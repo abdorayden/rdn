@@ -213,6 +213,7 @@ typedef enum{
 	FINE 
 }ListError;
 
+#ifdef LIST_C
 string __errors__[FINE] = {
 	[LIST_INDEX_OUT_OF_RANGE] = "[ERROR] list index out of range",
 	[LIST_MEMALLOC] = "[ERROR] list allocating memory",
@@ -225,6 +226,9 @@ string __errors__[FINE] = {
 	[LIST_SEARCH_DATA_NOTFOUND] = "[ERROR] data is not in the list",
 	[LIST_EMPTY] = "[ERROR] list empty"
 };
+#else
+extern string __errors__[FINE];
+#endif
 
 // global __raylist___self__status__ to handle raylist errors
 RLLOCAL ListError __raylist___self__status__ = FINE;
@@ -823,7 +827,22 @@ RLLAPI RLCollections Stack(int buffer_size);
 RLLAPI RLCollections Queue(int buffer_size);
 
 #define ___CAPACITY_MAX 	32
+
+#ifdef LIST_C
 void* __raylist__table__stock__memory__[___CAPACITY_MAX] = {0};
+int  _____raylist_index = 0;
+#else
+extern void* __raylist__table__stock__memory__[___CAPACITY_MAX];
+extern int  _____raylist_index;
+#endif
+
+void* __raylist__local__temp__int(int value);
+void* __raylist__local__temp__float(float value);
+void* __raylist__local__temp__short(short value);
+void* __raylist__local__temp__long(long value);
+void* __raylist__local__temp__char(char value);
+void* __raylist__local__temp__double(double value);
+void* __raylist__local__temp__bool(bool value);
 
 #define RLTempalloc(v) _Generic((v) , 			\
 	int : __raylist__local__temp__int,		\
@@ -847,16 +866,8 @@ void* __raylist__table__stock__memory__[___CAPACITY_MAX] = {0};
 		_____raylist_index = 0;						\
 	}while(0)
 
-#ifdef __cplusplus
-}
-#endif
-
-#endif
-
 // LIST_C implementation of interfaces 
 #ifdef LIST_C
-
-int  _____raylist_index = 0;
 
 void* __raylist__local__temp__int(int value){
 	if(_____raylist_index < ___CAPACITY_MAX){
@@ -2096,3 +2107,9 @@ RLCollections Queue(int buffer_size)
 }
 
 #endif /* LIST_C */
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

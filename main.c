@@ -1,6 +1,3 @@
-#define LIST_C
-
-#include "./third_party/raylist.h"
 #include "./src/state.h"
 
 // my stack based language
