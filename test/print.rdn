@@ -1,0 +1,26 @@
+# so simple
+# define function
+## ((x y) add defun {
+##     x y +
+## }) 
+## 
+## ((1 1 add) print)
+
+# define vars
+(5 x let)
+
+# print implemented natively
+(5 5 + print)
+
+# if statement
+(true if {
+
+}, else {
+
+})
+
+# while statement
+(true while {
+    # break
+    # continue
+})

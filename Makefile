@@ -8,5 +8,5 @@ main : main.c libraylib.so
 		-fPIC \
 		-lraylist
 
-libraylib.so : ./third_party/raylist.h
-	gcc -DLIST_C -shared -fPIC -o ./third_party/libraylist.so ./third_party/raylist.h
+libraylib.so : ./third_party/raylist.h ./third_party/raylist.c
+	gcc -DLIST_C -shared -fPIC -o ./third_party/libraylist.so ./third_party/raylist.c
