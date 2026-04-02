@@ -8,8 +8,17 @@ typedef struct {
 }RDNState;
 
 void rdn_init(RDNState* state);
-void rdn_push_int32(RDNState* state,int value);
+void rdn_push_int(RDNState* state,int value);
 void rdn_add(RDNState* state);
+void rdn_sub(RDNState* state);
+void rdn_mul(RDNState* state);
+void rdn_div(RDNState* state);
 void rdn_print(RDNState* state);
+
+void rdn_swap(RDNState* state);
+int* rdn_pop(RDNState* state);
+
+
+void rdn_clean(RDNState* state);
 
 #endif // !STATE_H_

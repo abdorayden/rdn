@@ -1,26 +1,35 @@
 # so simple
+# has virtual machine like lua
+# can create native functions just like lua
+
+get foo/bar.rdn # for raden code
+get foo/baz.native # for native file (file type must be dll in windows or so in linux)
+
 # define function
-## ((x y) add defun {
-##     x y +
-## }) 
-## 
-## ((1 1 add) print)
+((x y) add defun {
+    x y +
+}) 
+
+((1 1 add) print) # call function
 
 # define vars
 (5 x let)
+("rayden" name let)
+(3.14 pi let)
+([1,2,3] xs let)
 
 # print implemented natively
 (5 5 + print)
 
 # if statement
-(true if {
+true if {
 
 }, else {
 
-})
+}
 
 # while statement
-(true while {
+true while {
     # break
     # continue
-})
+}

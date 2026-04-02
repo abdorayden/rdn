@@ -3,6 +3,7 @@ main : main.c libraylib.so
 		main.c \
 		./src/state.c \
 		-o main \
+		-ggdb \
 		-L./third_party/ \
 		-Wl,-rpath,./third_party \
 		-fPIC \
