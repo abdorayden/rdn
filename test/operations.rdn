@@ -1,0 +1,12 @@
+[*
+    this file is for testing
+*]
+1 1 2 2 + + + print [* test sum *]
+3 3 * print [* test mul *]
+3 3 / print [* test div *]
+4 1 - print [* test minus *]
+4 1 << print [* test shl *]
+4 1 >> print [* test shr *]
+4 1 | print [* test or *]
+4 1 & print [* test and *]
+4 1 ^ print [* test xor *]

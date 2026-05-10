@@ -1,0 +1,46 @@
+# so simple
+# has virtual machine like lua
+# can create native functions just like lua
+
+# get keyword used to include other rdn src file if the filepath has .rdn if .native that means native dll code
+# get <path>
+get foo/bar.rdn # for raden code
+get foo/baz.native # for native file (file type must be dll in windows or so in linux)
+
+# define function
+#  (<params - separated by space>) <function name> defun {<block>}
+(x y) add defun {
+    x y +
+}
+
+
+# call function
+# by apply the parrens
+# (<params that separated by spaces> <function name>)
+((1 1 add) print) # call function
+
+# define vars
+# <value> <variable name> let
+(5 x let) # int
+("rayden" name let) # string
+(3.14 pi let) # floats
+([1,2,3] xs let) # list
+
+# print implemented natively
+# because print is a function
+(5 5 + print)
+
+# if statement
+# <condition> if {<block>}, else {<block>}
+true if {
+
+}, else {
+
+}
+
+# while statement
+# <condition> while {<block>}
+true while {
+    # break
+    # continue
+}

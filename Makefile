@@ -1,13 +1,19 @@
-main : main.c libraylib.so
-	gcc \
-		main.c \
-		./src/state.c \
-		-o main \
-		-ggdb \
-		-L./third_party/ \
-		-Wl,-rpath,./third_party \
-		-fPIC \
-		-lraylist
+CC = gcc
+CFLAGS = -Wall -Wextra -Werror -ggdb -std=c11
+TARGET = main
+SOURCES = main.c
+OBJECTS = $(SOURCES:.c=.o)
 
-libraylib.so : ./third_party/raylist.h ./third_party/raylist.c
-	gcc -DLIST_C -shared -fPIC -o ./third_party/libraylist.so ./third_party/raylist.c
+$(TARGET): $(OBJECTS)
+	$(CC) $(OBJECTS) -o $(TARGET)
+
+main.o: main.c src/stack.h
+	$(CC) $(CFLAGS) -c $< -o $@
+
+clean:
+	rm -f $(OBJECTS) $(TARGET)
+
+run: $(TARGET)
+	./$(TARGET)
+
+.PHONY: clean run
