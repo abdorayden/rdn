@@ -33,12 +33,16 @@ struct Value{
 
 typedef RLStack(Value *) MainStack;
 
+typedef enum {
+    BLOCK_STOP_EOF,
+    BLOCK_STOP_ELSE,
+    BLOCK_STOP_DONE,
+} BlockStop;
+
 static bool is_token(const char *value, const char *expected) {
     return strcmp(value, expected) == 0;
 }
 
-// TODO: implement equal "="
-// TODO: implement not "!"
 static bool is_operator_token(const char *value) {
     return is_token(value, "+") || is_token(value, "-") || is_token(value, "*") ||
            is_token(value, "/") || is_token(value, "<<") || is_token(value, ">>") ||
@@ -424,6 +428,7 @@ static bool apply_print(MainStack *stack) {
 
     value = ray_pop(stack);
     print_value(value);
+    // putchar('\n');
     free_value(value);
     return true;
 }
@@ -685,18 +690,113 @@ static bool push_token_value(MainStack *stack, const char *token, bool is_string
     return false;
 }
 
-static bool evaluate_source(MainStack *stack, char *source) {
-    char *cursor = source;
+static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else);
+static bool execute_block(MainStack *stack, char **cursor, BlockStop *stop_reason, bool allow_else);
+
+static bool apply_if(MainStack *stack, char **cursor) {
+    Value *condition = NULL;
+    bool condition_value = false;
+    BlockStop stop_reason = BLOCK_STOP_EOF;
+
+    if (stack->count < 1) {
+        fprintf(stderr, "if requires 1 operand\n");
+        return false;
+    }
+
+    condition = ray_pop(stack);
+    if (!value_to_boolean(condition, &condition_value)) {
+        fprintf(stderr, "if requires a boolean operand\n");
+        ray_append(stack, condition);
+        return false;
+    }
+
+    free_value(condition);
+
+    if (condition_value) {
+        if (!execute_block(stack, cursor, &stop_reason, true)) {
+            return false;
+        }
+
+        if (stop_reason == BLOCK_STOP_EOF) {
+            fprintf(stderr, "if missing done\n");
+            return false;
+        }
+
+        if (stop_reason == BLOCK_STOP_ELSE) {
+            if (!skip_block(cursor, &stop_reason, true)) {
+                return false;
+            }
+
+            if (stop_reason != BLOCK_STOP_DONE) {
+                fprintf(stderr, "else missing done\n");
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    if (!skip_block(cursor, &stop_reason, true)) {
+        return false;
+    }
+
+    if (stop_reason == BLOCK_STOP_EOF) {
+        fprintf(stderr, "if missing done\n");
+        return false;
+    }
+
+    if (stop_reason == BLOCK_STOP_ELSE) {
+        if (!execute_block(stack, cursor, &stop_reason, true)) {
+            return false;
+        }
+
+        if (stop_reason != BLOCK_STOP_DONE) {
+            fprintf(stderr, "else missing done\n");
+            return false;
+        }
+
+        return true;
+    }
+
+    return true;
+}
+
+static bool execute_block(MainStack *stack, char **cursor, BlockStop *stop_reason, bool allow_else) {
     char *token = NULL;
     bool is_string = false;
 
     while (true) {
-        if (!next_token(&cursor, &token, &is_string)) {
+        if (!next_token(cursor, &token, &is_string)) {
             return false;
         }
 
         if (token == NULL) {
+            *stop_reason = BLOCK_STOP_EOF;
             return true;
+        }
+
+        if (is_token(token, "else")) {
+            free(token);
+            if (!allow_else) {
+                fprintf(stderr, "unexpected else\n");
+                return false;
+            }
+            *stop_reason = BLOCK_STOP_ELSE;
+            return true;
+        }
+
+        if (is_token(token, "done")) {
+            free(token);
+            *stop_reason = BLOCK_STOP_DONE;
+            return true;
+        }
+
+        if (is_token(token, "if")) {
+            free(token);
+            if (!apply_if(stack, cursor)) {
+                return false;
+            }
+            continue;
         }
 
         if (is_operator_token(token)) {
@@ -764,6 +864,90 @@ static bool evaluate_source(MainStack *stack, char *source) {
     }
 }
 
+static bool skip_if(char **cursor) {
+    BlockStop stop_reason = BLOCK_STOP_EOF;
+
+    if (!skip_block(cursor, &stop_reason, true)) {
+        return false;
+    }
+
+    if (stop_reason == BLOCK_STOP_EOF) {
+        fprintf(stderr, "if missing done\n");
+        return false;
+    }
+
+    if (stop_reason == BLOCK_STOP_ELSE) {
+        if (!skip_block(cursor, &stop_reason, true)) {
+            return false;
+        }
+
+        if (stop_reason != BLOCK_STOP_DONE) {
+            fprintf(stderr, "else missing done\n");
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else) {
+    char *token = NULL;
+    bool is_string = false;
+
+    while (true) {
+        if (!next_token(cursor, &token, &is_string)) {
+            return false;
+        }
+
+        if (token == NULL) {
+            *stop_reason = BLOCK_STOP_EOF;
+            return true;
+        }
+
+        if (is_token(token, "else")) {
+            free(token);
+            if (!allow_else) {
+                fprintf(stderr, "unexpected else\n");
+                return false;
+            }
+            *stop_reason = BLOCK_STOP_ELSE;
+            return true;
+        }
+
+        if (is_token(token, "done")) {
+            free(token);
+            *stop_reason = BLOCK_STOP_DONE;
+            return true;
+        }
+
+        if (is_token(token, "if")) {
+            free(token);
+            if (!skip_if(cursor)) {
+                return false;
+            }
+            continue;
+        }
+
+        free(token);
+    }
+}
+
+static bool evaluate_source(MainStack *stack, char *source) {
+    BlockStop stop_reason = BLOCK_STOP_EOF;
+    char *cursor = source;
+
+    if (!execute_block(stack, &cursor, &stop_reason, false)) {
+        return false;
+    }
+
+    if (stop_reason != BLOCK_STOP_EOF) {
+        fprintf(stderr, "unexpected block terminator\n");
+        return false;
+    }
+
+    return true;
+}
+
 static char *read_file(const char *path) {
     FILE *file = fopen(path, "rb");
     char *buffer = NULL;
@@ -815,8 +999,7 @@ static char *read_file(const char *path) {
 }
 
 int main(int argc, char **argv) {
-    // const char *path = "./test/exit_test.rdn";
-    const char *path = "./test/swap_and_pop.rdn";
+    const char *path = "./test/if_else.rdn";
     char *source = NULL;
     MainStack stack = {0};
     int exit_code = EXIT_FAILURE;

@@ -1,0 +1,24 @@
+[* true branch *]
+true if
+    "then branch" print
+else
+    "else branch" print
+done
+
+[* false branch *]
+false if
+    "wrong branch" print
+else
+    "right branch" print
+done
+
+[* nested if *]
+true if
+    false if
+        "nested wrong" print
+    else
+        "nested else" print
+    done
+else
+    "outer else" print
+done
