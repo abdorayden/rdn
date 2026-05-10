@@ -1,25 +1,146 @@
+#include <ctype.h>
 #include <errno.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #include "./src/stack.h"
 
-typedef RLStack(char *) MainStack;
+typedef enum {
+    VALUE_INTEGER,
+    VALUE_DOUBLE,
+    VALUE_STRING,
+    VALUE_BOOLEAN,
+} ValueType;
+
+typedef struct {
+    ValueType type;
+    union {
+        long integer;
+        double number;
+        char *string;
+        bool boolean;
+    } as;
+} Value;
+
+typedef RLStack(Value *) MainStack;
 
 static bool is_token(const char *value, const char *expected) {
     return strcmp(value, expected) == 0;
 }
 
+// TODO: implement equal "="
+// TODO: implement not "!"
 static bool is_operator_token(const char *value) {
     return is_token(value, "+") || is_token(value, "-") || is_token(value, "*") ||
            is_token(value, "/") || is_token(value, "<<") || is_token(value, ">>") ||
            is_token(value, "|") || is_token(value, "&") || is_token(value, "^");
 }
 
-static bool parse_long(const char *text, long *out_value) {
+static char *copy_string(const char *text) {
+    size_t length = strlen(text) + 1;
+    char *copy = malloc(length);
+
+    if (copy == NULL) {
+        return NULL;
+    }
+
+    memcpy(copy, text, length);
+    return copy;
+}
+
+static Value *create_integer_value(long integer) {
+    Value *value = malloc(sizeof(*value));
+
+    if (value == NULL) {
+        return NULL;
+    }
+
+    value->type = VALUE_INTEGER;
+    value->as.integer = integer;
+    return value;
+}
+
+static Value *create_double_value(double number) {
+    Value *value = malloc(sizeof(*value));
+
+    if (value == NULL) {
+        return NULL;
+    }
+
+    value->type = VALUE_DOUBLE;
+    value->as.number = number;
+    return value;
+}
+
+static Value *create_boolean_value(bool boolean) {
+    Value *value = malloc(sizeof(*value));
+    if (value == NULL) {
+        return NULL;
+    }
+
+    value->type = VALUE_BOOLEAN;
+    value->as.boolean = boolean;
+    return value;
+}
+
+static Value *create_string_value_owned(char *string) {
+    Value *value = malloc(sizeof(*value));
+
+    if (value == NULL) {
+        free(string);
+        return NULL;
+    }
+
+    value->type = VALUE_STRING;
+    value->as.string = string;
+    return value;
+}
+
+static Value *create_string_value_copy(const char *string) {
+    char *copy = copy_string(string);
+
+    if (copy == NULL) {
+        return NULL;
+    }
+
+    return create_string_value_owned(copy);
+}
+
+static void free_value(Value *value) {
+    if (value == NULL) {
+        return;
+    }
+
+    if (value->type == VALUE_STRING) {
+        free(value->as.string);
+    }
+
+    free(value);
+}
+
+static void free_stack_values(MainStack *stack) {
+    while (!ray_is_empty(stack)) {
+        free_value(ray_pop(stack));
+    }
+
+    ray_clear(stack);
+}
+
+static bool push_value(MainStack *stack, Value *value) {
+    if (value == NULL) {
+        fprintf(stderr, "failed to allocate value\n");
+        return false;
+    }
+
+    ray_append(stack, value);
+    return true;
+}
+
+static bool parse_integer_token(const char *text, long *out_value) {
     char *end = NULL;
     long value = 0;
 
@@ -37,135 +158,197 @@ static bool parse_long(const char *text, long *out_value) {
     return true;
 }
 
-static char *copy_string(const char *text) {
-    size_t length = strlen(text) + 1;
-    char *copy = malloc(length);
+static bool parse_double_token(const char *text, double *out_value) {
+    char *end = NULL;
+    double value = 0;
 
-    if (copy == NULL) {
-        return NULL;
-    }
-
-    memcpy(copy, text, length);
-    return copy;
-}
-
-static char *long_to_string(long value) {
-    int length = snprintf(NULL, 0, "%ld", value);
-    char *buffer = NULL;
-
-    if (length < 0) {
-        return NULL;
-    }
-
-    buffer = malloc((size_t)length + 1);
-    if (buffer == NULL) {
-        return NULL;
-    }
-
-    snprintf(buffer, (size_t)length + 1, "%ld", value);
-    return buffer;
-}
-
-static void free_stack_strings(MainStack *stack) {
-    while (!ray_is_empty(stack)) {
-        free(ray_pop(stack));
-    }
-
-    ray_clear(stack);
-}
-
-static bool push_owned_token(MainStack *stack, const char *token) {
-    char *owned_token = copy_string(token);
-
-    if (owned_token == NULL) {
-        fprintf(stderr, "failed to allocate token\n");
+    if (text == NULL || *text == '\0') {
         return false;
     }
 
-    ray_append(stack, owned_token);
+    errno = 0;
+    value = strtod(text, &end);
+    if (errno == ERANGE || *end != '\0') {
+        return false;
+    }
+
+    *out_value = value;
     return true;
 }
 
+static bool value_to_double(const Value *value, double *out_value) {
+    if (value->type == VALUE_INTEGER) {
+        *out_value = (double)value->as.integer;
+        return true;
+    }
+
+    if (value->type == VALUE_DOUBLE) {
+        *out_value = value->as.number;
+        return true;
+    }
+
+    return false;
+}
+
+static bool value_to_long(const Value *value, long *out_value) {
+    if (value->type != VALUE_INTEGER) {
+        return false;
+    }
+
+    *out_value = value->as.integer;
+    return true;
+}
+
+static bool value_to_boolean(const Value *value, bool *out_value) {
+    if (value->type != VALUE_BOOLEAN) {
+        return false;
+    }
+
+    *out_value = value->as.boolean;
+    return true;
+}
+
+static void print_value(const Value *value) {
+    if (value->type == VALUE_INTEGER) {
+        printf("%ld\n", value->as.integer);
+        return;
+    }
+
+    if (value->type == VALUE_DOUBLE) {
+        printf("%.15g\n", value->as.number);
+        return;
+    }
+
+    if (value->type == VALUE_BOOLEAN) {
+        printf("%s\n", value->as.boolean ? "true" : "false");
+        return;
+    }
+
+    printf("%s\n", value->as.string);
+}
+
 static bool apply_binary_operator(MainStack *stack, const char *operator_token) {
-    long left = 0;
-    long right = 0;
-    char *left_token = NULL;
-    char *right_token = NULL;
-    char *result_token = NULL;
+    Value *left = NULL;
+    Value *right = NULL;
+    Value *result = NULL;
+    double left_double = 0;
+    double right_double = 0;
+    long left_long = 0;
+    long right_long = 0;
+    bool left_bool = false;
+    bool right_bool = false;
 
     if (stack->count < 2) {
         fprintf(stderr, "operator '%s' requires 2 operands, got %zu\n", operator_token, stack->count);
         return false;
     }
 
-    right_token = ray_pop(stack);
-    left_token = ray_pop(stack);
+    right = ray_pop(stack);
+    left = ray_pop(stack);
 
-    if (!parse_long(left_token, &left) || !parse_long(right_token, &right)) {
-        fprintf(stderr, "expected numeric operands for '%s'\n", operator_token);
-        ray_append(stack, left_token);
-        ray_append(stack, right_token);
-        return false;
-    }
+    if (is_token(operator_token, "|") || is_token(operator_token, "&")) {
+        if (value_to_boolean(left, &left_bool) && value_to_boolean(right, &right_bool)) {
+            if (is_token(operator_token, "|")) {
+                result = create_boolean_value(left_bool || right_bool);
+            } else {
+                result = create_boolean_value(left_bool && right_bool);
+            }
+        } else if (left->type == VALUE_BOOLEAN || right->type == VALUE_BOOLEAN) {
+            fprintf(stderr, "operator '%s' requires both operands to be boolean or integer\n", operator_token);
+            ray_append(stack, left);
+            ray_append(stack, right);
+            return false;
+        } else {
+            if (!value_to_long(left, &left_long) || !value_to_long(right, &right_long)) {
+                fprintf(stderr, "operator '%s' requires integer operands\n", operator_token);
+                ray_append(stack, left);
+                ray_append(stack, right);
+                return false;
+            }
 
-    if (is_token(operator_token, "+")) {
-        result_token = long_to_string(left + right);
-    } else if (is_token(operator_token, "-")) {
-        result_token = long_to_string(left - right);
-    } else if (is_token(operator_token, "*")) {
-        result_token = long_to_string(left * right);
-    } else if (is_token(operator_token, "/")) {
-        if (right == 0) {
-            fprintf(stderr, "division by zero\n");
-            ray_append(stack, left_token);
-            ray_append(stack, right_token);
+            if (is_token(operator_token, "|")) {
+                result = create_integer_value(left_long | right_long);
+            } else {
+                result = create_integer_value(left_long & right_long);
+            }
+        }
+    } else if (is_token(operator_token, "<<") || is_token(operator_token, ">>") ||
+               is_token(operator_token, "^")) {
+        if (!value_to_long(left, &left_long) || !value_to_long(right, &right_long)) {
+            fprintf(stderr, "operator '%s' requires integer operands\n", operator_token);
+            ray_append(stack, left);
+            ray_append(stack, right);
             return false;
         }
-        result_token = long_to_string(left / right);
-    } else if (is_token(operator_token, "<<")) {
-        if (right < 0) {
-            fprintf(stderr, "left shift requires a non-negative count\n");
-            ray_append(stack, left_token);
-            ray_append(stack, right_token);
+
+        if ((is_token(operator_token, "<<") || is_token(operator_token, ">>")) && right_long < 0) {
+            fprintf(stderr, "shift operators require a non-negative count\n");
+            ray_append(stack, left);
+            ray_append(stack, right);
             return false;
         }
-        result_token = long_to_string(left << right);
-    } else if (is_token(operator_token, ">>")) {
-        if (right < 0) {
-            fprintf(stderr, "right shift requires a non-negative count\n");
-            ray_append(stack, left_token);
-            ray_append(stack, right_token);
-            return false;
+
+        if (is_token(operator_token, "<<")) {
+            result = create_integer_value(left_long << right_long);
+        } else if (is_token(operator_token, ">>")) {
+            result = create_integer_value(left_long >> right_long);
+        } else {
+            result = create_integer_value(left_long ^ right_long);
         }
-        result_token = long_to_string(left >> right);
-    } else if (is_token(operator_token, "|")) {
-        result_token = long_to_string(left | right);
-    } else if (is_token(operator_token, "&")) {
-        result_token = long_to_string(left & right);
-    } else if (is_token(operator_token, "^")) {
-        result_token = long_to_string(left ^ right);
     } else {
-        fprintf(stderr, "unsupported operator: %s\n", operator_token);
-        ray_append(stack, left_token);
-        ray_append(stack, right_token);
-        return false;
+        if (!value_to_double(left, &left_double) || !value_to_double(right, &right_double)) {
+            fprintf(stderr, "operator '%s' requires numeric operands\n", operator_token);
+            ray_append(stack, left);
+            ray_append(stack, right);
+            return false;
+        }
+
+        if (is_token(operator_token, "/") && right_double == 0.0) {
+            fprintf(stderr, "division by zero\n");
+            ray_append(stack, left);
+            ray_append(stack, right);
+            return false;
+        }
+
+        if (left->type == VALUE_INTEGER && right->type == VALUE_INTEGER && !is_token(operator_token, "/")) {
+            if (is_token(operator_token, "+")) {
+                result = create_integer_value(left->as.integer + right->as.integer);
+            } else if (is_token(operator_token, "-")) {
+                result = create_integer_value(left->as.integer - right->as.integer);
+            } else if (is_token(operator_token, "*")) {
+                result = create_integer_value(left->as.integer * right->as.integer);
+            }
+        } else if (left->type == VALUE_INTEGER && right->type == VALUE_INTEGER && is_token(operator_token, "/") &&
+                   left->as.integer % right->as.integer == 0) {
+            result = create_integer_value(left->as.integer / right->as.integer);
+        } else {
+            if (is_token(operator_token, "+")) {
+                result = create_double_value(left_double + right_double);
+            } else if (is_token(operator_token, "-")) {
+                result = create_double_value(left_double - right_double);
+            } else if (is_token(operator_token, "*")) {
+                result = create_double_value(left_double * right_double);
+            } else if (is_token(operator_token, "/")) {
+                result = create_double_value(left_double / right_double);
+            }
+        }
     }
 
-    if (result_token == NULL) {
+    if (result == NULL) {
         fprintf(stderr, "failed to allocate result\n");
-        ray_append(stack, left_token);
-        ray_append(stack, right_token);
+        ray_append(stack, left);
+        ray_append(stack, right);
         return false;
     }
 
-    free(left_token);
-    free(right_token);
-    ray_append(stack, result_token);
+    free_value(left);
+    free_value(right);
+    ray_append(stack, result);
     return true;
 }
 
 static bool apply_print(MainStack *stack) {
-    char *value = NULL;
+    Value *value = NULL;
 
     if (stack->count < 1) {
         fprintf(stderr, "print requires 1 operand\n");
@@ -173,76 +356,268 @@ static bool apply_print(MainStack *stack) {
     }
 
     value = ray_pop(stack);
-    printf("%s\n", value);
-    free(value);
+    print_value(value);
+    free_value(value);
     return true;
 }
 
-static bool strip_comments(char *source) {
-    char *cursor = source;
+static bool apply_type(MainStack *stack) {
+    Value *value = NULL;
+    Value *result = NULL;
 
-    while (*cursor != '\0') {
-        if (cursor[0] == '[' && cursor[1] == '*') {
-            cursor[0] = ' ';
-            cursor[1] = ' ';
-            cursor += 2;
-
-            while (!(cursor[0] == '*' && cursor[1] == ']')) {
-                if (cursor[0] == '\0' || cursor[1] == '\0') {
-                    fprintf(stderr, "unterminated comment\n");
-                    return false;
-                }
-                *cursor = ' ';
-                cursor++;
-            }
-
-            cursor[0] = ' ';
-            cursor[1] = ' ';
-            cursor += 2;
-            continue;
-        }
-
-        cursor++;
-    }
-
-    return true;
-}
-
-static bool evaluate_source(MainStack *stack, char *source) {
-    char *token = NULL;
-    long numeric_value = 0;
-
-    if (!strip_comments(source)) {
+    if (stack->count < 1) {
+        fprintf(stderr, "type requires 1 operand\n");
         return false;
     }
 
-    for (token = strtok(source, " \t\r\n"); token != NULL; token = strtok(NULL, " \t\r\n")) {
-        if (parse_long(token, &numeric_value)) {
-            if (!push_owned_token(stack, token)) {
+    value = ray_pop(stack);
+
+    if (value->type == VALUE_INTEGER) {
+        result = create_string_value_copy("integer");
+    } else if (value->type == VALUE_DOUBLE) {
+        result = create_string_value_copy("double");
+    } else if (value->type == VALUE_BOOLEAN) {
+        result = create_string_value_copy("boolean");
+    } else {
+        result = create_string_value_copy("string");
+    }
+
+    free_value(value);
+
+    if (result == NULL) {
+        fprintf(stderr, "failed to allocate type result\n");
+        return false;
+    }
+
+    ray_append(stack, result);
+    return true;
+}
+
+static bool skip_comment(char **cursor) {
+    *cursor += 2;
+
+    while (**cursor != '\0') {
+        if ((*cursor)[0] == '*' && (*cursor)[1] == ']') {
+            *cursor += 2;
+            return true;
+        }
+        (*cursor)++;
+    }
+
+    fprintf(stderr, "unterminated comment\n");
+    return false;
+}
+
+static bool append_char(char **buffer, size_t *length, size_t *capacity, char ch) {
+    char *grown = NULL;
+
+    if (*length + 1 >= *capacity) {
+        size_t new_capacity = (*capacity == 0) ? 16 : (*capacity * 2);
+        grown = realloc(*buffer, new_capacity);
+        if (grown == NULL) {
+            return false;
+        }
+        *buffer = grown;
+        *capacity = new_capacity;
+    }
+
+    (*buffer)[(*length)++] = ch;
+    return true;
+}
+
+static bool read_string_token(char **cursor, char **out_token) {
+    char *buffer = NULL;
+    size_t length = 0;
+    size_t capacity = 0;
+    char escaped = '\0';
+
+    (*cursor)++;
+
+    while (**cursor != '\0') {
+        if (**cursor == '"') {
+            (*cursor)++;
+            if (!append_char(&buffer, &length, &capacity, '\0')) {
+                free(buffer);
+                return false;
+            }
+            *out_token = buffer;
+            return true;
+        }
+
+        if (**cursor == '\\') {
+            (*cursor)++;
+            if (**cursor == '\0') {
+                break;
+            }
+
+            if (**cursor == 'n') {
+                escaped = '\n';
+            } else if (**cursor == 't') {
+                escaped = '\t';
+            } else if (**cursor == 'r') {
+                escaped = '\r';
+            } else if (**cursor == '\\') {
+                escaped = '\\';
+            } else if (**cursor == '"') {
+                escaped = '"';
+            } else {
+                escaped = **cursor;
+            }
+
+            if (!append_char(&buffer, &length, &capacity, escaped)) {
+                free(buffer);
+                return false;
+            }
+
+            (*cursor)++;
+            continue;
+        }
+
+        if (!append_char(&buffer, &length, &capacity, **cursor)) {
+            free(buffer);
+            return false;
+        }
+
+        (*cursor)++;
+    }
+
+    fprintf(stderr, "unterminated string literal\n");
+    free(buffer);
+    return false;
+}
+
+static bool read_plain_token(char **cursor, char **out_token) {
+    const char *start = *cursor;
+    size_t length = 0;
+    char *token = NULL;
+
+    while ((*cursor)[length] != '\0' && !isspace((unsigned char)(*cursor)[length])) {
+        if ((*cursor)[length] == '[' && (*cursor)[length + 1] == '*') {
+            break;
+        }
+        length++;
+    }
+
+    token = malloc(length + 1);
+    if (token == NULL) {
+        return false;
+    }
+
+    memcpy(token, start, length);
+    token[length] = '\0';
+    *cursor += length;
+    *out_token = token;
+    return true;
+}
+
+static bool next_token(char **cursor, char **out_token, bool *out_is_string) {
+    *out_token = NULL;
+    *out_is_string = false;
+
+    while (**cursor != '\0') {
+        if (isspace((unsigned char)**cursor)) {
+            (*cursor)++;
+            continue;
+        }
+
+        if ((*cursor)[0] == '[' && (*cursor)[1] == '*') {
+            if (!skip_comment(cursor)) {
                 return false;
             }
             continue;
+        }
+
+        break;
+    }
+
+    if (**cursor == '\0') {
+        return true;
+    }
+
+    if (**cursor == '"') {
+        *out_is_string = true;
+        return read_string_token(cursor, out_token);
+    }
+
+    return read_plain_token(cursor, out_token);
+}
+
+static bool push_token_value(MainStack *stack, const char *token, bool is_string) {
+    long integer_value = 0;
+    double double_value = 0;
+
+    if (is_string) {
+        return push_value(stack, create_string_value_copy(token));
+    }
+
+    if (parse_integer_token(token, &integer_value)) {
+        return push_value(stack, create_integer_value(integer_value));
+    }
+
+    if (parse_double_token(token, &double_value)) {
+        return push_value(stack, create_double_value(double_value));
+    }
+
+    if (is_token(token, "true")) {
+        return push_value(stack, create_boolean_value(true));
+    }
+
+    if (is_token(token, "false")) {
+        return push_value(stack, create_boolean_value(false));
+    }
+
+    fprintf(stderr, "unknown token: %s\n", token);
+    return false;
+}
+
+static bool evaluate_source(MainStack *stack, char *source) {
+    char *cursor = source;
+    char *token = NULL;
+    bool is_string = false;
+
+    while (true) {
+        if (!next_token(&cursor, &token, &is_string)) {
+            return false;
+        }
+
+        if (token == NULL) {
+            return true;
         }
 
         if (is_operator_token(token)) {
             if (!apply_binary_operator(stack, token)) {
+                free(token);
                 return false;
             }
+            free(token);
             continue;
         }
 
         if (is_token(token, "print")) {
             if (!apply_print(stack)) {
+                free(token);
                 return false;
             }
+            free(token);
             continue;
         }
 
-        fprintf(stderr, "unknown token: %s\n", token);
-        return false;
-    }
+        if (is_token(token, "type")) {
+            if (!apply_type(stack)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        }
 
-    return true;
+        if (!push_token_value(stack, token, is_string)) {
+            free(token);
+            return false;
+        }
+
+        free(token);
+    }
 }
 
 static char *read_file(const char *path) {
@@ -295,11 +670,15 @@ static char *read_file(const char *path) {
     return buffer;
 }
 
-int main(void) {
-    const char *path = "./test/operations.rdn";
+int main(int argc, char **argv) {
+    const char *path = "./test/booleans.rdn";
     char *source = NULL;
     MainStack stack = {0};
     int exit_code = EXIT_FAILURE;
+
+    if (argc > 1) {
+        path = argv[1];
+    }
 
     source = read_file(path);
     if (source == NULL) {
@@ -308,18 +687,18 @@ int main(void) {
 
     if (!evaluate_source(&stack, source)) {
         free(source);
-        free_stack_strings(&stack);
+        free_stack_values(&stack);
         return exit_code;
     }
 
     if (stack.count != 0) {
         fprintf(stderr, "unexpected values left on stack: %zu\n", stack.count);
         free(source);
-        free_stack_strings(&stack);
+        free_stack_values(&stack);
         return exit_code;
     }
 
     free(source);
-    free_stack_strings(&stack);
+    free_stack_values(&stack);
     return EXIT_SUCCESS;
 }

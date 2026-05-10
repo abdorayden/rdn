@@ -1,0 +1,13 @@
+[* strings with escapes *]
+"hello\tworld" print
+"line1\nline2" print
+"quote: \"ok\"" print
+"slash: \\" print
+
+[* type builtin *]
+2 type print
+2.5 type print
+"text" type print
+
+[* composed usage *]
+"hello\t" type print
