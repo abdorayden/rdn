@@ -154,16 +154,45 @@ static bool push_value(MainStack *stack, Value *value) {
 
 static bool parse_integer_token(const char *text, long *out_value) {
     char *end = NULL;
+    const char *digits = text;
     long value = 0;
+    int base = 10;
+    bool negative = false;
 
     if (text == NULL || *text == '\0') {
         return false;
     }
 
+    if (*digits == '+') {
+        digits++;
+    } else if (*digits == '-') {
+        negative = true;
+        digits++;
+    }
+
+    if (digits[0] == '0' && (digits[1] == 'x' || digits[1] == 'X')) {
+        base = 16;
+        digits += 2;
+    } else if (digits[0] == '0' && (digits[1] == 'b' || digits[1] == 'B')) {
+        base = 2;
+        digits += 2;
+    } else if (digits[0] == '0' && (digits[1] == 'o' || digits[1] == 'O')) {
+        base = 8;
+        digits += 2;
+    }
+
+    if (*digits == '\0') {
+        return false;
+    }
+
     errno = 0;
-    value = strtol(text, &end, 10);
+    value = strtol(digits, &end, base);
     if (errno == ERANGE || *end != '\0') {
         return false;
+    }
+
+    if (negative) {
+        value = -value;
     }
 
     *out_value = value;
@@ -728,6 +757,25 @@ static bool push_token_value(MainStack *stack, const char *token, bool is_string
     return false;
 }
 
+static bool is_value_token(const char *token, bool is_string) {
+    long integer_value = 0;
+    double double_value = 0;
+
+    if (is_string) {
+        return true;
+    }
+
+    if (parse_integer_token(token, &integer_value)) {
+        return true;
+    }
+
+    if (parse_double_token(token, &double_value)) {
+        return true;
+    }
+
+    return is_token(token, "true") || is_token(token, "false");
+}
+
 static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else);
 static bool execute_block(MainStack *stack, char **cursor, BlockStop *stop_reason, bool allow_else);
 
@@ -837,6 +885,15 @@ static bool execute_block(MainStack *stack, char **cursor, BlockStop *stop_reaso
             continue;
         }
 
+        if (is_value_token(token, is_string)) {
+            if (!push_token_value(stack, token, is_string)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        }
+
         if (is_operator_token(token)) {
             if (!apply_binary_operator(stack, token)) {
                 free(token);
@@ -893,12 +950,9 @@ static bool execute_block(MainStack *stack, char **cursor, BlockStop *stop_reaso
             continue;
         }
 
-        if (!push_token_value(stack, token, is_string)) {
-            free(token);
-            return false;
-        }
-
+        fprintf(stderr, "unknown token: %s\n", token);
         free(token);
+        return false;
     }
 }
 

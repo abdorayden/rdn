@@ -11,3 +11,10 @@
 "\n" print
 1e2 2 / print 
 "\n" print
+"neg \n" print
+-1.5 2 + print
+"\n" print
+4.5 -1.5 + print
+"\n" print
+4.5 -1.5 - print
+"\n" print
