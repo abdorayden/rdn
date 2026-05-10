@@ -14,17 +14,21 @@ typedef enum {
     VALUE_DOUBLE,
     VALUE_STRING,
     VALUE_BOOLEAN,
+    VALUE_LIST,
 } ValueType;
 
-typedef struct {
+typedef struct Value Value ;
+
+struct Value{
     ValueType type;
     union {
         long integer;
         double number;
         char *string;
         bool boolean;
+        RLList(Value) list;
     } as;
-} Value;
+};
 
 typedef RLStack(Value *) MainStack;
 
@@ -254,6 +258,14 @@ static void print_value(const Value *value) {
     printf("%s", value->as.string);
 }
 
+static char* exit_value(const Value* value , int* out_exit) {
+    if (value->type == VALUE_INTEGER) {
+        if (out_exit) *out_exit = value->as.integer;
+        return NULL;
+    }
+    return "ERROR: exit expect integer";
+}
+
 static bool apply_binary_operator(MainStack *stack, const char *operator_token) {
     Value *left = NULL;
     Value *right = NULL;
@@ -412,6 +424,25 @@ static bool apply_print(MainStack *stack) {
     value = ray_pop(stack);
     print_value(value);
     free_value(value);
+    return true;
+}
+
+static bool apply_exit(MainStack *stack , int* exit_status) {
+
+    if (stack->count < 1) {
+        fprintf(stderr, "type requires 1 operand\n");
+        return false;
+    }
+
+    Value *value = NULL;
+    value = ray_pop(stack);
+
+    char* ret = exit_value(value, exit_status);
+
+    if (ret){
+        fprintf(stderr, "%s\n" , ret);
+        return false;
+    }
     return true;
 }
 
@@ -665,6 +696,17 @@ static bool evaluate_source(MainStack *stack, char *source) {
             continue;
         }
 
+        if (is_token(token, "exit")){
+            int ret = 0;
+            if (!apply_exit(stack , &ret)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            free_stack_values(stack);
+            exit(ret);
+        }
+
         if (!push_token_value(stack, token, is_string)) {
             free(token);
             return false;
@@ -725,7 +767,7 @@ static char *read_file(const char *path) {
 }
 
 int main(int argc, char **argv) {
-    const char *path = "./test/booleans.rdn";
+    const char *path = "./test/exit_test.rdn";
     char *source = NULL;
     MainStack stack = {0};
     int exit_code = EXIT_FAILURE;
