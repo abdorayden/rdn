@@ -37,7 +37,8 @@ static bool is_token(const char *value, const char *expected) {
 static bool is_operator_token(const char *value) {
     return is_token(value, "+") || is_token(value, "-") || is_token(value, "*") ||
            is_token(value, "/") || is_token(value, "<<") || is_token(value, ">>") ||
-           is_token(value, "|") || is_token(value, "&") || is_token(value, "^");
+           is_token(value, "|") || is_token(value, "&") || is_token(value, "^") ||
+           is_token(value, "=") || is_token(value, "!");
 }
 
 static char *copy_string(const char *text) {
@@ -208,23 +209,49 @@ static bool value_to_boolean(const Value *value, bool *out_value) {
     return true;
 }
 
+static bool values_equal(const Value *left, const Value *right) {
+    double left_double = 0;
+    double right_double = 0;
+
+    if ((left->type == VALUE_INTEGER || left->type == VALUE_DOUBLE) &&
+        (right->type == VALUE_INTEGER || right->type == VALUE_DOUBLE)) {
+        value_to_double(left, &left_double);
+        value_to_double(right, &right_double);
+        return left_double == right_double;
+    }
+
+    if (left->type != right->type) {
+        return false;
+    }
+
+    if (left->type == VALUE_BOOLEAN) {
+        return left->as.boolean == right->as.boolean;
+    }
+
+    if (left->type == VALUE_STRING) {
+        return strcmp(left->as.string, right->as.string) == 0;
+    }
+
+    return left->as.integer == right->as.integer;
+}
+
 static void print_value(const Value *value) {
     if (value->type == VALUE_INTEGER) {
-        printf("%ld\n", value->as.integer);
+        printf("%ld", value->as.integer);
         return;
     }
 
     if (value->type == VALUE_DOUBLE) {
-        printf("%.15g\n", value->as.number);
+        printf("%.15g", value->as.number);
         return;
     }
 
     if (value->type == VALUE_BOOLEAN) {
-        printf("%s\n", value->as.boolean ? "true" : "false");
+        printf("%s", value->as.boolean ? "true" : "false");
         return;
     }
 
-    printf("%s\n", value->as.string);
+    printf("%s", value->as.string);
 }
 
 static bool apply_binary_operator(MainStack *stack, const char *operator_token) {
@@ -238,6 +265,31 @@ static bool apply_binary_operator(MainStack *stack, const char *operator_token) 
     bool left_bool = false;
     bool right_bool = false;
 
+    if (is_token(operator_token, "!")) {
+        if (stack->count < 1) {
+            fprintf(stderr, "operator '%s' requires 1 operand, got %zu\n", operator_token, stack->count);
+            return false;
+        }
+
+        right = ray_pop(stack);
+        if (!value_to_boolean(right, &right_bool)) {
+            fprintf(stderr, "operator '%s' requires a boolean operand\n", operator_token);
+            ray_append(stack, right);
+            return false;
+        }
+
+        result = create_boolean_value(!right_bool);
+        if (result == NULL) {
+            fprintf(stderr, "failed to allocate result\n");
+            ray_append(stack, right);
+            return false;
+        }
+
+        free_value(right);
+        ray_append(stack, result);
+        return true;
+    }
+
     if (stack->count < 2) {
         fprintf(stderr, "operator '%s' requires 2 operands, got %zu\n", operator_token, stack->count);
         return false;
@@ -246,7 +298,9 @@ static bool apply_binary_operator(MainStack *stack, const char *operator_token) 
     right = ray_pop(stack);
     left = ray_pop(stack);
 
-    if (is_token(operator_token, "|") || is_token(operator_token, "&")) {
+    if (is_token(operator_token, "=")) {
+        result = create_boolean_value(values_equal(left, right));
+    } else if (is_token(operator_token, "|") || is_token(operator_token, "&")) {
         if (value_to_boolean(left, &left_bool) && value_to_boolean(right, &right_bool)) {
             if (is_token(operator_token, "|")) {
                 result = create_boolean_value(left_bool || right_bool);

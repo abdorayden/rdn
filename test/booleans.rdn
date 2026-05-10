@@ -1,19 +1,31 @@
 [* boolean literals *]
-true print
-false print
+true print "\n" print
+false print "\n" print
 
-"or logic" print
-true true | print
-true false | print
-false true | print
-false false | print
+"or logic" print "\n" print
+true true | print "\n" print
+true false | print "\n" print
+false true | print "\n" print
+false false | print "\n" print
 
-"and logic" print
-true true & print
-true false & print
-false true & print
-false false & print
+"and logic" print "\n" print
+true true & print "\n" print
+true false & print "\n" print
+false true & print "\n" print
+false false & print "\n" print
+
+"equal logic" print "\n" print
+true true = print "\n" print
+true false = print "\n" print
+1 1 = print "\n" print
+1 1.0 = print "\n" print
+"a" "a" = print "\n" print
+"a" "b" = print "\n" print
+
+"not logic" print "\n" print
+true ! print "\n" print
+false ! print "\n" print
 
 [* boolean type *]
-true type print
-false type print
+true type print "\n" print
+false type print "\n" print

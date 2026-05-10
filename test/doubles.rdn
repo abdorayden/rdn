@@ -1,7 +1,13 @@
 [* floating-point arithmetic *]
-1.5 2 + print
-7 2 / print
-3.25 0.75 + print
-2.5 4 * print
-9.5 1.25 - print
-1e2 2 / print
+1.5 2 + print 
+"\n" print
+7 2 / print 
+"\n" print
+3.25 0.75 + print 
+"\n" print
+2.5 4 * print 
+"\n" print
+9.5 1.25 - print 
+"\n" print
+1e2 2 / print 
+"\n" print
