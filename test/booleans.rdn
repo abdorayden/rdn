@@ -22,6 +22,19 @@ true false = print "\n" print
 "a" "a" = print "\n" print
 "a" "b" = print "\n" print
 
+"not equal logic" print "\n" print
+true true != print "\n" print
+true false != print "\n" print
+1 2 != print "\n" print
+1 "1" != print "\n" print
+
+"compare logic" print "\n" print
+1 2 < print "\n" print
+2 1 > print "\n" print
+2 2 <= print "\n" print
+3 2 >= print "\n" print
+1 1.5 < print "\n" print
+
 "not logic" print "\n" print
 true ! print "\n" print
 false ! print "\n" print

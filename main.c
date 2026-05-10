@@ -47,7 +47,9 @@ static bool is_operator_token(const char *value) {
     return is_token(value, "+") || is_token(value, "-") || is_token(value, "*") ||
            is_token(value, "/") || is_token(value, "<<") || is_token(value, ">>") ||
            is_token(value, "|") || is_token(value, "&") || is_token(value, "^") ||
-           is_token(value, "=") || is_token(value, "!");
+           is_token(value, "<") || is_token(value, ">") || is_token(value, "<=") ||
+           is_token(value, ">=") || is_token(value, "!=") || is_token(value, "=") ||
+           is_token(value, "!");
 }
 
 static char *copy_string(const char *text) {
@@ -244,6 +246,31 @@ static bool values_equal(const Value *left, const Value *right) {
     return left->as.integer == right->as.integer;
 }
 
+static bool values_not_equal(const Value *left, const Value *right) {
+    return !values_equal(left, right);
+}
+
+static bool values_compare(const Value *left, const Value *right, const char *operator_token, bool *out_value) {
+    double left_double = 0;
+    double right_double = 0;
+
+    if (!value_to_double(left, &left_double) || !value_to_double(right, &right_double)) {
+        return false;
+    }
+
+    if (is_token(operator_token, "<")) {
+        *out_value = left_double < right_double;
+    } else if (is_token(operator_token, ">")) {
+        *out_value = left_double > right_double;
+    } else if (is_token(operator_token, "<=")) {
+        *out_value = left_double <= right_double;
+    } else {
+        *out_value = left_double >= right_double;
+    }
+
+    return true;
+}
+
 static void print_value(const Value *value) {
     if (value->type == VALUE_INTEGER) {
         printf("%ld", value->as.integer);
@@ -317,6 +344,17 @@ static bool apply_binary_operator(MainStack *stack, const char *operator_token) 
 
     if (is_token(operator_token, "=")) {
         result = create_boolean_value(values_equal(left, right));
+    } else if (is_token(operator_token, "!=")) {
+        result = create_boolean_value(values_not_equal(left, right));
+    } else if (is_token(operator_token, "<") || is_token(operator_token, ">") ||
+               is_token(operator_token, "<=") || is_token(operator_token, ">=")) {
+        if (!values_compare(left, right, operator_token, &right_bool)) {
+            fprintf(stderr, "operator '%s' requires numeric operands\n", operator_token);
+            ray_append(stack, left);
+            ray_append(stack, right);
+            return false;
+        }
+        result = create_boolean_value(right_bool);
     } else if (is_token(operator_token, "|") || is_token(operator_token, "&")) {
         if (value_to_boolean(left, &left_bool) && value_to_boolean(right, &right_bool)) {
             if (is_token(operator_token, "|")) {
