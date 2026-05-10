@@ -26,6 +26,7 @@ struct Value{
         double number;
         char *string;
         bool boolean;
+        // list is (1 2 3 4 5 6)
         RLList(Value) list;
     } as;
 };
@@ -439,6 +440,8 @@ static bool apply_exit(MainStack *stack , int* exit_status) {
 
     char* ret = exit_value(value, exit_status);
 
+    free_value(value);
+
     if (ret){
         fprintf(stderr, "%s\n" , ret);
         return false;
@@ -477,6 +480,33 @@ static bool apply_type(MainStack *stack) {
     ray_append(stack, result);
     return true;
 }
+
+static bool apply_swap(MainStack *stack) {
+    if (stack->count < 2) {
+        fprintf(stderr, "swap type requires 2 operand in stack\n");
+        return false;
+    }
+    Value *value1 = NULL;
+    Value *value2 = NULL;
+    value1 = ray_pop(stack);
+    value2 = ray_pop(stack);
+    ray_append(stack, value1);
+    ray_append(stack, value2);
+    return true;
+}
+
+static bool apply_pop(MainStack *stack) {
+    if (stack->count < 1) {
+        fprintf(stderr, "swap type requires 1 operand in stack\n");
+        return false;
+    }
+
+    Value *value = NULL;
+    value = ray_pop(stack);
+    free_value(value);
+    return true;
+}
+
 
 static bool skip_comment(char **cursor) {
     *cursor += 2;
@@ -707,6 +737,24 @@ static bool evaluate_source(MainStack *stack, char *source) {
             exit(ret);
         }
 
+        if (is_token(token, "pop")) {
+            if (!apply_pop(stack)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        }
+
+        if (is_token(token, "swap")) {
+            if (!apply_swap(stack)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        }
+
         if (!push_token_value(stack, token, is_string)) {
             free(token);
             return false;
@@ -767,7 +815,8 @@ static char *read_file(const char *path) {
 }
 
 int main(int argc, char **argv) {
-    const char *path = "./test/exit_test.rdn";
+    // const char *path = "./test/exit_test.rdn";
+    const char *path = "./test/swap_and_pop.rdn";
     char *source = NULL;
     MainStack stack = {0};
     int exit_code = EXIT_FAILURE;
