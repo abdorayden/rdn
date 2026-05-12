@@ -1,0 +1,10 @@
+3
+to_string
+type
+"string" = if
+    "is a string" print
+else
+    "it's not" print
+done
+
+pop

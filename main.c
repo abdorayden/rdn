@@ -42,6 +42,8 @@
 //  "hello foo" print
 // done
 
+// TODO: introduce big ints 
+
 typedef enum ValueType ValueType;
 typedef enum BlockStop BlockStop;
 typedef struct Value Value ;
@@ -175,7 +177,7 @@ static void free_value(Value *value) {
 }
 
 static void free_stack_values(MainStack *stack) {
-    while (!ray_is_empty(stack)) {
+    while (!(ray_is_empty(stack))) {
         free_value(ray_pop(stack));
     }
 
@@ -661,6 +663,52 @@ static bool apply_dup(MainStack *stack) {
     return true;
 }
 
+// to_string builtin function convert value from the top stack to string without remove it
+static bool apply_to_string(MainStack *stack) {
+    if (stack->count < 1) {
+        fprintf(stderr, "to_string type requires 1 operand in stack\n");
+        return false;
+    }
+
+    Value *value = NULL;
+    value = ray_pop(stack);
+
+    Value* converted;
+
+    switch (value->type) {
+        case VALUE_BOOLEAN:{
+            if (value->as.boolean) {
+                converted = create_string_value_copy("true");
+            }else {
+                converted = create_string_value_copy("false");
+            }
+        }break;
+        case VALUE_DOUBLE:{
+            char *forStore = malloc(16);
+            snprintf(forStore, 16, "%lf", value->as.number);
+            converted = create_string_value_owned(forStore);
+        }break;
+        case VALUE_INTEGER:{
+            char *forStore = malloc(16);
+            snprintf(forStore, 16, "%ld", value->as.integer);
+            converted = create_string_value_owned(forStore);
+        }break;
+        case VALUE_STRING:{
+            converted = create_string_value_copy(value->as.string);
+        }break;
+        case VALUE_LIST: {}break;
+        default: {
+            fprintf(stderr, "to_string type requires 1 operand in stack\n");
+            free_value(value);
+            return false;
+        }
+    }
+
+    ray_append(stack, value);
+    ray_append(stack, converted);
+    return true;
+}
+
 static bool skip_comment(char **cursor) {
     *cursor += 2;
 
@@ -950,59 +998,45 @@ static bool execute_block(MainStack *stack, char **cursor, BlockStop *stop_reaso
             }
             *stop_reason = BLOCK_STOP_ELSE;
             return true;
-        }
-
-        if (is_token(token, "done")) {
+        } else if (is_token(token, "done")) {
             free(token);
             *stop_reason = BLOCK_STOP_DONE;
             return true;
-        }
-
-        if (is_token(token, "if")) {
+        } else if (is_token(token, "if")) {
             free(token);
             if (!apply_if(stack, cursor)) {
                 return false;
             }
             continue;
-        }
-
-        if (is_value_token(token, is_string)) {
+        } else if (is_value_token(token, is_string)) {
             if (!push_token_value(stack, token, is_string)) {
                 free(token);
                 return false;
             }
             free(token);
             continue;
-        }
-
-        if (is_operator_token(token)) {
+        } else if (is_operator_token(token)) {
             if (!apply_binary_operator(stack, token)) {
                 free(token);
                 return false;
             }
             free(token);
             continue;
-        }
-
-        if (is_token(token, "print")) {
+        } else if (is_token(token, "print")) {
             if (!apply_print(stack)) {
                 free(token);
                 return false;
             }
             free(token);
             continue;
-        }
-
-        if (is_token(token, "type")) {
+        } else if (is_token(token, "type")) {
             if (!apply_type(stack)) {
                 free(token);
                 return false;
             }
             free(token);
             continue;
-        }
-
-        if (is_token(token, "exit")){
+        } else if (is_token(token, "exit")){
             int ret = 0;
             if (!apply_exit(stack , &ret)) {
                 free(token);
@@ -1011,39 +1045,41 @@ static bool execute_block(MainStack *stack, char **cursor, BlockStop *stop_reaso
             free(token);
             free_stack_values(stack);
             exit(ret);
-        }
-
-        if (is_token(token, "pop")) {
+        } else if (is_token(token, "pop")) {
             if (!apply_pop(stack)) {
                 free(token);
                 return false;
             }
             free(token);
             continue;
-        }
-
-        if (is_token(token, "swap")) {
+        } else if (is_token(token, "swap")) {
             if (!apply_swap(stack)) {
                 free(token);
                 return false;
             }
             free(token);
             continue;
-        }
-
-        if (is_token(token, "dup")) {
+        } else if (is_token(token, "dup")) {
             if (!apply_dup(stack)) {
                 free(token);
                 return false;
             }
             free(token);
             continue;
+        } else if (is_token(token, "to_string")) {
+            if (!apply_to_string(stack)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        }else {
+            fprintf(stderr, "unknown token: %s\n", token);
+            free(token);
+            return false;
         }
-
-        fprintf(stderr, "unknown token: %s\n", token);
-        free(token);
-        return false;
     }
+    return true;
 }
 
 static bool skip_if(char **cursor) {
