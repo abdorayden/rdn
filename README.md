@@ -1,28 +1,14 @@
-# what's raden
-- raden is stack based scripting programming language , that used for configurations and stuff 
-- it has state virtual machine and easy for embeding to other projects 
-- you can create native functions in C and call them inside raden
+# What's Raden?
+
+- Raden is a stack-based scripting language that is used for configuration and other purposes.
+- It has a stack-based virtual machine and is easy to embed into other projects.
+- You can create native functions in C and call them from within Raden.
 
 ```raden
 2 2 +
 print
 
 true if
-
-false eif
-
-else
-
-endif
-
-
-do 
-
-    ...
-
- true   repeat
-
-dfun
-    access params by stack directly
-endfun
+    "hello" print
+done
 ```
