@@ -5,19 +5,56 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
 
 #include "./src/stack.h"
 
-typedef enum {
+// TODO: replace done with end and make sure that it changed in the tests
+// TODO: make a good api in C so i can implement native functions or create bindings
+
+// TODO: introduce loops 
+// example :
+// true loop 
+//  ...
+// done
+
+// TODO: introduce vars 
+// example :
+// save keyword pop two values from the stack and save
+// 3 i save 
+// i print 
+// i print 
+// i print
+
+// TODO: introduce lists 
+// example :
+// (1 2 3 4 5 "hello") [* push this list on the stack *]
+// 6 _append [* accept a value *]
+// 0 _index [* accept index from list and push it in the stack *]
+// 0 _remove [* accept index and remove the value from it *]
+
+// TODO: introduce string manipulations (to make it easy just convert it to a list)
+// example :
+// "hello" _slice 0 _index print
+
+// TODO: introduce functions 
+// example :
+// fnc foo
+//  "hello foo" print
+// done
+
+typedef enum ValueType ValueType;
+typedef enum BlockStop BlockStop;
+typedef struct Value Value ;
+typedef RLStack(Value *) MainStack;
+typedef struct Vars Vars;
+
+enum ValueType{
     VALUE_INTEGER,
     VALUE_DOUBLE,
     VALUE_STRING,
     VALUE_BOOLEAN,
     VALUE_LIST,
-} ValueType;
-
-typedef struct Value Value ;
+};
 
 struct Value{
     ValueType type;
@@ -27,17 +64,20 @@ struct Value{
         char *string;
         bool boolean;
         // list is (1 2 3 4 5 6)
-        RLList(Value) list;
+        RLList(Value*) list;
     } as;
 };
 
-typedef RLStack(Value *) MainStack;
+struct Vars {
+    char* var_name;
+    Value* var_value;
+};
 
-typedef enum {
+enum BlockStop{
     BLOCK_STOP_EOF,
     BLOCK_STOP_ELSE,
     BLOCK_STOP_DONE,
-} BlockStop;
+};
 
 static bool is_token(const char *value, const char *expected) {
     return strcmp(value, expected) == 0;
@@ -495,7 +535,6 @@ static bool apply_print(MainStack *stack) {
 
     value = ray_pop(stack);
     print_value(value);
-    // putchar('\n');
     free_value(value);
     return true;
 }
@@ -569,7 +608,7 @@ static bool apply_swap(MainStack *stack) {
 
 static bool apply_pop(MainStack *stack) {
     if (stack->count < 1) {
-        fprintf(stderr, "swap type requires 1 operand in stack\n");
+        fprintf(stderr, "pop type requires 1 operand in stack\n");
         return false;
     }
 
@@ -579,6 +618,48 @@ static bool apply_pop(MainStack *stack) {
     return true;
 }
 
+static bool apply_dup(MainStack *stack) {
+    if (stack->count < 1) {
+        fprintf(stderr, "dup type requires 1 operand in stack\n");
+        return false;
+    }
+
+    Value *value = NULL;
+    value = ray_pop(stack);
+
+    Value* dup1;
+    Value* dup2;
+
+    switch (value->type) {
+        case VALUE_BOOLEAN:{
+            dup1 = create_boolean_value(value->as.boolean);
+            dup2 = create_boolean_value(value->as.boolean);
+        }break;
+        case VALUE_DOUBLE:{
+            dup1 = create_double_value(value->as.number);
+            dup2 = create_double_value(value->as.number);
+        }break;
+        case VALUE_INTEGER:{
+            dup1 = create_integer_value(value->as.integer);
+            dup2 = create_integer_value(value->as.integer);
+        }break;
+        case VALUE_STRING:{
+            dup1 = create_string_value_copy(value->as.string);
+            dup2 = create_string_value_copy(value->as.string);
+        }break;
+        case VALUE_LIST: {}break;
+        default: {
+            fprintf(stderr, "dup type requires 1 operand in stack\n");
+            free_value(value);
+            return false;
+        }
+    }
+
+    ray_append(stack, dup1);
+    ray_append(stack, dup2);
+    free_value(value);
+    return true;
+}
 
 static bool skip_comment(char **cursor) {
     *cursor += 2;
@@ -950,6 +1031,15 @@ static bool execute_block(MainStack *stack, char **cursor, BlockStop *stop_reaso
             continue;
         }
 
+        if (is_token(token, "dup")) {
+            if (!apply_dup(stack)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        }
+
         fprintf(stderr, "unknown token: %s\n", token);
         free(token);
         return false;
@@ -1090,16 +1180,124 @@ static char *read_file(const char *path) {
     return buffer;
 }
 
+static bool append_text(char **buffer, size_t *length, const char *text) {
+    size_t text_length = strlen(text);
+    char *grown = realloc(*buffer, *length + text_length + 1);
+
+    if (grown == NULL) {
+        return false;
+    }
+
+    memcpy(grown + *length, text, text_length + 1);
+    *buffer = grown;
+    *length += text_length;
+    return true;
+}
+
+static bool source_has_complete_blocks(const char *source, bool *out_complete) {
+    char *cursor = (char *)source;
+    char *token = NULL;
+    bool is_string = false;
+    int depth = 0;
+
+    while (true) {
+        if (!next_token(&cursor, &token, &is_string)) {
+            return false;
+        }
+
+        if (token == NULL) {
+            *out_complete = (depth == 0);
+            return true;
+        }
+
+        if (!is_string && is_token(token, "if")) {
+            depth++;
+        } else if (!is_string && is_token(token, "done")) {
+            depth--;
+            if (depth < 0) {
+                fprintf(stderr, "unexpected done\n");
+                free(token);
+                return false;
+            }
+        } else if (!is_string && is_token(token, "else") && depth == 0) {
+            fprintf(stderr, "unexpected else\n");
+            free(token);
+            return false;
+        }
+
+        free(token);
+    }
+}
+
+static int run_repl(void) {
+    MainStack stack = {0};
+    char line[4096];
+    char *source = NULL;
+    size_t source_length = 0;
+    bool complete = true;
+
+    printf("raden repl\n");
+    printf("press Ctrl-D to exit\n");
+
+    while (true) {
+        fputs(source_length == 0 ? "RDN >> " : ".. ", stdout);
+        fflush(stdout);
+
+        if (fgets(line, sizeof(line), stdin) == NULL) {
+            if (source_length != 0) {
+                fprintf(stderr, "incomplete input\n");
+            } else {
+                putchar('\n');
+            }
+            break;
+        }
+
+        if (!append_text(&source, &source_length, line)) {
+            fprintf(stderr, "failed to allocate repl buffer\n");
+            free(source);
+            free_stack_values(&stack);
+            return EXIT_FAILURE;
+        }
+
+        if (!source_has_complete_blocks(source, &complete)) {
+            free(source);
+            source = NULL;
+            source_length = 0;
+            free_stack_values(&stack);
+            stack = (MainStack){0};
+            continue;
+        }
+
+        if (!complete) {
+            continue;
+        }
+
+        if (!evaluate_source(&stack, source)) {
+            free_stack_values(&stack);
+            stack = (MainStack){0};
+        }
+
+        free(source);
+        source = NULL;
+        source_length = 0;
+    }
+
+    free(source);
+    free_stack_values(&stack);
+    return EXIT_SUCCESS;
+}
+
 int main(int argc, char **argv) {
-    const char *path = "./test/if_else.rdn";
+    const char *path = NULL;
     char *source = NULL;
     MainStack stack = {0};
     int exit_code = EXIT_FAILURE;
 
-    if (argc > 1) {
-        path = argv[1];
+    if (argc < 2) {
+        return run_repl();
     }
 
+    path = argv[1];
     source = read_file(path);
     if (source == NULL) {
         return exit_code;
