@@ -1,0 +1,24 @@
+3 i save
+i print "\n" print
+i print "\n" print
+i 1 + i save
+i print "\n" print
+
+10 x save
+true if
+    20 x save
+    "inner x = " print x print "\n" print
+else
+    "wrong branch" print "\n" print
+done
+"outer x = " print x print "\n" print
+
+false if
+    "wrong branch" print "\n" print
+else
+    "else branch" print "\n" print
+    99 z save
+    "inner z = " print z print "\n" print
+done
+
+"i is " print i print "\n" print

@@ -51,6 +51,8 @@ typedef RLStack(Value *) MainStack;
 typedef struct Vars_t Vars_t;
 typedef RLList(Vars_t*) Vars;
 
+static void free_value(Value *value);
+
 enum ValueType{
     VALUE_INTEGER,
     VALUE_DOUBLE,
@@ -76,6 +78,7 @@ struct Value{
 struct Vars_t {
     char* var_name;
     Value* var_value;
+    bool is_scope_marker;
 };
 
 struct Funcs_t {
@@ -172,12 +175,186 @@ static Value *create_string_value_copy(const char *string) {
     return create_string_value_owned(copy);
 }
 
+static Value *create_var_name_value(const char *name) {
+    Value *value = malloc(sizeof(*value));
+
+    if (value == NULL) {
+        return NULL;
+    }
+
+    value->type = VALUE_AS_VAR;
+    value->as.string = copy_string(name);
+    if (value->as.string == NULL) {
+        free(value);
+        return NULL;
+    }
+
+    return value;
+}
+
+static Value *clone_value(const Value *value) {
+    if (value == NULL) {
+        return NULL;
+    }
+
+    switch (value->type) {
+        case VALUE_INTEGER:
+            return create_integer_value(value->as.integer);
+        case VALUE_DOUBLE:
+            return create_double_value(value->as.number);
+        case VALUE_BOOLEAN:
+            return create_boolean_value(value->as.boolean);
+        case VALUE_STRING:
+            return create_string_value_copy(value->as.string);
+        case VALUE_AS_VAR:
+            return create_var_name_value(value->as.string);
+        case VALUE_LIST:
+        default:
+            return NULL;
+    }
+}
+
+static Vars_t *create_scope_marker(void) {
+    Vars_t *entry = malloc(sizeof(*entry));
+
+    if (entry == NULL) {
+        return NULL;
+    }
+
+    entry->var_name = NULL;
+    entry->var_value = NULL;
+    entry->is_scope_marker = true;
+    return entry;
+}
+
+static Vars_t *create_var_entry(const char *name, Value *value) {
+    Vars_t *entry = malloc(sizeof(*entry));
+
+    if (entry == NULL) {
+        return NULL;
+    }
+
+    entry->var_name = copy_string(name);
+    if (entry->var_name == NULL) {
+        free(entry);
+        return NULL;
+    }
+
+    entry->var_value = value;
+    entry->is_scope_marker = false;
+    return entry;
+}
+
+static void free_var_entry(Vars_t *entry) {
+    if (entry == NULL) {
+        return;
+    }
+
+    free(entry->var_name);
+    free_value(entry->var_value);
+    free(entry);
+}
+
+static void free_vars(Vars *vars) {
+    while (vars->count > 0) {
+        free_var_entry(ray_pop(vars));
+    }
+
+    ray_clear(vars);
+}
+
+static bool vars_push_scope(Vars *vars) {
+    Vars_t *marker = create_scope_marker();
+
+    if (marker == NULL) {
+        fprintf(stderr, "failed to allocate scope marker\n");
+        return false;
+    }
+
+    ray_append(vars, marker);
+    return true;
+}
+
+static void vars_pop_scope(Vars *vars) {
+    while (vars->count > 0) {
+        Vars_t *entry = ray_pop(vars);
+        bool is_marker = entry->is_scope_marker;
+
+        free_var_entry(entry);
+        if (is_marker) {
+            return;
+        }
+    }
+}
+
+static Vars_t *find_var_entry(const Vars *vars, const char *name) {
+    size_t index = vars->count;
+
+    while (index > 0) {
+        Vars_t *entry = vars->items[--index];
+
+        if (entry->is_scope_marker) {
+            continue;
+        }
+
+        if (strcmp(entry->var_name, name) == 0) {
+            return entry;
+        }
+    }
+
+    return NULL;
+}
+
+static Vars_t *find_current_scope_var_entry(const Vars *vars, const char *name) {
+    size_t index = vars->count;
+
+    while (index > 0) {
+        Vars_t *entry = vars->items[--index];
+
+        if (entry->is_scope_marker) {
+            break;
+        }
+
+        if (strcmp(entry->var_name, name) == 0) {
+            return entry;
+        }
+    }
+
+    return NULL;
+}
+
+static bool vars_save(Vars *vars, const char *name, const Value *value) {
+    Vars_t *entry = find_current_scope_var_entry(vars, name);
+    Value *copy = clone_value(value);
+
+    if (copy == NULL) {
+        fprintf(stderr, "failed to clone variable value\n");
+        return false;
+    }
+
+    if (entry != NULL) {
+        free_value(entry->var_value);
+        entry->var_value = copy;
+        return true;
+    }
+
+    entry = create_var_entry(name, copy);
+    if (entry == NULL) {
+        fprintf(stderr, "failed to allocate variable entry\n");
+        free_value(copy);
+        return false;
+    }
+
+    ray_append(vars, entry);
+    return true;
+}
+
 static void free_value(Value *value) {
     if (value == NULL) {
         return;
     }
 
-    if (value->type == VALUE_STRING) {
+    if (value->type == VALUE_STRING || value->type == VALUE_AS_VAR) {
         free(value->as.string);
     }
 
@@ -657,6 +834,10 @@ static bool apply_dup(MainStack *stack) {
             dup1 = create_string_value_copy(value->as.string);
             dup2 = create_string_value_copy(value->as.string);
         }break;
+        case VALUE_AS_VAR:{
+            dup1 = create_var_name_value(value->as.string);
+            dup2 = create_var_name_value(value->as.string);
+        }break;
         case VALUE_LIST: {}break;
         default: {
             fprintf(stderr, "dup type requires 1 operand in stack\n");
@@ -702,6 +883,9 @@ static bool apply_to_string(MainStack *stack) {
             converted = create_string_value_owned(forStore);
         }break;
         case VALUE_STRING:{
+            converted = create_string_value_copy(value->as.string);
+        }break;
+        case VALUE_AS_VAR:{
             converted = create_string_value_copy(value->as.string);
         }break;
         case VALUE_LIST: {}break;
@@ -913,6 +1097,77 @@ static bool is_value_token(const char *token, bool is_string) {
     return is_token(token, "true") || is_token(token, "false");
 }
 
+static bool is_identifier_token(const char *token) {
+    size_t index = 0;
+
+    if (token == NULL || token[0] == '\0') {
+        return false;
+    }
+
+    if (!(isalpha((unsigned char)token[0]) || token[0] == '_')) {
+        return false;
+    }
+
+    for (index = 1; token[index] != '\0'; index++) {
+        if (!(isalnum((unsigned char)token[index]) || token[index] == '_')) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool identifier_is_save_target(char *cursor) {
+    char *next = NULL;
+    bool is_string = false;
+
+    if (!next_token(&cursor, &next, &is_string)) {
+        return false;
+    }
+
+    if (next == NULL) {
+        return false;
+    }
+
+    if (!is_string && is_token(next, "save")) {
+        free(next);
+        return true;
+    }
+
+    free(next);
+    return false;
+}
+
+static bool apply_save(MainStack *stack, Vars *vars) {
+    Value *name = NULL;
+    Value *value = NULL;
+
+    if (stack->count < 2) {
+        fprintf(stderr, "save requires 2 operands\n");
+        return false;
+    }
+
+    name = ray_pop(stack);
+    value = ray_pop(stack);
+
+    if (name->type != VALUE_AS_VAR) {
+        fprintf(stderr, "save requires variable name\n");
+        ray_append(stack, value);
+        ray_append(stack, name);
+        return false;
+    }
+
+    if (!vars_save(vars, name->as.string, value)) {
+        ray_append(stack, value);
+        ray_append(stack, name);
+        return false;
+    }
+
+    free_value(name);
+    free_value(value);
+    return true;
+}
+
 static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else);
 static bool execute_block(MainStack *stack, Vars* vars, char **cursor, BlockStop *stop_reason, bool allow_else);
 
@@ -936,14 +1191,21 @@ static bool apply_if(MainStack *stack, Vars* vars, char **cursor) {
     free_value(condition);
 
     if (condition_value) {
+        if (!vars_push_scope(vars)) {
+            return false;
+        }
         if (!execute_block(stack, vars, cursor, &stop_reason, true)) {
+            vars_pop_scope(vars);
             return false;
         }
 
         if (stop_reason == BLOCK_STOP_EOF) {
+            vars_pop_scope(vars);
             fprintf(stderr, "if missing done\n");
             return false;
         }
+
+        vars_pop_scope(vars);
 
         if (stop_reason == BLOCK_STOP_ELSE) {
             if (!skip_block(cursor, &stop_reason, true)) {
@@ -969,15 +1231,21 @@ static bool apply_if(MainStack *stack, Vars* vars, char **cursor) {
     }
 
     if (stop_reason == BLOCK_STOP_ELSE) {
+        if (!vars_push_scope(vars)) {
+            return false;
+        }
         if (!execute_block(stack, vars, cursor, &stop_reason, true)) {
+            vars_pop_scope(vars);
             return false;
         }
 
         if (stop_reason != BLOCK_STOP_DONE) {
+            vars_pop_scope(vars);
             fprintf(stderr, "else missing done\n");
             return false;
         }
 
+        vars_pop_scope(vars);
         return true;
     }
 
@@ -1075,8 +1343,33 @@ static bool execute_block(MainStack *stack, Vars* vars, char **cursor, BlockStop
             }
             free(token);
             continue;
+        } else if (is_token(token, "save")) {
+            if (!apply_save(stack, vars)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
         } else if (is_token(token, "to_string")) {
             if (!apply_to_string(stack)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else if (is_identifier_token(token)) {
+            Value *resolved = NULL;
+            Vars_t *entry = NULL;
+
+            if (identifier_is_save_target(*cursor)) {
+                resolved = create_var_name_value(token);
+            } else if ((entry = find_var_entry(vars, token)) != NULL) {
+                resolved = clone_value(entry->var_value);
+            } else {
+                resolved = create_var_name_value(token);
+            }
+
+            if (!push_value(stack, resolved)) {
                 free(token);
                 return false;
             }
@@ -1302,6 +1595,7 @@ static int run_repl(void) {
             fprintf(stderr, "failed to allocate repl buffer\n");
             free(source);
             free_stack_values(&stack);
+            free_vars(&vars);
             return EXIT_FAILURE;
         }
 
@@ -1330,6 +1624,7 @@ static int run_repl(void) {
 
     free(source);
     free_stack_values(&stack);
+    free_vars(&vars);
     return EXIT_SUCCESS;
 }
 
@@ -1353,6 +1648,7 @@ int main(int argc, char **argv) {
     if (!evaluate_source(&stack,&vars, source)) {
         free(source);
         free_stack_values(&stack);
+        free_vars(&vars);
         return exit_code;
     }
 
@@ -1360,10 +1656,12 @@ int main(int argc, char **argv) {
         fprintf(stderr, "unexpected values left on stack: %zu\n", stack.count);
         free(source);
         free_stack_values(&stack);
+        free_vars(&vars);
         return exit_code;
     }
 
     free(source);
     free_stack_values(&stack);
+    free_vars(&vars);
     return EXIT_SUCCESS;
 }
