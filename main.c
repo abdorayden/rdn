@@ -20,7 +20,7 @@
 // TODO: introduce vars 
 // example :
 // save keyword pop two values from the stack and save
-// 3 i save 
+// 3 i save
 // i print 
 // i print 
 // i print
@@ -48,7 +48,8 @@ typedef enum ValueType ValueType;
 typedef enum BlockStop BlockStop;
 typedef struct Value Value ;
 typedef RLStack(Value *) MainStack;
-typedef struct Vars Vars;
+typedef struct Vars_t Vars_t;
+typedef RLList(Vars_t*) Vars;
 
 enum ValueType{
     VALUE_INTEGER,
@@ -56,6 +57,8 @@ enum ValueType{
     VALUE_STRING,
     VALUE_BOOLEAN,
     VALUE_LIST,
+
+    VALUE_AS_VAR,
 };
 
 struct Value{
@@ -70,9 +73,14 @@ struct Value{
     } as;
 };
 
-struct Vars {
+struct Vars_t {
     char* var_name;
     Value* var_value;
+};
+
+struct Funcs_t {
+    char* func_name;
+    RLStack(Value*) body_stack;
 };
 
 enum BlockStop{
@@ -906,9 +914,9 @@ static bool is_value_token(const char *token, bool is_string) {
 }
 
 static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else);
-static bool execute_block(MainStack *stack, char **cursor, BlockStop *stop_reason, bool allow_else);
+static bool execute_block(MainStack *stack, Vars* vars, char **cursor, BlockStop *stop_reason, bool allow_else);
 
-static bool apply_if(MainStack *stack, char **cursor) {
+static bool apply_if(MainStack *stack, Vars* vars, char **cursor) {
     Value *condition = NULL;
     bool condition_value = false;
     BlockStop stop_reason = BLOCK_STOP_EOF;
@@ -928,7 +936,7 @@ static bool apply_if(MainStack *stack, char **cursor) {
     free_value(condition);
 
     if (condition_value) {
-        if (!execute_block(stack, cursor, &stop_reason, true)) {
+        if (!execute_block(stack, vars, cursor, &stop_reason, true)) {
             return false;
         }
 
@@ -961,7 +969,7 @@ static bool apply_if(MainStack *stack, char **cursor) {
     }
 
     if (stop_reason == BLOCK_STOP_ELSE) {
-        if (!execute_block(stack, cursor, &stop_reason, true)) {
+        if (!execute_block(stack, vars, cursor, &stop_reason, true)) {
             return false;
         }
 
@@ -976,7 +984,8 @@ static bool apply_if(MainStack *stack, char **cursor) {
     return true;
 }
 
-static bool execute_block(MainStack *stack, char **cursor, BlockStop *stop_reason, bool allow_else) {
+static bool execute_block(MainStack *stack, Vars* vars, char **cursor, BlockStop *stop_reason, bool allow_else) {
+    (void)vars;
     char *token = NULL;
     bool is_string = false;
 
@@ -1004,7 +1013,7 @@ static bool execute_block(MainStack *stack, char **cursor, BlockStop *stop_reaso
             return true;
         } else if (is_token(token, "if")) {
             free(token);
-            if (!apply_if(stack, cursor)) {
+            if (!apply_if(stack, vars, cursor)) {
                 return false;
             }
             continue;
@@ -1150,11 +1159,11 @@ static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else) {
     }
 }
 
-static bool evaluate_source(MainStack *stack, char *source) {
+static bool evaluate_source(MainStack *stack, Vars* vars, char *source) {
     BlockStop stop_reason = BLOCK_STOP_EOF;
     char *cursor = source;
 
-    if (!execute_block(stack, &cursor, &stop_reason, false)) {
+    if (!execute_block(stack, vars, &cursor, &stop_reason, false)) {
         return false;
     }
 
@@ -1267,6 +1276,7 @@ static bool source_has_complete_blocks(const char *source, bool *out_complete) {
 
 static int run_repl(void) {
     MainStack stack = {0};
+    Vars vars = {0};
     char line[4096];
     char *source = NULL;
     size_t source_length = 0;
@@ -1308,7 +1318,7 @@ static int run_repl(void) {
             continue;
         }
 
-        if (!evaluate_source(&stack, source)) {
+        if (!evaluate_source(&stack, &vars, source)) {
             free_stack_values(&stack);
             stack = (MainStack){0};
         }
@@ -1327,6 +1337,7 @@ int main(int argc, char **argv) {
     const char *path = NULL;
     char *source = NULL;
     MainStack stack = {0};
+    Vars vars = {0};
     int exit_code = EXIT_FAILURE;
 
     if (argc < 2) {
@@ -1339,7 +1350,7 @@ int main(int argc, char **argv) {
         return exit_code;
     }
 
-    if (!evaluate_source(&stack, source)) {
+    if (!evaluate_source(&stack,&vars, source)) {
         free(source);
         free_stack_values(&stack);
         return exit_code;
