@@ -87,6 +87,110 @@ enum BlockStop{
     BLOCK_STOP_END,
 };
 
+static bool is_token(const char *value, const char *expected);
+static bool is_operator_token(const char *value);
+static char *copy_string(const char *text) ;
+static Value *create_integer_value(long integer);
+static Value *create_double_value(double number);
+static Value *create_boolean_value(bool boolean);
+static Value *create_string_value_owned(char *string);
+static Value *create_string_value_copy(const char *string);
+static Value *create_var_name_value(const char *name);
+static Value *clone_value(const Value *value);
+static Vars_t *create_scope_marker(void);
+static Vars_t *create_var_entry(const char *name, Value *value, bool is_const);
+static void free_var_entry(Vars_t *entry);
+static void free_vars(Vars *vars);
+static bool vars_push_scope(Vars *vars);
+static void vars_pop_scope(Vars *vars);
+static Vars_t *find_var_entry(const Vars *vars, const char *name);
+static Vars_t *find_current_scope_var_entry(const Vars *vars, const char *name);
+static bool vars_let(Vars *vars, const char *name, const Value *value);
+static bool vars_const(Vars *vars, const char *name, const Value *value);
+static void free_value(Value *value);
+static void free_stack_values(RDNState *stack);
+static bool push_value(RDNState *stack, Value *value);
+static bool parse_integer_token(const char *text, long *out_value);
+static bool parse_double_token(const char *text, double *out_value);
+static bool value_to_double(const Value *value, double *out_value);
+static bool value_to_long(const Value *value, long *out_value);
+static bool value_to_boolean(const Value *value, bool *out_value);
+static bool values_equal(const Value *left, const Value *right);
+static bool values_not_equal(const Value *left, const Value *right);
+static bool values_compare(const Value *left, const Value *right, const char *operator_token, bool *out_value);
+static void print_value(const Value *value);
+static char* exit_value(const Value* value , int* out_exit);
+static bool apply_binary_operator(RDNState *stack, const char *operator_token);
+static bool apply_print(RDNState *stack);
+static bool apply_exit(RDNState *stack , int* exit_status);
+static bool apply_type(RDNState *stack);
+static bool apply_swap(RDNState *stack);
+static bool apply_pop(RDNState *stack);
+static bool apply_dup(RDNState *stack);
+
+// to_string builtin function convert value from the top stack to string without remove it
+static bool apply_to_string(RDNState *stack);
+static bool skip_comment(char **cursor);
+static bool append_char(char **buffer, size_t *length, size_t *capacity, char ch);
+static bool read_string_token(char **cursor, char **out_token);
+static bool read_plain_token(char **cursor, char **out_token);
+static bool next_token(char **cursor, char **out_token, bool *out_is_string);
+static bool push_token_value(RDNState *stack, const char *token, bool is_string);
+static bool is_value_token(const char *token, bool is_string);
+static bool is_identifier_token(const char *token);
+static bool identifier_is_save_target(char *cursor);
+static bool apply_let(RDNState *stack, Vars *vars);
+static bool apply_const(RDNState *stack, Vars *vars);
+static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else);
+static bool execute_block(RDNState *stack, Vars* vars, char **cursor, BlockStop *stop_reason, bool allow_else);
+static bool apply_if(RDNState *stack, Vars* vars, char **cursor);
+static bool execute_block(RDNState *stack, Vars* vars, char **cursor, BlockStop *stop_reason, bool allow_else);
+static bool skip_if(char **cursor);
+static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else);
+static bool evaluate_source(RDNState *stack, Vars* vars, char *source);
+static char *read_file(const char *path);
+static bool append_text(char **buffer, size_t *length, const char *text);
+static bool source_has_complete_blocks(const char *source, bool *out_complete);
+static int run_repl(void);
+
+int main(int argc, char **argv) {
+    const char *path = NULL;
+    char *source = NULL;
+    RDNState stack = {0};
+    Vars vars = {0};
+    int exit_code = EXIT_FAILURE;
+
+    if (argc < 2) {
+        return run_repl();
+    }
+
+    path = argv[1];
+    source = read_file(path);
+    if (source == NULL) {
+        return exit_code;
+    }
+
+    if (!evaluate_source(&stack,&vars, source)) {
+        free(source);
+        free_stack_values(&stack);
+        free_vars(&vars);
+        return exit_code;
+    }
+
+    if (stack.count != 0) {
+        fprintf(stderr, "unexpected values left on stack: %zu\n", stack.count);
+        free(source);
+        free_stack_values(&stack);
+        free_vars(&vars);
+        return exit_code;
+    }
+
+    free(source);
+    free_stack_values(&stack);
+    free_vars(&vars);
+    return EXIT_SUCCESS;
+}
+
 static bool is_token(const char *value, const char *expected) {
     return strcmp(value, expected) == 0;
 }
@@ -1684,44 +1788,6 @@ static int run_repl(void) {
         free(source);
         source = NULL;
         source_length = 0;
-    }
-
-    free(source);
-    free_stack_values(&stack);
-    free_vars(&vars);
-    return EXIT_SUCCESS;
-}
-
-int main(int argc, char **argv) {
-    const char *path = NULL;
-    char *source = NULL;
-    RDNState stack = {0};
-    Vars vars = {0};
-    int exit_code = EXIT_FAILURE;
-
-    if (argc < 2) {
-        return run_repl();
-    }
-
-    path = argv[1];
-    source = read_file(path);
-    if (source == NULL) {
-        return exit_code;
-    }
-
-    if (!evaluate_source(&stack,&vars, source)) {
-        free(source);
-        free_stack_values(&stack);
-        free_vars(&vars);
-        return exit_code;
-    }
-
-    if (stack.count != 0) {
-        fprintf(stderr, "unexpected values left on stack: %zu\n", stack.count);
-        free(source);
-        free_stack_values(&stack);
-        free_vars(&vars);
-        return exit_code;
     }
 
     free(source);
