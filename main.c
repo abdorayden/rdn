@@ -19,20 +19,23 @@
 // TODO: introduce lists 
 // example :
 // (1 2 3 4 5 "hello") [* push this list on the stack *]
-// 6 _append [* accept a value *]
-// 0 _index [* accept index from list and push it in the stack *]
-// 0 _remove [* accept index and remove the value from it *]
+// 6 append [* accept a value *]
+// 0 index [* accept index from list and push it in the stack *]
+// 0 remove [* accept index and remove the value from it *]
+// [* other example *]
+// ("rayden" , "abdo") names let
+// names "other_name" append
 
 // TODO: introduce string manipulations (to make it easy just convert it to a list)
 // example :
-// "hello" _slice 0 _index print
+// "hello" slice 0 index print
 
 // TODO: introduce functions 
 // example :
 // defun foo
 //  "hello foo" print
 // end
-//
+// [* call function *]
 // foo call
 
 // TODO: introduce big ints 
@@ -148,6 +151,7 @@ static bool execute_block(RDNState *stack, Vars* vars, char **cursor, BlockStop 
 static bool skip_if(char **cursor);
 static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else);
 static bool evaluate_source(RDNState *stack, Vars* vars, char *source);
+#define rdn_do_string(src) do{evaluate_source(NULL , NULL , (src))}while(0)
 static char *read_file(const char *path);
 static bool append_text(char **buffer, size_t *length, const char *text);
 static bool source_has_complete_blocks(const char *source, bool *out_complete);
@@ -1414,7 +1418,15 @@ static bool apply_if(RDNState *stack, Vars* vars, char **cursor) {
 }
 
 static bool execute_block(RDNState *stack, Vars* vars, char **cursor, BlockStop *stop_reason, bool allow_else) {
-    (void)vars;
+
+    if (vars == NULL){
+        *vars = (Vars){0};
+    }
+
+    if (stack == NULL){
+        *stack = (RDNState){0};
+    }
+
     char *token = NULL;
     bool is_string = false;
 
