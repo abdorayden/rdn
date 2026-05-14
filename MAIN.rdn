@@ -1,9 +1,15 @@
-"hello" hello let
+10 n let
+0 i let
 
-hello "hello" = if
-    true if
-        true false | true & if
-            "inside" print
-        end
-    end
+i n < condition let
+
+condition loop 
+
+    i print
+    "\n" print
+    i 1 + i let
+    
+    i n < condition let
+    condition
 end
+

@@ -10,12 +10,6 @@
 
 // TODO: make a good api in C so i can implement native functions or create bindings
 
-// TODO: introduce loops 
-// example :
-// true loop 
-//  ...
-// end
-
 // TODO: introduce lists 
 // example :
 // (1 2 3 4 5 "hello") [* push this list on the stack *]
@@ -162,8 +156,10 @@ static bool apply_const(RDNState *stack, Vars *vars);
 static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else);
 static bool execute_block(RDNState *stack, Vars* vars, char **cursor, BlockStop *stop_reason, bool allow_else);
 static bool apply_if(RDNState *stack, Vars* vars, char **cursor);
+static bool apply_loop(RDNState *stack, Vars* vars, char **cursor);
 static bool execute_block(RDNState *stack, Vars* vars, char **cursor, BlockStop *stop_reason, bool allow_else);
 static bool skip_if(char **cursor);
+static bool skip_loop(char **cursor);
 static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else);
 static bool evaluate_source(RDNState *stack, Vars* vars, char *source);
 #define rdn_do_string(src) do{evaluate_source(NULL , NULL , (src))}while(0)
@@ -1926,6 +1922,66 @@ static bool apply_if(RDNState *stack, Vars* vars, char **cursor) {
     return true;
 }
 
+static bool apply_loop(RDNState *stack, Vars* vars, char **cursor) {
+    Value *condition = NULL;
+    bool condition_value = false;
+    BlockStop stop_reason = BLOCK_STOP_EOF;
+    char *body_start = *cursor;
+    char *body_end = NULL;
+
+    if (stack->count < 1) {
+        fprintf(stderr, "loop requires 1 operand\n");
+        return false;
+    }
+
+    condition = ray_pop(stack);
+    if (!value_to_boolean(condition, &condition_value)) {
+        fprintf(stderr, "loop requires a boolean operand\n");
+        ray_append(stack, condition);
+        return false;
+    }
+    free_value(condition);
+
+    body_end = body_start;
+    if (!skip_block(&body_end, &stop_reason, false)) {
+        return false;
+    }
+
+    if (stop_reason != BLOCK_STOP_END) {
+        fprintf(stderr, "loop missing end\n");
+        return false;
+    }
+
+    while (condition_value) {
+        char *iteration_cursor = body_start;
+
+        if (!execute_block(stack, vars, &iteration_cursor, &stop_reason, false)) {
+            return false;
+        }
+
+        if (stop_reason != BLOCK_STOP_END) {
+            fprintf(stderr, "loop missing end\n");
+            return false;
+        }
+
+        if (stack->count < 1) {
+            fprintf(stderr, "loop body must leave boolean condition on stack\n");
+            return false;
+        }
+
+        condition = ray_pop(stack);
+        if (!value_to_boolean(condition, &condition_value)) {
+            fprintf(stderr, "loop body must leave boolean condition on stack\n");
+            ray_append(stack, condition);
+            return false;
+        }
+        free_value(condition);
+    }
+
+    *cursor = body_end;
+    return true;
+}
+
 static bool execute_block(RDNState *stack, Vars* vars, char **cursor, BlockStop *stop_reason, bool allow_else) {
 
     if (vars == NULL){
@@ -1972,6 +2028,12 @@ static bool execute_block(RDNState *stack, Vars* vars, char **cursor, BlockStop 
         } else if (is_token(token, "if")) {
             free(token);
             if (!apply_if(stack, vars, cursor)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "loop")) {
+            free(token);
+            if (!apply_loop(stack, vars, cursor)) {
                 return false;
             }
             continue;
@@ -2137,6 +2199,21 @@ static bool skip_if(char **cursor) {
     return true;
 }
 
+static bool skip_loop(char **cursor) {
+    BlockStop stop_reason = BLOCK_STOP_EOF;
+
+    if (!skip_block(cursor, &stop_reason, false)) {
+        return false;
+    }
+
+    if (stop_reason != BLOCK_STOP_END) {
+        fprintf(stderr, "loop missing end\n");
+        return false;
+    }
+
+    return true;
+}
+
 static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else) {
     char *token = NULL;
     bool is_string = false;
@@ -2170,6 +2247,14 @@ static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else) {
         if (is_token(token, "if")) {
             free(token);
             if (!skip_if(cursor)) {
+                return false;
+            }
+            continue;
+        }
+
+        if (is_token(token, "loop")) {
+            free(token);
+            if (!skip_loop(cursor)) {
                 return false;
             }
             continue;
@@ -2275,7 +2360,7 @@ static bool source_has_complete_blocks(const char *source, bool *out_complete) {
             return true;
         }
 
-        if (!is_string && is_token(token, "if")) {
+        if (!is_string && (is_token(token, "if") || is_token(token, "loop"))) {
             depth++;
         } else if (!is_string && is_token(token, "end")) {
             depth--;

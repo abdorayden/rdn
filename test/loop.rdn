@@ -1,0 +1,22 @@
+[* false condition skips body *]
+false loop
+    "wrong" print "\n" print
+    false
+end
+
+[* counting down *]
+3 i let
+i 0 > loop
+    i print "\n" print
+    i 1 - i let
+    i 0 >
+end
+
+[* loop-local scope *]
+1 outer let
+true loop
+    9 outer let
+    "inner outer = " print outer print "\n" print
+    false
+end
+"outer after = " print outer print "\n" print
