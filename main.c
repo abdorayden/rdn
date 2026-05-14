@@ -8,22 +8,13 @@
 
 #include "./src/stack.h"
 
-// TODO: replace done with end and make sure that it changed in the tests
 // TODO: make a good api in C so i can implement native functions or create bindings
 
 // TODO: introduce loops 
 // example :
 // true loop 
 //  ...
-// done
-
-// TODO: introduce vars 
-// example :
-// save keyword pop two values from the stack and save
-// 3 i save
-// i print 
-// i print 
-// i print
+// end
 
 // TODO: introduce lists 
 // example :
@@ -38,17 +29,20 @@
 
 // TODO: introduce functions 
 // example :
-// fnc foo
+// defun foo
 //  "hello foo" print
-// done
+// end
+//
+// foo call
 
 // TODO: introduce big ints 
 
 typedef enum ValueType ValueType;
 typedef enum BlockStop BlockStop;
 typedef struct Value Value ;
-typedef RLStack(Value *) MainStack;
 typedef struct Vars_t Vars_t;
+
+typedef RLStack(Value *) RDNState;
 typedef RLList(Vars_t*) Vars;
 
 static void free_value(Value *value);
@@ -78,7 +72,8 @@ struct Value{
 struct Vars_t {
     char* var_name;
     Value* var_value;
-    bool is_scope_marker;
+    bool is_scope_marker; // define the variable in scope
+    bool is_const; // check if the variable is constant
 };
 
 struct Funcs_t {
@@ -89,7 +84,7 @@ struct Funcs_t {
 enum BlockStop{
     BLOCK_STOP_EOF,
     BLOCK_STOP_ELSE,
-    BLOCK_STOP_DONE,
+    BLOCK_STOP_END,
 };
 
 static bool is_token(const char *value, const char *expected) {
@@ -224,10 +219,11 @@ static Vars_t *create_scope_marker(void) {
     entry->var_name = NULL;
     entry->var_value = NULL;
     entry->is_scope_marker = true;
+    entry->is_const = false;
     return entry;
 }
 
-static Vars_t *create_var_entry(const char *name, Value *value) {
+static Vars_t *create_var_entry(const char *name, Value *value, bool is_const) {
     Vars_t *entry = malloc(sizeof(*entry));
 
     if (entry == NULL) {
@@ -242,6 +238,7 @@ static Vars_t *create_var_entry(const char *name, Value *value) {
 
     entry->var_value = value;
     entry->is_scope_marker = false;
+    entry->is_const = is_const;
     return entry;
 }
 
@@ -323,7 +320,7 @@ static Vars_t *find_current_scope_var_entry(const Vars *vars, const char *name) 
     return NULL;
 }
 
-static bool vars_save(Vars *vars, const char *name, const Value *value) {
+static bool vars_let(Vars *vars, const char *name, const Value *value) {
     Vars_t *entry = find_current_scope_var_entry(vars, name);
     Value *copy = clone_value(value);
 
@@ -333,14 +330,44 @@ static bool vars_save(Vars *vars, const char *name, const Value *value) {
     }
 
     if (entry != NULL) {
+        if (entry->is_const) {
+            fprintf(stderr, "cannot change constant '%s'\n", name);
+            free_value(copy);
+            return false;
+        }
         free_value(entry->var_value);
         entry->var_value = copy;
         return true;
     }
 
-    entry = create_var_entry(name, copy);
+    entry = create_var_entry(name, copy, false);
     if (entry == NULL) {
         fprintf(stderr, "failed to allocate variable entry\n");
+        free_value(copy);
+        return false;
+    }
+
+    ray_append(vars, entry);
+    return true;
+}
+
+static bool vars_const(Vars *vars, const char *name, const Value *value) {
+    Vars_t *entry = find_current_scope_var_entry(vars, name);
+    Value *copy = clone_value(value);
+
+    if (entry != NULL) {
+        fprintf(stderr, "'%s' already exists in current scope\n", name);
+        return false;
+    }
+
+    if (copy == NULL) {
+        fprintf(stderr, "failed to clone constant value\n");
+        return false;
+    }
+
+    entry = create_var_entry(name, copy, true);
+    if (entry == NULL) {
+        fprintf(stderr, "failed to allocate constant entry\n");
         free_value(copy);
         return false;
     }
@@ -361,7 +388,7 @@ static void free_value(Value *value) {
     free(value);
 }
 
-static void free_stack_values(MainStack *stack) {
+static void free_stack_values(RDNState *stack) {
     while (!(ray_is_empty(stack))) {
         free_value(ray_pop(stack));
     }
@@ -369,7 +396,7 @@ static void free_stack_values(MainStack *stack) {
     ray_clear(stack);
 }
 
-static bool push_value(MainStack *stack, Value *value) {
+static bool push_value(RDNState *stack, Value *value) {
     if (value == NULL) {
         fprintf(stderr, "failed to allocate value\n");
         return false;
@@ -554,7 +581,7 @@ static char* exit_value(const Value* value , int* out_exit) {
     return "ERROR: exit expect integer";
 }
 
-static bool apply_binary_operator(MainStack *stack, const char *operator_token) {
+static bool apply_binary_operator(RDNState *stack, const char *operator_token) {
     Value *left = NULL;
     Value *right = NULL;
     Value *result = NULL;
@@ -712,7 +739,7 @@ static bool apply_binary_operator(MainStack *stack, const char *operator_token) 
     return true;
 }
 
-static bool apply_print(MainStack *stack) {
+static bool apply_print(RDNState *stack) {
     Value *value = NULL;
 
     if (stack->count < 1) {
@@ -726,7 +753,7 @@ static bool apply_print(MainStack *stack) {
     return true;
 }
 
-static bool apply_exit(MainStack *stack , int* exit_status) {
+static bool apply_exit(RDNState *stack , int* exit_status) {
 
     if (stack->count < 1) {
         fprintf(stderr, "type requires 1 operand\n");
@@ -747,7 +774,7 @@ static bool apply_exit(MainStack *stack , int* exit_status) {
     return true;
 }
 
-static bool apply_type(MainStack *stack) {
+static bool apply_type(RDNState *stack) {
     Value *value = NULL;
     Value *result = NULL;
 
@@ -779,7 +806,7 @@ static bool apply_type(MainStack *stack) {
     return true;
 }
 
-static bool apply_swap(MainStack *stack) {
+static bool apply_swap(RDNState *stack) {
     if (stack->count < 2) {
         fprintf(stderr, "swap type requires 2 operand in stack\n");
         return false;
@@ -793,7 +820,7 @@ static bool apply_swap(MainStack *stack) {
     return true;
 }
 
-static bool apply_pop(MainStack *stack) {
+static bool apply_pop(RDNState *stack) {
     if (stack->count < 1) {
         fprintf(stderr, "pop type requires 1 operand in stack\n");
         return false;
@@ -805,7 +832,7 @@ static bool apply_pop(MainStack *stack) {
     return true;
 }
 
-static bool apply_dup(MainStack *stack) {
+static bool apply_dup(RDNState *stack) {
     if (stack->count < 1) {
         fprintf(stderr, "dup type requires 1 operand in stack\n");
         return false;
@@ -853,7 +880,7 @@ static bool apply_dup(MainStack *stack) {
 }
 
 // to_string builtin function convert value from the top stack to string without remove it
-static bool apply_to_string(MainStack *stack) {
+static bool apply_to_string(RDNState *stack) {
     if (stack->count < 1) {
         fprintf(stderr, "to_string type requires 1 operand in stack\n");
         return false;
@@ -1050,7 +1077,7 @@ static bool next_token(char **cursor, char **out_token, bool *out_is_string) {
     return read_plain_token(cursor, out_token);
 }
 
-static bool push_token_value(MainStack *stack, const char *token, bool is_string) {
+static bool push_token_value(RDNState *stack, const char *token, bool is_string) {
     long integer_value = 0;
     double double_value = 0;
 
@@ -1129,7 +1156,7 @@ static bool identifier_is_save_target(char *cursor) {
         return false;
     }
 
-    if (!is_string && is_token(next, "save")) {
+    if (!is_string && (is_token(next, "let") || is_token(next, "const"))) {
         free(next);
         return true;
     }
@@ -1138,12 +1165,12 @@ static bool identifier_is_save_target(char *cursor) {
     return false;
 }
 
-static bool apply_save(MainStack *stack, Vars *vars) {
+static bool apply_let(RDNState *stack, Vars *vars) {
     Value *name = NULL;
     Value *value = NULL;
 
     if (stack->count < 2) {
-        fprintf(stderr, "save requires 2 operands\n");
+        fprintf(stderr, "let requires 2 operands\n");
         return false;
     }
 
@@ -1151,13 +1178,43 @@ static bool apply_save(MainStack *stack, Vars *vars) {
     value = ray_pop(stack);
 
     if (name->type != VALUE_AS_VAR) {
-        fprintf(stderr, "save requires variable name\n");
+        fprintf(stderr, "let requires variable name\n");
         ray_append(stack, value);
         ray_append(stack, name);
         return false;
     }
 
-    if (!vars_save(vars, name->as.string, value)) {
+    if (!vars_let(vars, name->as.string, value)) {
+        ray_append(stack, value);
+        ray_append(stack, name);
+        return false;
+    }
+
+    free_value(name);
+    free_value(value);
+    return true;
+}
+
+static bool apply_const(RDNState *stack, Vars *vars) {
+    Value *name = NULL;
+    Value *value = NULL;
+
+    if (stack->count < 2) {
+        fprintf(stderr, "const requires 2 operands\n");
+        return false;
+    }
+
+    name = ray_pop(stack);
+    value = ray_pop(stack);
+
+    if (name->type != VALUE_AS_VAR) {
+        fprintf(stderr, "const requires variable name\n");
+        ray_append(stack, value);
+        ray_append(stack, name);
+        return false;
+    }
+
+    if (!vars_const(vars, name->as.string, value)) {
         ray_append(stack, value);
         ray_append(stack, name);
         return false;
@@ -1169,9 +1226,9 @@ static bool apply_save(MainStack *stack, Vars *vars) {
 }
 
 static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else);
-static bool execute_block(MainStack *stack, Vars* vars, char **cursor, BlockStop *stop_reason, bool allow_else);
+static bool execute_block(RDNState *stack, Vars* vars, char **cursor, BlockStop *stop_reason, bool allow_else);
 
-static bool apply_if(MainStack *stack, Vars* vars, char **cursor) {
+static bool apply_if(RDNState *stack, Vars* vars, char **cursor) {
     Value *condition = NULL;
     bool condition_value = false;
     BlockStop stop_reason = BLOCK_STOP_EOF;
@@ -1201,7 +1258,7 @@ static bool apply_if(MainStack *stack, Vars* vars, char **cursor) {
 
         if (stop_reason == BLOCK_STOP_EOF) {
             vars_pop_scope(vars);
-            fprintf(stderr, "if missing done\n");
+            fprintf(stderr, "if missing end\n");
             return false;
         }
 
@@ -1212,8 +1269,8 @@ static bool apply_if(MainStack *stack, Vars* vars, char **cursor) {
                 return false;
             }
 
-            if (stop_reason != BLOCK_STOP_DONE) {
-                fprintf(stderr, "else missing done\n");
+            if (stop_reason != BLOCK_STOP_END) {
+                fprintf(stderr, "else missing end\n");
                 return false;
             }
         }
@@ -1226,7 +1283,7 @@ static bool apply_if(MainStack *stack, Vars* vars, char **cursor) {
     }
 
     if (stop_reason == BLOCK_STOP_EOF) {
-        fprintf(stderr, "if missing done\n");
+        fprintf(stderr, "if missing end\n");
         return false;
     }
 
@@ -1239,9 +1296,9 @@ static bool apply_if(MainStack *stack, Vars* vars, char **cursor) {
             return false;
         }
 
-        if (stop_reason != BLOCK_STOP_DONE) {
+        if (stop_reason != BLOCK_STOP_END) {
             vars_pop_scope(vars);
-            fprintf(stderr, "else missing done\n");
+            fprintf(stderr, "else missing end\n");
             return false;
         }
 
@@ -1252,7 +1309,7 @@ static bool apply_if(MainStack *stack, Vars* vars, char **cursor) {
     return true;
 }
 
-static bool execute_block(MainStack *stack, Vars* vars, char **cursor, BlockStop *stop_reason, bool allow_else) {
+static bool execute_block(RDNState *stack, Vars* vars, char **cursor, BlockStop *stop_reason, bool allow_else) {
     (void)vars;
     char *token = NULL;
     bool is_string = false;
@@ -1275,9 +1332,9 @@ static bool execute_block(MainStack *stack, Vars* vars, char **cursor, BlockStop
             }
             *stop_reason = BLOCK_STOP_ELSE;
             return true;
-        } else if (is_token(token, "done")) {
+        } else if (is_token(token, "end")) {
             free(token);
-            *stop_reason = BLOCK_STOP_DONE;
+            *stop_reason = BLOCK_STOP_END;
             return true;
         } else if (is_token(token, "if")) {
             free(token);
@@ -1343,8 +1400,15 @@ static bool execute_block(MainStack *stack, Vars* vars, char **cursor, BlockStop
             }
             free(token);
             continue;
-        } else if (is_token(token, "save")) {
-            if (!apply_save(stack, vars)) {
+        } else if (is_token(token, "let")) {
+            if (!apply_let(stack, vars)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else if (is_token(token, "const")) {
+            if (!apply_const(stack, vars)) {
                 free(token);
                 return false;
             }
@@ -1392,7 +1456,7 @@ static bool skip_if(char **cursor) {
     }
 
     if (stop_reason == BLOCK_STOP_EOF) {
-        fprintf(stderr, "if missing done\n");
+        fprintf(stderr, "if missing end\n");
         return false;
     }
 
@@ -1401,8 +1465,8 @@ static bool skip_if(char **cursor) {
             return false;
         }
 
-        if (stop_reason != BLOCK_STOP_DONE) {
-            fprintf(stderr, "else missing done\n");
+        if (stop_reason != BLOCK_STOP_END) {
+            fprintf(stderr, "else missing end\n");
             return false;
         }
     }
@@ -1434,9 +1498,9 @@ static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else) {
             return true;
         }
 
-        if (is_token(token, "done")) {
+        if (is_token(token, "end")) {
             free(token);
-            *stop_reason = BLOCK_STOP_DONE;
+            *stop_reason = BLOCK_STOP_END;
             return true;
         }
 
@@ -1452,7 +1516,7 @@ static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else) {
     }
 }
 
-static bool evaluate_source(MainStack *stack, Vars* vars, char *source) {
+static bool evaluate_source(RDNState *stack, Vars* vars, char *source) {
     BlockStop stop_reason = BLOCK_STOP_EOF;
     char *cursor = source;
 
@@ -1550,10 +1614,10 @@ static bool source_has_complete_blocks(const char *source, bool *out_complete) {
 
         if (!is_string && is_token(token, "if")) {
             depth++;
-        } else if (!is_string && is_token(token, "done")) {
+        } else if (!is_string && is_token(token, "end")) {
             depth--;
             if (depth < 0) {
-                fprintf(stderr, "unexpected done\n");
+                fprintf(stderr, "unexpected end\n");
                 free(token);
                 return false;
             }
@@ -1568,7 +1632,7 @@ static bool source_has_complete_blocks(const char *source, bool *out_complete) {
 }
 
 static int run_repl(void) {
-    MainStack stack = {0};
+    RDNState stack = {0};
     Vars vars = {0};
     char line[4096];
     char *source = NULL;
@@ -1604,7 +1668,7 @@ static int run_repl(void) {
             source = NULL;
             source_length = 0;
             free_stack_values(&stack);
-            stack = (MainStack){0};
+            stack = (RDNState){0};
             continue;
         }
 
@@ -1614,7 +1678,7 @@ static int run_repl(void) {
 
         if (!evaluate_source(&stack, &vars, source)) {
             free_stack_values(&stack);
-            stack = (MainStack){0};
+            stack = (RDNState){0};
         }
 
         free(source);
@@ -1631,7 +1695,7 @@ static int run_repl(void) {
 int main(int argc, char **argv) {
     const char *path = NULL;
     char *source = NULL;
-    MainStack stack = {0};
+    RDNState stack = {0};
     Vars vars = {0};
     int exit_code = EXIT_FAILURE;
 

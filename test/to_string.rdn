@@ -5,6 +5,6 @@ type
     "is a string" print
 else
     "it's not" print
-done
+end
 
 pop

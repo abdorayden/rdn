@@ -1,0 +1,9 @@
+"hello" hello let
+
+hello "hello" = if
+    true if
+        true false | true & if
+            "inside" print
+        end
+    end
+end

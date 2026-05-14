@@ -10,5 +10,5 @@ print
 
 true if
     "hello" print
-done
+end
 ```

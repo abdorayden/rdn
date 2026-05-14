@@ -1,24 +1,17 @@
-3 i let
-i print "\n" print
-i print "\n" print
-i 1 + i let
+3 i const
 i print "\n" print
 
-10 x let
+10 x const
 true if
-    20 x let
+    20 x const
     "inner x = " print x print "\n" print
-else
-    "wrong branch" print "\n" print
 end
-
 "outer x = " print x print "\n" print
 
 false if
     "wrong branch" print "\n" print
 else
-    "else branch" print "\n" print
-    99 z let
+    99 z const
     "inner z = " print z print "\n" print
 end
 

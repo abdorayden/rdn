@@ -49,4 +49,7 @@
 
 #define ray_clear(da) free((da)->items)
 
+// TODO: add foreach 
+// TODO: add remove 
+
 #endif // !STACK

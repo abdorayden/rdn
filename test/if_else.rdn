@@ -3,14 +3,14 @@ true if
     "then branch" print
 else
     "else branch" print
-done
+end
 
 [* false branch *]
 false if
     "wrong branch" print
 else
     "right branch" print
-done
+end
 
 [* nested if *]
 true if
@@ -18,7 +18,7 @@ true if
         "nested wrong" print
     else
         "nested else" print
-    done
+    end
 else
     "outer else" print
-done
+end
