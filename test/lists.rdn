@@ -1,0 +1,16 @@
+[* list literals and builtins *]
+(1 2 3) print "\n" print
+(1 2) 3 append print "\n" print
+(10 20 30) 1 index print "\n" print
+(1 2 3) 1 remove print "\n" print
+(1 2 3) len print "\n" print
+
+(1 2 "hello") names let
+names print "\n" print
+names 3 append
+names print "\n" print
+names 2 index print "\n" print
+names len print "\n" print
+names 0 remove
+names print "\n" print
+names type print "\n" print
