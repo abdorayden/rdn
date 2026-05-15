@@ -70,6 +70,7 @@ module.exports = grammar({
         "append",
         "remove",
         "index",
+        "load",
         "len"
       ),
 
