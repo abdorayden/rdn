@@ -20,3 +20,21 @@ true loop
     false
 end
 "outer after = " print outer print "\n" print
+
+[* continue and break *]
+4 n let
+n 0 > loop
+    n 1 - n let
+
+    n 2 = if
+        n 0 >
+        continue
+    end
+
+    n 1 = if
+        break
+    end
+
+    n print "\n" print
+    n 0 >
+end
