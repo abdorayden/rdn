@@ -26,11 +26,16 @@
 
 // TODO: introduce functions 
 // example :
-// defun foo
+// foo defun
 //  "hello foo" print
 // end
 // [* call function *]
 // foo call
+
+// TODO: introduce load , loadnative
+// example:
+// "std" load [* .rdn file *]
+// "raylib" loadnative [* .so/.dll file *]
 
 // TODO: introduce big ints 
 
@@ -83,6 +88,8 @@ enum BlockStop{
     BLOCK_STOP_EOF,
     BLOCK_STOP_ELSE,
     BLOCK_STOP_END,
+    BLOCK_STOP_BREAK,
+    BLOCK_STOP_CONTINUE,
 };
 
 struct RDNSharedState {
@@ -138,6 +145,7 @@ static bool apply_append(RDNState *stack, Vars *vars);
 static bool apply_remove(RDNState *stack, Vars *vars);
 static bool apply_index(RDNState *stack, Vars *vars);
 static bool apply_len(RDNState *stack, Vars *vars);
+static bool apply_load(RDNState *stack, Vars *vars);
 
 // to_string builtin function convert value from the top stack to string without remove it
 static bool apply_to_string(RDNState *stack, Vars *vars);
@@ -155,7 +163,7 @@ static bool apply_let(RDNState *stack, Vars *vars);
 static bool apply_const(RDNState *stack, Vars *vars);
 static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else);
 static bool execute_block(RDNState *stack, Vars* vars, char **cursor, BlockStop *stop_reason, bool allow_else);
-static bool apply_if(RDNState *stack, Vars* vars, char **cursor);
+static bool apply_if(RDNState *stack, Vars* vars, char **cursor, BlockStop *stop_reason);
 static bool apply_loop(RDNState *stack, Vars* vars, char **cursor);
 static bool execute_block(RDNState *stack, Vars* vars, char **cursor, BlockStop *stop_reason, bool allow_else);
 static bool skip_if(char **cursor);
@@ -1450,6 +1458,50 @@ static bool apply_len(RDNState *stack, Vars *vars) {
     return true;
 }
 
+static bool apply_load(RDNState *stack, Vars *vars){
+    char *source = NULL;
+    char *path = NULL;
+    bool ok = false;
+
+    if (stack->count < 1) {
+        fprintf(stderr, "load requires 1 operand\n");
+        return false;
+    }
+    Value* target = ray_pop(stack);
+
+    if (target->type == VALUE_AS_VAR) {
+        Vars_t* entry = find_var_entry(vars, target->as.string);
+        free_value(target);
+        if (entry == NULL) {
+            fprintf(stderr , "load requires existing variable path\n");
+            return false;
+        }
+
+        if (entry->var_value->type != VALUE_STRING) {
+            fprintf(stderr , "load requires string type\n");
+            return false;
+        }
+        path = entry->var_value->as.string;
+    }else if (target->type == VALUE_STRING) {
+        path = target->as.string;
+    }else{
+        free_value(target);
+        fprintf(stderr, "load accept string at the top");
+        return false;
+    }
+
+    source = read_file(path);
+    if (source == NULL) {
+        free_value(target);
+        return false;
+    }
+
+    ok = evaluate_source(stack, vars, source);
+    free(source);
+    free_value(target);
+    return ok;
+}
+
 static bool skip_comment(char **cursor) {
     *cursor += 2;
 
@@ -1749,7 +1801,7 @@ static bool is_identifier_token(const char *token) {
     }
 
     for (index = 1; token[index] != '\0'; index++) {
-        if (!(isalnum((unsigned char)token[index]) || token[index] == '_')) {
+        if (!(isalnum((unsigned char)token[index]) || token[index] == '_' || token[index] == '-')) {
             return false;
         }
     }
@@ -1841,10 +1893,10 @@ static bool apply_const(RDNState *stack, Vars *vars) {
 static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else);
 static bool execute_block(RDNState *stack, Vars* vars, char **cursor, BlockStop *stop_reason, bool allow_else);
 
-static bool apply_if(RDNState *stack, Vars* vars, char **cursor) {
+static bool apply_if(RDNState *stack, Vars* vars, char **cursor, BlockStop *stop_reason) {
     Value *condition = NULL;
     bool condition_value = false;
-    BlockStop stop_reason = BLOCK_STOP_EOF;
+    BlockStop branch_stop = BLOCK_STOP_EOF;
 
     if (stack->count < 1) {
         fprintf(stderr, "if requires 1 operand\n");
@@ -1864,12 +1916,12 @@ static bool apply_if(RDNState *stack, Vars* vars, char **cursor) {
         if (!vars_push_scope(vars)) {
             return false;
         }
-        if (!execute_block(stack, vars, cursor, &stop_reason, true)) {
+        if (!execute_block(stack, vars, cursor, &branch_stop, true)) {
             vars_pop_scope(vars);
             return false;
         }
 
-        if (stop_reason == BLOCK_STOP_EOF) {
+        if (branch_stop == BLOCK_STOP_EOF) {
             vars_pop_scope(vars);
             fprintf(stderr, "if missing end\n");
             return false;
@@ -1877,48 +1929,62 @@ static bool apply_if(RDNState *stack, Vars* vars, char **cursor) {
 
         vars_pop_scope(vars);
 
-        if (stop_reason == BLOCK_STOP_ELSE) {
-            if (!skip_block(cursor, &stop_reason, true)) {
+        if (branch_stop == BLOCK_STOP_BREAK || branch_stop == BLOCK_STOP_CONTINUE) {
+            *stop_reason = branch_stop;
+            return true;
+        }
+
+        if (branch_stop == BLOCK_STOP_ELSE) {
+            if (!skip_block(cursor, &branch_stop, true)) {
                 return false;
             }
 
-            if (stop_reason != BLOCK_STOP_END) {
+            if (branch_stop != BLOCK_STOP_END) {
                 fprintf(stderr, "else missing end\n");
                 return false;
             }
         }
 
+        *stop_reason = BLOCK_STOP_END;
         return true;
     }
 
-    if (!skip_block(cursor, &stop_reason, true)) {
+    if (!skip_block(cursor, &branch_stop, true)) {
         return false;
     }
 
-    if (stop_reason == BLOCK_STOP_EOF) {
+    if (branch_stop == BLOCK_STOP_EOF) {
         fprintf(stderr, "if missing end\n");
         return false;
     }
 
-    if (stop_reason == BLOCK_STOP_ELSE) {
+    if (branch_stop == BLOCK_STOP_ELSE) {
         if (!vars_push_scope(vars)) {
             return false;
         }
-        if (!execute_block(stack, vars, cursor, &stop_reason, true)) {
+        if (!execute_block(stack, vars, cursor, &branch_stop, true)) {
             vars_pop_scope(vars);
             return false;
         }
 
-        if (stop_reason != BLOCK_STOP_END) {
+        if (branch_stop == BLOCK_STOP_BREAK || branch_stop == BLOCK_STOP_CONTINUE) {
+            vars_pop_scope(vars);
+            *stop_reason = branch_stop;
+            return true;
+        }
+
+        if (branch_stop != BLOCK_STOP_END) {
             vars_pop_scope(vars);
             fprintf(stderr, "else missing end\n");
             return false;
         }
 
         vars_pop_scope(vars);
+        *stop_reason = BLOCK_STOP_END;
         return true;
     }
 
+    *stop_reason = BLOCK_STOP_END;
     return true;
 }
 
@@ -1959,7 +2025,12 @@ static bool apply_loop(RDNState *stack, Vars* vars, char **cursor) {
             return false;
         }
 
-        if (stop_reason != BLOCK_STOP_END) {
+        if (stop_reason == BLOCK_STOP_BREAK) {
+            condition_value = false;
+            break;
+        }
+
+        if (stop_reason != BLOCK_STOP_END && stop_reason != BLOCK_STOP_CONTINUE) {
             fprintf(stderr, "loop missing end\n");
             return false;
         }
@@ -2027,8 +2098,11 @@ static bool execute_block(RDNState *stack, Vars* vars, char **cursor, BlockStop 
             return true;
         } else if (is_token(token, "if")) {
             free(token);
-            if (!apply_if(stack, vars, cursor)) {
+            if (!apply_if(stack, vars, cursor, stop_reason)) {
                 return false;
+            }
+            if (*stop_reason == BLOCK_STOP_BREAK || *stop_reason == BLOCK_STOP_CONTINUE) {
+                return true;
             }
             continue;
         } else if (is_token(token, "loop")) {
@@ -2037,6 +2111,14 @@ static bool execute_block(RDNState *stack, Vars* vars, char **cursor, BlockStop 
                 return false;
             }
             continue;
+        } else if (is_token(token, "break")) {
+            free(token);
+            *stop_reason = BLOCK_STOP_BREAK;
+            return true;
+        } else if (is_token(token, "continue")) {
+            free(token);
+            *stop_reason = BLOCK_STOP_CONTINUE;
+            return true;
         } else if (is_value_token(token, is_string)) {
             if (!push_token_value(stack, token, is_string)) {
                 free(token);
@@ -2139,6 +2221,13 @@ static bool execute_block(RDNState *stack, Vars* vars, char **cursor, BlockStop 
             continue;
         } else if (is_token(token, "len")) {
             if (!apply_len(stack, vars)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        }else if(is_token(token, "load")) {
+            if (!apply_load(stack, vars)) {
                 free(token);
                 return false;
             }
@@ -2260,6 +2349,11 @@ static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else) {
             continue;
         }
 
+        if (is_token(token, "break") || is_token(token, "continue")) {
+            free(token);
+            continue;
+        }
+
         free(token);
     }
 }
@@ -2269,6 +2363,16 @@ static bool evaluate_source(RDNState *stack, Vars* vars, char *source) {
     char *cursor = source;
 
     if (!execute_block(stack, vars, &cursor, &stop_reason, false)) {
+        return false;
+    }
+
+    if (stop_reason == BLOCK_STOP_BREAK) {
+        fprintf(stderr, "unexpected break\n");
+        return false;
+    }
+
+    if (stop_reason == BLOCK_STOP_CONTINUE) {
+        fprintf(stderr, "unexpected continue\n");
         return false;
     }
 
