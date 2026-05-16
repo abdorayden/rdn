@@ -23,6 +23,15 @@ if ! make -C "$ROOT_DIR" >/dev/null; then
     exit 1
 fi
 
+printf "%sBuilding native test module...%s\n" "$BLUE" "$RESET"
+if ! "${CC:-gcc}" -Wall -Wextra -Werror -fPIC -shared \
+    "$TEST_DIR/native/native_test_module.c" \
+    -I"$ROOT_DIR" \
+    -o "$TEST_DIR/native/native_test_module.so"; then
+    printf "%sNative module build failed%s\n" "$RED" "$RESET"
+    exit 1
+fi
+
 for test_file in "$TEST_DIR"/*.rdn; do
     test_name="$(basename "$test_file" .rdn)"
     expected_out="$EXPECTED_DIR/$test_name.out"

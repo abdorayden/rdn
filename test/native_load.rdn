@@ -1,0 +1,6 @@
+"native/native_test_module.so" loadnative
+
+2 5 native_add call print "\n" print
+1.5 2 native_add call print "\n" print
+"ha" 3 native_repeat call print "\n" print
+true native_not call print

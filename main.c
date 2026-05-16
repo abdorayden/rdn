@@ -1,4 +1,5 @@
 #include <ctype.h>
+#include <dlfcn.h>
 #include <errno.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -6,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "./include/rdn_native.h"
 #include "./src/stack.h"
 
 // TODO: make a good api in C so i can implement native functions or create bindings
@@ -41,14 +43,19 @@
 
 typedef enum ValueType ValueType;
 typedef enum BlockStop BlockStop;
+typedef enum FuncType FuncType;
 typedef struct Value Value ;
 typedef struct Vars_t Vars_t;
 typedef struct Funcs_t Funcs_t;
 typedef struct RDNSharedState RDNSharedState;
+typedef struct NativeCallState NativeCallState;
+typedef struct NativeModuleReg NativeModuleReg;
+typedef struct NativeModuleLoadState NativeModuleLoadState;
 
 typedef RLStack(Value *) RDNState;
 typedef RLList(Vars_t*) Vars;
 typedef RLList(Funcs_t*) Funcs;
+typedef RLList(NativeModuleReg*) NativeModuleRegs;
 
 static void free_value(Value *value);
 
@@ -81,9 +88,35 @@ struct Vars_t {
     bool is_const; // check if the variable is constant
 };
 
+enum FuncType {
+    FUNC_SCRIPT,
+    FUNC_NATIVE,
+};
+
 struct Funcs_t {
     char* func_name;
-    char* func_body;
+    FuncType type;
+    union {
+        char *func_body;
+        RDNNativeFunction native_function;
+    } as;
+    void *native_library_handle;
+};
+
+struct NativeModuleReg {
+    char *name;
+    RDNNativeFunction function;
+};
+
+struct NativeCallState {
+    RDNState *stack;
+    Vars *vars;
+    char *error_message;
+};
+
+struct NativeModuleLoadState {
+    NativeModuleRegs regs;
+    char *error_message;
 };
 
 enum BlockStop{
@@ -116,6 +149,7 @@ static Value *clone_value(const Value *value);
 static Vars_t *create_scope_marker(void);
 static Vars_t *create_var_entry(const char *name, Value *value, bool is_const);
 static Funcs_t *create_func_entry(const char *name, char *body);
+static Funcs_t *create_native_func_entry(const char *name, RDNNativeFunction native_function, void *native_library_handle);
 static void free_var_entry(Vars_t *entry);
 static void free_vars(Vars *vars);
 static void free_func_entry(Funcs_t *entry);
@@ -126,6 +160,7 @@ static Vars_t *find_var_entry(const Vars *vars, const char *name);
 static Vars_t *find_current_scope_var_entry(const Vars *vars, const char *name);
 static Funcs_t *find_func_entry(const Funcs *funcs, const char *name);
 static bool funcs_define(Funcs *funcs, const char *name, char *body);
+static bool funcs_define_native(Funcs *funcs, const char *name, RDNNativeFunction native_function, void *native_library_handle);
 static bool vars_let(Vars *vars, const char *name, const Value *value);
 static bool vars_set(Vars *vars, const char *name, const Value *value);
 static bool vars_const(Vars *vars, const char *name, const Value *value);
@@ -157,6 +192,7 @@ static bool apply_remove(RDNState *stack, Vars *vars);
 static bool apply_index(RDNState *stack, Vars *vars);
 static bool apply_len(RDNState *stack, Vars *vars);
 static bool apply_load(RDNState *stack, Vars *vars, Funcs *funcs);
+static bool apply_loadnative(RDNState *stack, Vars *vars, Funcs *funcs);
 static bool apply_defun(RDNState *stack, Funcs *funcs, char **cursor);
 static bool apply_call(RDNState *stack, Vars *vars, Funcs *funcs);
 
@@ -189,6 +225,29 @@ static bool evaluate_file(RDNState *stack, Vars *vars, Funcs *funcs, const char 
 #define rdn_do_string(src) do{evaluate_source(NULL , NULL , NULL , (src))}while(0)
 static char *read_file(const char *path);
 static char *resolve_path_from_current_source(const char *path);
+static bool pop_string_path_operand(RDNState *stack, Vars *vars, const char *context, Value **out_target, char **out_path);
+static bool set_owned_error_message(char **slot, const char *message);
+static Value *native_get_stack_value(RDNState *stack, long index);
+static RDNValueType native_value_type_from_value(const Value *value);
+static size_t native_api_stack_size(RDNApi *api);
+static RDNValueType native_api_type(RDNApi *api, long index);
+static bool native_api_is_number(RDNApi *api, long index);
+static bool native_api_to_integer(RDNApi *api, long index, long *out_value);
+static bool native_api_to_number(RDNApi *api, long index, double *out_value);
+static bool native_api_to_boolean(RDNApi *api, long index, bool *out_value);
+static const char *native_api_to_string(RDNApi *api, long index);
+static const char *native_api_to_identifier(RDNApi *api, long index);
+static bool native_api_pop(RDNApi *api, size_t count);
+static bool native_api_push_integer(RDNApi *api, long value);
+static bool native_api_push_number(RDNApi *api, double value);
+static bool native_api_push_boolean(RDNApi *api, bool value);
+static bool native_api_push_string(RDNApi *api, const char *value);
+static bool native_api_raise_error(RDNApi *api, const char *message);
+static NativeModuleReg *create_native_module_reg(const char *name, RDNNativeFunction function);
+static void free_native_module_reg(NativeModuleReg *reg);
+static void free_native_module_regs(NativeModuleRegs *regs);
+static bool native_module_register_function(RDNModule *module, const char *name, RDNNativeFunction function);
+static bool native_module_set_error(RDNModule *module, const char *message);
 static bool append_text(char **buffer, size_t *length, const char *text);
 static bool source_has_complete_blocks(const char *source, bool *out_complete);
 static int run_repl(void);
@@ -450,7 +509,28 @@ static Funcs_t *create_func_entry(const char *name, char *body) {
         return NULL;
     }
 
-    entry->func_body = body;
+    entry->type = FUNC_SCRIPT;
+    entry->as.func_body = body;
+    entry->native_library_handle = NULL;
+    return entry;
+}
+
+static Funcs_t *create_native_func_entry(const char *name, RDNNativeFunction native_function, void *native_library_handle) {
+    Funcs_t *entry = malloc(sizeof(*entry));
+
+    if (entry == NULL) {
+        return NULL;
+    }
+
+    entry->func_name = copy_string(name);
+    if (entry->func_name == NULL) {
+        free(entry);
+        return NULL;
+    }
+
+    entry->type = FUNC_NATIVE;
+    entry->as.native_function = native_function;
+    entry->native_library_handle = native_library_handle;
     return entry;
 }
 
@@ -478,13 +558,31 @@ static void free_func_entry(Funcs_t *entry) {
     }
 
     free(entry->func_name);
-    free(entry->func_body);
+    if (entry->type == FUNC_SCRIPT) {
+        free(entry->as.func_body);
+    }
     free(entry);
 }
 
 static void free_funcs(Funcs *funcs) {
     while (funcs->count > 0) {
-        free_func_entry(ray_pop(funcs));
+        Funcs_t *entry = ray_pop(funcs);
+        void *library_handle = entry->native_library_handle;
+        bool seen = false;
+
+        if (library_handle != NULL) {
+            for (size_t index = 0; index < funcs->count; index++) {
+                if (funcs->items[index]->native_library_handle == library_handle) {
+                    seen = true;
+                    break;
+                }
+            }
+        }
+
+        free_func_entry(entry);
+        if (library_handle != NULL && !seen) {
+            dlclose(library_handle);
+        }
     }
 
     ray_clear(funcs);
@@ -568,14 +666,41 @@ static bool funcs_define(Funcs *funcs, const char *name, char *body) {
     Funcs_t *entry = find_func_entry(funcs, name);
 
     if (entry != NULL) {
-        free(entry->func_body);
-        entry->func_body = body;
+        if (entry->type == FUNC_SCRIPT) {
+            free(entry->as.func_body);
+        }
+        entry->type = FUNC_SCRIPT;
+        entry->as.func_body = body;
+        entry->native_library_handle = NULL;
         return true;
     }
 
     entry = create_func_entry(name, body);
     if (entry == NULL) {
         fprintf(stderr, "failed to allocate function entry\n");
+        return false;
+    }
+
+    ray_append(funcs, entry);
+    return true;
+}
+
+static bool funcs_define_native(Funcs *funcs, const char *name, RDNNativeFunction native_function, void *native_library_handle) {
+    Funcs_t *entry = find_func_entry(funcs, name);
+
+    if (entry != NULL) {
+        if (entry->type == FUNC_SCRIPT) {
+            free(entry->as.func_body);
+        }
+        entry->type = FUNC_NATIVE;
+        entry->as.native_function = native_function;
+        entry->native_library_handle = native_library_handle;
+        return true;
+    }
+
+    entry = create_native_func_entry(name, native_function, native_library_handle);
+    if (entry == NULL) {
+        fprintf(stderr, "failed to allocate native function entry\n");
         return false;
     }
 
@@ -1590,34 +1715,12 @@ static bool apply_len(RDNState *stack, Vars *vars) {
 
 static bool apply_load(RDNState *stack, Vars *vars, Funcs *funcs){
     char *source = NULL;
-    char *path = NULL;
     char *resolved_path = NULL;
+    char *path = NULL;
+    Value *target = NULL;
     bool ok = false;
 
-    if (stack->count < 1) {
-        fprintf(stderr, "load requires 1 operand\n");
-        return false;
-    }
-    Value* target = ray_pop(stack);
-
-    if (target->type == VALUE_AS_VAR) {
-        Vars_t* entry = find_var_entry(vars, target->as.string);
-        free_value(target);
-        if (entry == NULL) {
-            fprintf(stderr , "load requires existing variable path\n");
-            return false;
-        }
-
-        if (entry->var_value->type != VALUE_STRING) {
-            fprintf(stderr , "load requires string type\n");
-            return false;
-        }
-        path = entry->var_value->as.string;
-    }else if (target->type == VALUE_STRING) {
-        path = target->as.string;
-    }else{
-        free_value(target);
-        fprintf(stderr, "load accept string at the top");
+    if (!pop_string_path_operand(stack, vars, "load", &target, &path)) {
         return false;
     }
 
@@ -1646,6 +1749,83 @@ static bool apply_load(RDNState *stack, Vars *vars, Funcs *funcs){
     free(resolved_path);
     free_value(target);
     return ok;
+}
+
+static bool apply_loadnative(RDNState *stack, Vars *vars, Funcs *funcs) {
+    char *resolved_path = NULL;
+    char *path = NULL;
+    Value *target = NULL;
+    void *handle = NULL;
+    RDNModuleInit init_function = NULL;
+    RDNModule module = {0};
+    NativeModuleLoadState module_state = {0};
+    bool ok = false;
+
+    if (!pop_string_path_operand(stack, vars, "loadnative", &target, &path)) {
+        return false;
+    }
+
+    resolved_path = resolve_path_from_current_source(path);
+    if (resolved_path == NULL) {
+        fprintf(stderr, "failed to resolve path '%s'\n", path);
+        free_value(target);
+        return false;
+    }
+
+    handle = dlopen(resolved_path, RTLD_NOW | RTLD_LOCAL);
+    if (handle == NULL) {
+        fprintf(stderr, "failed to load native module '%s': %s\n", resolved_path, dlerror());
+        free(resolved_path);
+        free_value(target);
+        return false;
+    }
+
+    init_function = (RDNModuleInit)dlsym(handle, "rdn_module_init");
+    if (init_function == NULL) {
+        fprintf(stderr, "native module '%s' is missing rdn_module_init: %s\n", resolved_path, dlerror());
+        dlclose(handle);
+        free(resolved_path);
+        free_value(target);
+        return false;
+    }
+
+    module_state.regs.items = NULL;
+    module_state.regs.count = 0;
+    module_state.regs.capacity = 0;
+    module_state.error_message = NULL;
+
+    module.userdata = &module_state;
+    module.register_function = native_module_register_function;
+    module.set_error = native_module_set_error;
+
+    ok = init_function(&module);
+    if (!ok) {
+        fprintf(stderr, "%s\n", module_state.error_message == NULL ? "native module initialization failed" : module_state.error_message);
+        free_native_module_regs(&module_state.regs);
+        free(module_state.error_message);
+        dlclose(handle);
+        free(resolved_path);
+        free_value(target);
+        return false;
+    }
+
+    for (size_t index = 0; index < module_state.regs.count; index++) {
+        NativeModuleReg *reg = module_state.regs.items[index];
+        if (!funcs_define_native(funcs, reg->name, reg->function, handle)) {
+            free_native_module_regs(&module_state.regs);
+            free(module_state.error_message);
+            dlclose(handle);
+            free(resolved_path);
+            free_value(target);
+            return false;
+        }
+    }
+
+    free_native_module_regs(&module_state.regs);
+    free(module_state.error_message);
+    free(resolved_path);
+    free_value(target);
+    return true;
 }
 
 static bool apply_defun(RDNState *stack, Funcs *funcs, char **cursor) {
@@ -1742,12 +1922,49 @@ static bool apply_call(RDNState *stack, Vars *vars, Funcs *funcs) {
         return false;
     }
 
+    if (entry->type == FUNC_NATIVE) {
+        RDNApi api = {0};
+        NativeCallState call_state = {0};
+        bool ok = false;
+
+        call_state.stack = stack;
+        call_state.vars = vars;
+        call_state.error_message = NULL;
+
+        api.userdata = &call_state;
+        api.stack_size = native_api_stack_size;
+        api.type = native_api_type;
+        api.is_number = native_api_is_number;
+        api.to_integer = native_api_to_integer;
+        api.to_number = native_api_to_number;
+        api.to_boolean = native_api_to_boolean;
+        api.to_string = native_api_to_string;
+        api.to_identifier = native_api_to_identifier;
+        api.pop = native_api_pop;
+        api.push_integer = native_api_push_integer;
+        api.push_number = native_api_push_number;
+        api.push_boolean = native_api_push_boolean;
+        api.push_string = native_api_push_string;
+        api.raise_error = native_api_raise_error;
+
+        ok = entry->as.native_function(&api);
+        free_value(name);
+        if (!ok) {
+            fprintf(stderr, "%s\n", call_state.error_message == NULL ? "native function call failed" : call_state.error_message);
+            free(call_state.error_message);
+            return false;
+        }
+
+        free(call_state.error_message);
+        return true;
+    }
+
     if (!vars_push_scope(vars)) {
         ray_append(stack, name);
         return false;
     }
 
-    cursor = entry->func_body;
+    cursor = entry->as.func_body;
     if (!execute_block(stack, vars, funcs, &cursor, &stop_reason, false)) {
         vars_pop_scope(vars);
         free_value(name);
@@ -2574,6 +2791,13 @@ static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **curs
             }
             free(token);
             continue;
+        } else if (is_token(token, "loadnative")) {
+            if (!apply_loadnative(stack, vars, funcs)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
         } else if (is_identifier_token(token)) {
             Value *resolved = NULL;
             Vars_t *entry = NULL;
@@ -2822,6 +3046,299 @@ static char *resolve_path_from_current_source(const char *path) {
     memcpy(resolved, g_current_source_path, dir_length);
     memcpy(resolved + dir_length, path, path_length + 1);
     return resolved;
+}
+
+static bool pop_string_path_operand(RDNState *stack, Vars *vars, const char *context, Value **out_target, char **out_path) {
+    Value *target = NULL;
+
+    if (stack->count < 1) {
+        fprintf(stderr, "%s requires 1 operand\n", context);
+        return false;
+    }
+
+    target = ray_pop(stack);
+    if (target->type == VALUE_AS_VAR) {
+        Vars_t *entry = find_var_entry(vars, target->as.string);
+        if (entry == NULL) {
+            fprintf(stderr, "%s requires existing variable path\n", context);
+            free_value(target);
+            return false;
+        }
+
+        if (entry->var_value->type != VALUE_STRING) {
+            fprintf(stderr, "%s requires string type\n", context);
+            free_value(target);
+            return false;
+        }
+
+        *out_target = target;
+        *out_path = entry->var_value->as.string;
+        return true;
+    }
+
+    if (target->type != VALUE_STRING) {
+        fprintf(stderr, "%s accepts a string path\n", context);
+        free_value(target);
+        return false;
+    }
+
+    *out_target = target;
+    *out_path = target->as.string;
+    return true;
+}
+
+static bool set_owned_error_message(char **slot, const char *message) {
+    char *copy = NULL;
+
+    free(*slot);
+    *slot = NULL;
+
+    if (message == NULL) {
+        return true;
+    }
+
+    copy = copy_string(message);
+    if (copy == NULL) {
+        return false;
+    }
+
+    *slot = copy;
+    return true;
+}
+
+static Value *native_get_stack_value(RDNState *stack, long index) {
+    long resolved_index = 0;
+
+    if (index == 0) {
+        return NULL;
+    }
+
+    if (index > 0) {
+        resolved_index = index - 1;
+    } else {
+        resolved_index = (long)stack->count + index;
+    }
+
+    if (resolved_index < 0 || (size_t)resolved_index >= stack->count) {
+        return NULL;
+    }
+
+    return stack->items[resolved_index];
+}
+
+static RDNValueType native_value_type_from_value(const Value *value) {
+    if (value == NULL) {
+        return RDN_VALUE_NONE;
+    }
+
+    switch (value->type) {
+        case VALUE_INTEGER:
+            return RDN_VALUE_INTEGER;
+        case VALUE_DOUBLE:
+            return RDN_VALUE_DOUBLE;
+        case VALUE_STRING:
+            return RDN_VALUE_STRING;
+        case VALUE_BOOLEAN:
+            return RDN_VALUE_BOOLEAN;
+        case VALUE_LIST:
+            return RDN_VALUE_LIST;
+        case VALUE_AS_VAR:
+            return RDN_VALUE_IDENTIFIER;
+        default:
+            return RDN_VALUE_NONE;
+    }
+}
+
+static size_t native_api_stack_size(RDNApi *api) {
+    NativeCallState *state = api->userdata;
+    return state->stack->count;
+}
+
+static RDNValueType native_api_type(RDNApi *api, long index) {
+    NativeCallState *state = api->userdata;
+    return native_value_type_from_value(native_get_stack_value(state->stack, index));
+}
+
+static bool native_api_is_number(RDNApi *api, long index) {
+    NativeCallState *state = api->userdata;
+    Value *value = native_get_stack_value(state->stack, index);
+    double number = 0;
+
+    if (value == NULL) {
+        return false;
+    }
+
+    return value_to_double(value, &number);
+}
+
+static bool native_api_to_integer(RDNApi *api, long index, long *out_value) {
+    NativeCallState *state = api->userdata;
+    Value *value = native_get_stack_value(state->stack, index);
+
+    if (value == NULL) {
+        return false;
+    }
+
+    return value_to_long(value, out_value);
+}
+
+static bool native_api_to_number(RDNApi *api, long index, double *out_value) {
+    NativeCallState *state = api->userdata;
+    Value *value = native_get_stack_value(state->stack, index);
+
+    if (value == NULL) {
+        return false;
+    }
+
+    return value_to_double(value, out_value);
+}
+
+static bool native_api_to_boolean(RDNApi *api, long index, bool *out_value) {
+    NativeCallState *state = api->userdata;
+    Value *value = native_get_stack_value(state->stack, index);
+
+    if (value == NULL) {
+        return false;
+    }
+
+    return value_to_boolean(value, out_value);
+}
+
+static const char *native_api_to_string(RDNApi *api, long index) {
+    NativeCallState *state = api->userdata;
+    Value *value = native_get_stack_value(state->stack, index);
+
+    if (value == NULL || value->type != VALUE_STRING) {
+        return NULL;
+    }
+
+    return value->as.string;
+}
+
+static const char *native_api_to_identifier(RDNApi *api, long index) {
+    NativeCallState *state = api->userdata;
+    Value *value = native_get_stack_value(state->stack, index);
+
+    if (value == NULL || value->type != VALUE_AS_VAR) {
+        return NULL;
+    }
+
+    return value->as.string;
+}
+
+static bool native_api_pop(RDNApi *api, size_t count) {
+    NativeCallState *state = api->userdata;
+
+    if (count > state->stack->count) {
+        return native_api_raise_error(api, "native pop exceeds stack size");
+    }
+
+    while (count-- > 0) {
+        free_value(ray_pop(state->stack));
+    }
+
+    return true;
+}
+
+static bool native_api_push_integer(RDNApi *api, long value) {
+    NativeCallState *state = api->userdata;
+    return push_value(state->stack, create_integer_value(value));
+}
+
+static bool native_api_push_number(RDNApi *api, double value) {
+    NativeCallState *state = api->userdata;
+    return push_value(state->stack, create_double_value(value));
+}
+
+static bool native_api_push_boolean(RDNApi *api, bool value) {
+    NativeCallState *state = api->userdata;
+    return push_value(state->stack, create_boolean_value(value));
+}
+
+static bool native_api_push_string(RDNApi *api, const char *value) {
+    NativeCallState *state = api->userdata;
+    return push_value(state->stack, create_string_value_copy(value));
+}
+
+static bool native_api_raise_error(RDNApi *api, const char *message) {
+    NativeCallState *state = api->userdata;
+
+    if (!set_owned_error_message(&state->error_message, message)) {
+        fprintf(stderr, "failed to allocate native error message\n");
+    }
+    return false;
+}
+
+static NativeModuleReg *create_native_module_reg(const char *name, RDNNativeFunction function) {
+    NativeModuleReg *reg = malloc(sizeof(*reg));
+
+    if (reg == NULL) {
+        return NULL;
+    }
+
+    reg->name = copy_string(name);
+    if (reg->name == NULL) {
+        free(reg);
+        return NULL;
+    }
+
+    reg->function = function;
+    return reg;
+}
+
+static void free_native_module_reg(NativeModuleReg *reg) {
+    if (reg == NULL) {
+        return;
+    }
+
+    free(reg->name);
+    free(reg);
+}
+
+static void free_native_module_regs(NativeModuleRegs *regs) {
+    while (regs->count > 0) {
+        free_native_module_reg(ray_pop(regs));
+    }
+
+    ray_clear(regs);
+}
+
+static bool native_module_register_function(RDNModule *module, const char *name, RDNNativeFunction function) {
+    NativeModuleLoadState *state = module->userdata;
+    NativeModuleReg *reg = NULL;
+
+    if (name == NULL || name[0] == '\0') {
+        return native_module_set_error(module, "native function name must not be empty");
+    }
+
+    if (function == NULL) {
+        return native_module_set_error(module, "native function callback must not be null");
+    }
+
+    for (size_t index = 0; index < state->regs.count; index++) {
+        reg = state->regs.items[index];
+        if (strcmp(reg->name, name) == 0) {
+            reg->function = function;
+            return true;
+        }
+    }
+
+    reg = create_native_module_reg(name, function);
+    if (reg == NULL) {
+        return native_module_set_error(module, "failed to allocate native registration");
+    }
+
+    ray_append(&state->regs, reg);
+    return true;
+}
+
+static bool native_module_set_error(RDNModule *module, const char *message) {
+    NativeModuleLoadState *state = module->userdata;
+
+    if (!set_owned_error_message(&state->error_message, message)) {
+        fprintf(stderr, "failed to allocate native module error message\n");
+    }
+    return false;
 }
 
 static bool append_text(char **buffer, size_t *length, const char *text) {
