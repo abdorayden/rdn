@@ -1,0 +1,24 @@
+foo defun
+    "hello from foo\n" print
+end
+
+foo call
+
+7 x let
+
+shadow defun
+    9 x let
+    x print "\n" print
+end
+
+shadow call
+x print "\n" print
+
+adder defun
+    + print "\n" print
+end
+
+2 3 adder call
+
+"functions_helper.rdn" load
+loaded call

@@ -83,7 +83,7 @@ struct Vars_t {
 
 struct Funcs_t {
     char* func_name;
-    RLStack(Value*) body_stack;
+    char* func_body;
 };
 
 enum BlockStop{
@@ -97,7 +97,10 @@ enum BlockStop{
 struct RDNSharedState {
     RDNState rdn_state;
     Vars    rdn_vars;
+    Funcs   rdn_funcs;
 };
+
+static const char *g_current_source_path = NULL;
 
 static bool is_token(const char *value, const char *expected);
 static bool is_operator_token(const char *value);
@@ -112,12 +115,17 @@ static Value *create_var_name_value(const char *name);
 static Value *clone_value(const Value *value);
 static Vars_t *create_scope_marker(void);
 static Vars_t *create_var_entry(const char *name, Value *value, bool is_const);
+static Funcs_t *create_func_entry(const char *name, char *body);
 static void free_var_entry(Vars_t *entry);
 static void free_vars(Vars *vars);
+static void free_func_entry(Funcs_t *entry);
+static void free_funcs(Funcs *funcs);
 static bool vars_push_scope(Vars *vars);
 static void vars_pop_scope(Vars *vars);
 static Vars_t *find_var_entry(const Vars *vars, const char *name);
 static Vars_t *find_current_scope_var_entry(const Vars *vars, const char *name);
+static Funcs_t *find_func_entry(const Funcs *funcs, const char *name);
+static bool funcs_define(Funcs *funcs, const char *name, char *body);
 static bool vars_let(Vars *vars, const char *name, const Value *value);
 static bool vars_const(Vars *vars, const char *name, const Value *value);
 static void free_value(Value *value);
@@ -147,7 +155,9 @@ static bool apply_append(RDNState *stack, Vars *vars);
 static bool apply_remove(RDNState *stack, Vars *vars);
 static bool apply_index(RDNState *stack, Vars *vars);
 static bool apply_len(RDNState *stack, Vars *vars);
-static bool apply_load(RDNState *stack, Vars *vars);
+static bool apply_load(RDNState *stack, Vars *vars, Funcs *funcs);
+static bool apply_defun(RDNState *stack, Funcs *funcs, char **cursor);
+static bool apply_call(RDNState *stack, Vars *vars, Funcs *funcs);
 
 // to_string builtin function convert value from the top stack to string without remove it
 static bool apply_to_string(RDNState *stack, Vars *vars);
@@ -160,21 +170,23 @@ static bool push_token_value(RDNState *stack, const char *token, bool is_string)
 static bool is_value_token(const char *token, bool is_string);
 static bool is_identifier_token(const char *token);
 static Value *parse_list_literal(char **cursor, Vars *vars);
-static bool identifier_is_save_target(char *cursor);
+static bool identifier_is_name_target(char *cursor);
 static bool apply_let(RDNState *stack, Vars *vars);
 static bool apply_enum(RDNState *stack, Vars *vars , bool reset);
 static bool apply_const(RDNState *stack, Vars *vars);
 static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else);
-static bool execute_block(RDNState *stack, Vars* vars, char **cursor, BlockStop *stop_reason, bool allow_else);
-static bool apply_if(RDNState *stack, Vars* vars, char **cursor, BlockStop *stop_reason);
-static bool apply_loop(RDNState *stack, Vars* vars, char **cursor);
-static bool execute_block(RDNState *stack, Vars* vars, char **cursor, BlockStop *stop_reason, bool allow_else);
+static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor, BlockStop *stop_reason, bool allow_else);
+static bool apply_if(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor, BlockStop *stop_reason);
+static bool apply_loop(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor);
+static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor, BlockStop *stop_reason, bool allow_else);
 static bool skip_if(char **cursor);
 static bool skip_loop(char **cursor);
 static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else);
-static bool evaluate_source(RDNState *stack, Vars* vars, char *source);
-#define rdn_do_string(src) do{evaluate_source(NULL , NULL , (src))}while(0)
+static bool evaluate_source(RDNState *stack, Vars* vars, Funcs *funcs, char *source);
+static bool evaluate_file(RDNState *stack, Vars *vars, Funcs *funcs, const char *path);
+#define rdn_do_string(src) do{evaluate_source(NULL , NULL , NULL , (src))}while(0)
 static char *read_file(const char *path);
+static char *resolve_path_from_current_source(const char *path);
 static bool append_text(char **buffer, size_t *length, const char *text);
 static bool source_has_complete_blocks(const char *source, bool *out_complete);
 static int run_repl(void);
@@ -198,9 +210,9 @@ static void apply_argv(Vars* vars , const char* path, int argc , char** argv) {
 
 int rdn_main(int argc , char** argv) {
     const char *path = NULL;
-    char *source = NULL;
     RDNState stack = {0};
     Vars vars = {0};
+    Funcs funcs = {0};
     int exit_code = EXIT_FAILURE;
 
     if (argc < 2) {
@@ -208,31 +220,26 @@ int rdn_main(int argc , char** argv) {
     }
 
     path = argv[1];
-    source = read_file(path);
-    if (source == NULL) {
-        return exit_code;
-    }
-
     apply_argv(&vars, path, argc ,  argv);
 
-    if (!evaluate_source(&stack,&vars, source)) {
-        free(source);
+    if (!evaluate_file(&stack, &vars, &funcs, path)) {
         free_stack_values(&stack);
         free_vars(&vars);
+        free_funcs(&funcs);
         return exit_code;
     }
 
     if (stack.count != 0) {
         fprintf(stderr, "unexpected values left on stack: %zu\n", stack.count);
-        free(source);
         free_stack_values(&stack);
         free_vars(&vars);
+        free_funcs(&funcs);
         return exit_code;
     }
 
-    free(source);
     free_stack_values(&stack);
     free_vars(&vars);
+    free_funcs(&funcs);
     return EXIT_SUCCESS;
 }
 
@@ -426,6 +433,25 @@ static Vars_t *create_var_entry(const char *name, Value *value, bool is_const) {
     return entry;
 }
 
+static Funcs_t *create_func_entry(const char *name, char *body) {
+    Funcs_t *entry = malloc(sizeof(*entry));
+
+    if (entry == NULL) {
+        free(body);
+        return NULL;
+    }
+
+    entry->func_name = copy_string(name);
+    if (entry->func_name == NULL) {
+        free(body);
+        free(entry);
+        return NULL;
+    }
+
+    entry->func_body = body;
+    return entry;
+}
+
 static void free_var_entry(Vars_t *entry) {
     if (entry == NULL) {
         return;
@@ -442,6 +468,24 @@ static void free_vars(Vars *vars) {
     }
 
     ray_clear(vars);
+}
+
+static void free_func_entry(Funcs_t *entry) {
+    if (entry == NULL) {
+        return;
+    }
+
+    free(entry->func_name);
+    free(entry->func_body);
+    free(entry);
+}
+
+static void free_funcs(Funcs *funcs) {
+    while (funcs->count > 0) {
+        free_func_entry(ray_pop(funcs));
+    }
+
+    ray_clear(funcs);
 }
 
 static bool vars_push_scope(Vars *vars) {
@@ -502,6 +546,39 @@ static Vars_t *find_current_scope_var_entry(const Vars *vars, const char *name) 
     }
 
     return NULL;
+}
+
+static Funcs_t *find_func_entry(const Funcs *funcs, const char *name) {
+    size_t index = funcs->count;
+
+    while (index > 0) {
+        Funcs_t *entry = funcs->items[--index];
+
+        if (strcmp(entry->func_name, name) == 0) {
+            return entry;
+        }
+    }
+
+    return NULL;
+}
+
+static bool funcs_define(Funcs *funcs, const char *name, char *body) {
+    Funcs_t *entry = find_func_entry(funcs, name);
+
+    if (entry != NULL) {
+        free(entry->func_body);
+        entry->func_body = body;
+        return true;
+    }
+
+    entry = create_func_entry(name, body);
+    if (entry == NULL) {
+        fprintf(stderr, "failed to allocate function entry\n");
+        return false;
+    }
+
+    ray_append(funcs, entry);
+    return true;
 }
 
 static bool vars_let(Vars *vars, const char *name, const Value *value) {
@@ -1484,9 +1561,10 @@ static bool apply_len(RDNState *stack, Vars *vars) {
     return true;
 }
 
-static bool apply_load(RDNState *stack, Vars *vars){
+static bool apply_load(RDNState *stack, Vars *vars, Funcs *funcs){
     char *source = NULL;
     char *path = NULL;
+    char *resolved_path = NULL;
     bool ok = false;
 
     if (stack->count < 1) {
@@ -1516,16 +1594,158 @@ static bool apply_load(RDNState *stack, Vars *vars){
         return false;
     }
 
-    source = read_file(path);
+    resolved_path = resolve_path_from_current_source(path);
+    if (resolved_path == NULL) {
+        free_value(target);
+        fprintf(stderr, "failed to resolve path '%s'\n", path);
+        return false;
+    }
+
+    source = read_file(resolved_path);
     if (source == NULL) {
+        free(resolved_path);
         free_value(target);
         return false;
     }
 
-    ok = evaluate_source(stack, vars, source);
+    {
+        const char *previous_path = g_current_source_path;
+        g_current_source_path = resolved_path;
+        ok = evaluate_source(stack, vars, funcs, source);
+        g_current_source_path = previous_path;
+    }
+
     free(source);
+    free(resolved_path);
     free_value(target);
     return ok;
+}
+
+static bool apply_defun(RDNState *stack, Funcs *funcs, char **cursor) {
+    Value *name = NULL;
+    char *body = NULL;
+    char *body_start = *cursor;
+    char *scan = *cursor;
+    char *token = NULL;
+    bool is_string = false;
+    int depth = 1;
+
+    if (stack->count < 1) {
+        fprintf(stderr, "defun requires function name\n");
+        return false;
+    }
+
+    name = ray_pop(stack);
+    if (name->type != VALUE_AS_VAR) {
+        fprintf(stderr, "defun requires function name\n");
+        ray_append(stack, name);
+        return false;
+    }
+
+    while (true) {
+        char *token_start = scan;
+
+        if (!next_token(&scan, &token, &is_string)) {
+            free_value(name);
+            return false;
+        }
+
+        if (token == NULL) {
+            fprintf(stderr, "defun missing end\n");
+            free_value(name);
+            return false;
+        }
+
+        if (!is_string && (is_token(token, "if") || is_token(token, "loop") || is_token(token, "defun"))) {
+            depth++;
+        } else if (!is_string && is_token(token, "end")) {
+            depth--;
+            if (depth == 0) {
+                size_t body_length = (size_t)(token_start - body_start);
+                body = malloc(body_length + 1);
+                if (body == NULL) {
+                    fprintf(stderr, "failed to allocate function body\n");
+                    free(token);
+                    free_value(name);
+                    return false;
+                }
+
+                memcpy(body, body_start, body_length);
+                body[body_length] = '\0';
+
+                if (!funcs_define(funcs, name->as.string, body)) {
+                    free(token);
+                    free_value(name);
+                    return false;
+                }
+
+                free(token);
+                free_value(name);
+                *cursor = scan;
+                return true;
+            }
+        }
+
+        free(token);
+    }
+}
+
+static bool apply_call(RDNState *stack, Vars *vars, Funcs *funcs) {
+    Value *name = NULL;
+    Funcs_t *entry = NULL;
+    BlockStop stop_reason = BLOCK_STOP_EOF;
+    char *cursor = NULL;
+
+    if (stack->count < 1) {
+        fprintf(stderr, "call requires function name\n");
+        return false;
+    }
+
+    name = ray_pop(stack);
+    if (name->type != VALUE_AS_VAR) {
+        fprintf(stderr, "call requires function name\n");
+        ray_append(stack, name);
+        return false;
+    }
+
+    entry = find_func_entry(funcs, name->as.string);
+    if (entry == NULL) {
+        fprintf(stderr, "unknown function: %s\n", name->as.string);
+        ray_append(stack, name);
+        return false;
+    }
+
+    if (!vars_push_scope(vars)) {
+        ray_append(stack, name);
+        return false;
+    }
+
+    cursor = entry->func_body;
+    if (!execute_block(stack, vars, funcs, &cursor, &stop_reason, false)) {
+        vars_pop_scope(vars);
+        free_value(name);
+        return false;
+    }
+
+    vars_pop_scope(vars);
+    free_value(name);
+
+    if (stop_reason == BLOCK_STOP_BREAK) {
+        fprintf(stderr, "unexpected break\n");
+        return false;
+    }
+
+    if (stop_reason == BLOCK_STOP_CONTINUE) {
+        fprintf(stderr, "unexpected continue\n");
+        return false;
+    }
+
+    if (stop_reason != BLOCK_STOP_EOF) {
+        fprintf(stderr, "unexpected block terminator\n");
+        return false;
+    }
+
+    return true;
 }
 
 static bool skip_comment(char **cursor) {
@@ -1835,7 +2055,7 @@ static bool is_identifier_token(const char *token) {
     return true;
 }
 
-static bool identifier_is_save_target(char *cursor) {
+static bool identifier_is_name_target(char *cursor) {
     char *next = NULL;
     bool is_string = false;
 
@@ -1847,7 +2067,8 @@ static bool identifier_is_save_target(char *cursor) {
         return false;
     }
 
-    if (!is_string && (is_token(next, "let") || is_token(next, "const"))) {
+    if (!is_string &&
+        (is_token(next, "let") || is_token(next, "const") || is_token(next, "defun") || is_token(next, "call"))) {
         free(next);
         return true;
     }
@@ -1929,9 +2150,9 @@ static bool apply_const(RDNState *stack, Vars *vars) {
 }
 
 static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else);
-static bool execute_block(RDNState *stack, Vars* vars, char **cursor, BlockStop *stop_reason, bool allow_else);
+static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor, BlockStop *stop_reason, bool allow_else);
 
-static bool apply_if(RDNState *stack, Vars* vars, char **cursor, BlockStop *stop_reason) {
+static bool apply_if(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor, BlockStop *stop_reason) {
     Value *condition = NULL;
     bool condition_value = false;
     BlockStop branch_stop = BLOCK_STOP_EOF;
@@ -1954,7 +2175,7 @@ static bool apply_if(RDNState *stack, Vars* vars, char **cursor, BlockStop *stop
         if (!vars_push_scope(vars)) {
             return false;
         }
-        if (!execute_block(stack, vars, cursor, &branch_stop, true)) {
+        if (!execute_block(stack, vars, funcs, cursor, &branch_stop, true)) {
             vars_pop_scope(vars);
             return false;
         }
@@ -2000,7 +2221,7 @@ static bool apply_if(RDNState *stack, Vars* vars, char **cursor, BlockStop *stop
         if (!vars_push_scope(vars)) {
             return false;
         }
-        if (!execute_block(stack, vars, cursor, &branch_stop, true)) {
+        if (!execute_block(stack, vars, funcs, cursor, &branch_stop, true)) {
             vars_pop_scope(vars);
             return false;
         }
@@ -2026,7 +2247,7 @@ static bool apply_if(RDNState *stack, Vars* vars, char **cursor, BlockStop *stop
     return true;
 }
 
-static bool apply_loop(RDNState *stack, Vars* vars, char **cursor) {
+static bool apply_loop(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor) {
     Value *condition = NULL;
     bool condition_value = false;
     BlockStop stop_reason = BLOCK_STOP_EOF;
@@ -2059,7 +2280,7 @@ static bool apply_loop(RDNState *stack, Vars* vars, char **cursor) {
     while (condition_value) {
         char *iteration_cursor = body_start;
 
-        if (!execute_block(stack, vars, &iteration_cursor, &stop_reason, false)) {
+        if (!execute_block(stack, vars, funcs, &iteration_cursor, &stop_reason, false)) {
             return false;
         }
 
@@ -2091,16 +2312,7 @@ static bool apply_loop(RDNState *stack, Vars* vars, char **cursor) {
     return true;
 }
 
-static bool execute_block(RDNState *stack, Vars* vars, char **cursor, BlockStop *stop_reason, bool allow_else) {
-
-    if (vars == NULL){
-        *vars = (Vars){0};
-    }
-
-    if (stack == NULL){
-        *stack = (RDNState){0};
-    }
-
+static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor, BlockStop *stop_reason, bool allow_else) {
     char *token = NULL;
     bool is_string = false;
 
@@ -2136,7 +2348,7 @@ static bool execute_block(RDNState *stack, Vars* vars, char **cursor, BlockStop 
             return true;
         } else if (is_token(token, "if")) {
             free(token);
-            if (!apply_if(stack, vars, cursor, stop_reason)) {
+            if (!apply_if(stack, vars, funcs, cursor, stop_reason)) {
                 return false;
             }
             if (*stop_reason == BLOCK_STOP_BREAK || *stop_reason == BLOCK_STOP_CONTINUE) {
@@ -2145,7 +2357,19 @@ static bool execute_block(RDNState *stack, Vars* vars, char **cursor, BlockStop 
             continue;
         } else if (is_token(token, "loop")) {
             free(token);
-            if (!apply_loop(stack, vars, cursor)) {
+            if (!apply_loop(stack, vars, funcs, cursor)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "defun")) {
+            free(token);
+            if (!apply_defun(stack, funcs, cursor)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "call")) {
+            free(token);
+            if (!apply_call(stack, vars, funcs)) {
                 return false;
             }
             continue;
@@ -2279,7 +2503,7 @@ static bool execute_block(RDNState *stack, Vars* vars, char **cursor, BlockStop 
             free(token);
             continue;
         }else if(is_token(token, "load")) {
-            if (!apply_load(stack, vars)) {
+            if (!apply_load(stack, vars, funcs)) {
                 free(token);
                 return false;
             }
@@ -2289,7 +2513,7 @@ static bool execute_block(RDNState *stack, Vars* vars, char **cursor, BlockStop 
             Value *resolved = NULL;
             Vars_t *entry = NULL;
 
-            if (identifier_is_save_target(*cursor)) {
+            if (identifier_is_name_target(*cursor)) {
                 resolved = create_var_name_value(token);
             } else if ((entry = find_var_entry(vars, token)) != NULL && entry->var_value->type == VALUE_LIST) {
                 resolved = create_var_name_value(token);
@@ -2393,7 +2617,7 @@ static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else) {
             continue;
         }
 
-        if (is_token(token, "loop")) {
+        if (is_token(token, "loop") || is_token(token, "defun")) {
             free(token);
             if (!skip_loop(cursor)) {
                 return false;
@@ -2410,11 +2634,11 @@ static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else) {
     }
 }
 
-static bool evaluate_source(RDNState *stack, Vars* vars, char *source) {
+static bool evaluate_source(RDNState *stack, Vars* vars, Funcs *funcs, char *source) {
     BlockStop stop_reason = BLOCK_STOP_EOF;
     char *cursor = source;
 
-    if (!execute_block(stack, vars, &cursor, &stop_reason, false)) {
+    if (!execute_block(stack, vars, funcs, &cursor, &stop_reason, false)) {
         return false;
     }
 
@@ -2434,6 +2658,24 @@ static bool evaluate_source(RDNState *stack, Vars* vars, char *source) {
     }
 
     return true;
+}
+
+static bool evaluate_file(RDNState *stack, Vars *vars, Funcs *funcs, const char *path) {
+    char *source = NULL;
+    const char *previous_path = g_current_source_path;
+    bool ok = false;
+
+    source = read_file(path);
+    if (source == NULL) {
+        return false;
+    }
+
+    g_current_source_path = path;
+    ok = evaluate_source(stack, vars, funcs, source);
+    g_current_source_path = previous_path;
+
+    free(source);
+    return ok;
 }
 
 static char *read_file(const char *path) {
@@ -2486,6 +2728,37 @@ static char *read_file(const char *path) {
     return buffer;
 }
 
+static char *resolve_path_from_current_source(const char *path) {
+    const char *slash = NULL;
+    size_t dir_length = 0;
+    size_t path_length = 0;
+    char *resolved = NULL;
+
+    if (path == NULL) {
+        return NULL;
+    }
+
+    if (path[0] == '/' || g_current_source_path == NULL) {
+        return copy_string(path);
+    }
+
+    slash = strrchr(g_current_source_path, '/');
+    if (slash == NULL) {
+        return copy_string(path);
+    }
+
+    dir_length = (size_t)(slash - g_current_source_path + 1);
+    path_length = strlen(path);
+    resolved = malloc(dir_length + path_length + 1);
+    if (resolved == NULL) {
+        return NULL;
+    }
+
+    memcpy(resolved, g_current_source_path, dir_length);
+    memcpy(resolved + dir_length, path, path_length + 1);
+    return resolved;
+}
+
 static bool append_text(char **buffer, size_t *length, const char *text) {
     size_t text_length = strlen(text);
     char *grown = realloc(*buffer, *length + text_length + 1);
@@ -2516,7 +2789,7 @@ static bool source_has_complete_blocks(const char *source, bool *out_complete) {
             return true;
         }
 
-        if (!is_string && (is_token(token, "if") || is_token(token, "loop"))) {
+        if (!is_string && (is_token(token, "if") || is_token(token, "loop") || is_token(token, "defun"))) {
             depth++;
         } else if (!is_string && is_token(token, "end")) {
             depth--;
@@ -2538,6 +2811,7 @@ static bool source_has_complete_blocks(const char *source, bool *out_complete) {
 static int run_repl(void) {
     RDNState stack = {0};
     Vars vars = {0};
+    Funcs funcs = {0};
     char line[4096];
     char *source = NULL;
     size_t source_length = 0;
@@ -2564,6 +2838,7 @@ static int run_repl(void) {
             free(source);
             free_stack_values(&stack);
             free_vars(&vars);
+            free_funcs(&funcs);
             return EXIT_FAILURE;
         }
 
@@ -2580,7 +2855,7 @@ static int run_repl(void) {
             continue;
         }
 
-        if (!evaluate_source(&stack, &vars, source)) {
+        if (!evaluate_source(&stack, &vars, &funcs, source)) {
             free_stack_values(&stack);
             stack = (RDNState){0};
         }
@@ -2593,5 +2868,6 @@ static int run_repl(void) {
     free(source);
     free_stack_values(&stack);
     free_vars(&vars);
+    free_funcs(&funcs);
     return EXIT_SUCCESS;
 }

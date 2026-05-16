@@ -1,0 +1,40 @@
+[*
+* 2 3 pow
+* 
+* 2 power of 3
+*
+* 2 6 pow call print result 64
+* *]
+
+pow defun
+    power_number let
+    tha_number let
+    1 result let
+    0 i let
+    i power_number < condition let
+
+    condition loop
+
+        result tha_number * result let
+
+        i 1 + i let
+        i power_number < condition let
+        condition
+    end
+    result
+end
+[**
+2 6 pow call res let
+
+true if
+    res print
+    "\n" print
+
+    1 res + res let
+
+end
+
+res print
+"\n" print
+
+* ]
