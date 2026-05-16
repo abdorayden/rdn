@@ -23,7 +23,7 @@ syntax keyword radenRepeat loop break continue
 syntax keyword radenKeyword let const
 
 syntax keyword radenBuiltin print type exit pop swap dup to_string load
-syntax keyword radenBuiltin append remove index len
+syntax keyword radenBuiltin append remove index len __argv
 
 syntax match radenOperator /\V+/
 syntax match radenOperator /-/

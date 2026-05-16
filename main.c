@@ -10,6 +10,8 @@
 
 // TODO: make a good api in C so i can implement native functions or create bindings
 
+// TODO: introduce __argv
+
 // TODO: introduce lists 
 // example :
 // (1 2 3 4 5 "hello") [* push this list on the stack *]
@@ -176,7 +178,24 @@ static bool append_text(char **buffer, size_t *length, const char *text);
 static bool source_has_complete_blocks(const char *source, bool *out_complete);
 static int run_repl(void);
 
-int main(int argc, char **argv) {
+static void apply_argv(Vars* vars , const char* path, int argc , char** argv) {
+
+    Value* argv_list = create_list_value();
+    Value* tha_path_value = create_string_value_copy(path);
+    ray_append(&argv_list->as.list, tha_path_value);
+
+    for(int i = 2 ; i < argc ; ++i) {
+        Value* val = create_string_value_copy(argv[i]);
+        ray_append(&argv_list->as.list, val);
+    }
+
+    Vars_t* argv_var = create_var_entry("__argv", argv_list, true);
+    ray_append(vars, argv_var);
+
+}
+
+
+int rdn_main(int argc , char** argv) {
     const char *path = NULL;
     char *source = NULL;
     RDNState stack = {0};
@@ -192,6 +211,8 @@ int main(int argc, char **argv) {
     if (source == NULL) {
         return exit_code;
     }
+
+    apply_argv(&vars, path, argc ,  argv);
 
     if (!evaluate_source(&stack,&vars, source)) {
         free(source);
@@ -212,6 +233,10 @@ int main(int argc, char **argv) {
     free_stack_values(&stack);
     free_vars(&vars);
     return EXIT_SUCCESS;
+}
+
+int main(int argc, char **argv) {
+    return rdn_main(argc, argv);
 }
 
 static bool is_token(const char *value, const char *expected) {
