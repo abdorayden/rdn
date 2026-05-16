@@ -10,9 +10,7 @@
 
 // TODO: make a good api in C so i can implement native functions or create bindings
 
-// TODO: introduce __argv
-
-// TODO: introduce lists 
+// TODO: introduce lists (make those builtin functions works with string)
 // example :
 // (1 2 3 4 5 "hello") [* push this list on the stack *]
 // 6 append [* accept a value *]
@@ -45,10 +43,12 @@ typedef enum ValueType ValueType;
 typedef enum BlockStop BlockStop;
 typedef struct Value Value ;
 typedef struct Vars_t Vars_t;
+typedef struct Funcs_t Funcs_t;
 typedef struct RDNSharedState RDNSharedState;
 
 typedef RLStack(Value *) RDNState;
 typedef RLList(Vars_t*) Vars;
+typedef RLList(Funcs_t*) Funcs;
 
 static void free_value(Value *value);
 
@@ -162,6 +162,7 @@ static bool is_identifier_token(const char *token);
 static Value *parse_list_literal(char **cursor, Vars *vars);
 static bool identifier_is_save_target(char *cursor);
 static bool apply_let(RDNState *stack, Vars *vars);
+static bool apply_enum(RDNState *stack, Vars *vars , bool reset);
 static bool apply_const(RDNState *stack, Vars *vars);
 static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else);
 static bool execute_block(RDNState *stack, Vars* vars, char **cursor, BlockStop *stop_reason, bool allow_else);
@@ -1885,6 +1886,18 @@ static bool apply_let(RDNState *stack, Vars *vars) {
     return true;
 }
 
+static bool apply_enum(RDNState *stack, Vars *vars , bool reset) {
+    (void)vars;
+    static long counter = 0;
+    if (reset) {
+        counter = 0;
+        return true;
+    }
+    Value* enum_val = create_integer_value(counter++);
+    ray_append(stack, enum_val);
+    return true;
+}
+
 static bool apply_const(RDNState *stack, Vars *vars) {
     Value *name = NULL;
     Value *value = NULL;
@@ -2204,6 +2217,20 @@ static bool execute_block(RDNState *stack, Vars* vars, char **cursor, BlockStop 
             continue;
         } else if (is_token(token, "let")) {
             if (!apply_let(stack, vars)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else if (is_token(token, "enum")) {
+            if (!apply_enum(stack, vars , false)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else if (is_token(token, "reset")) {
+            if (!apply_enum(stack, vars , true)) {
                 free(token);
                 return false;
             }

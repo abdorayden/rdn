@@ -20,7 +20,7 @@ syntax keyword radenBoolean true false
 
 syntax keyword radenConditional if else end
 syntax keyword radenRepeat loop break continue
-syntax keyword radenKeyword let const
+syntax keyword radenKeyword let const enum reset
 
 syntax keyword radenBuiltin print type exit pop swap dup to_string load
 syntax keyword radenBuiltin append remove index len __argv

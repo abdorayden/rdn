@@ -1,0 +1,27 @@
+enum had const
+enum tnin const
+enum tlata const
+
+"\nhad: " print
+had print
+"\ntnin: " print
+tnin print
+"\ntlata: " print
+tlata print
+
+[*
+* reset the enum
+* *]
+reset
+
+enum zero const
+enum one const
+enum two const
+
+"\nzero: " print
+zero print
+"\none: " print
+one print
+"\ntwo: " print
+two print
+
