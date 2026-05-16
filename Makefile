@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -Werror -ggdb -std=c11
-LDFLAGS = -ldl
+LDFLAGS = -ldl -rdynamic
 TARGET = main
 SOURCES = main.c
 OBJECTS = $(SOURCES:.c=.o)

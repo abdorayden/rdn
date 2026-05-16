@@ -1,15 +1,33 @@
-10 n let
+10 N const
 0 i let
 
-i n < condition let
-
-condition loop 
-
-    i print
-    "\n" print
-    i 1 + i let
+i N < condition let
     
-    i n < condition let
+condition loop 
+    
+    i print "\n" print
+    i 1 + i let
+
+    i N < condition let
     condition
 end
+
+"---------------------------\n" print
+
+( 10 2 "hello" ( 1 2 3 ) ) 3 index 0 index print "\n" print
+
+( i N ) state let
+
+true if
+    state 1 append
+end
+state print
+"\n" print
+
+"./nativelibs/math.so" loadnative
+
+2.0 4.0 powerOf call print
+"\n" print
+"sqrt\n" print
+4.0 sqrtOf call print
 

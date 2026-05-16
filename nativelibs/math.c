@@ -3,17 +3,12 @@
 #include <math.h>
 
 static bool powerOf(RDNApi* api) {
-
     double x = 0;
     double y = 0;
-
-
     if (api->stack_size(api) < 2) {
         return api->raise_error(api, "powerOf requires 2 operands");
     }
-
     if (api->type(api, -1) == RDN_VALUE_DOUBLE && api->type(api, -2) == RDN_VALUE_DOUBLE) {
-
         if (!api->to_number(api, -1, &y) || !api->to_number(api, -2, &x)) {
             return api->raise_error(api, "powerOf requires number operands");
         }
@@ -23,12 +18,35 @@ static bool powerOf(RDNApi* api) {
         return api->push_number(api, pow(x, y));
     }
     return true;
+}
 
+static bool sqrtOf(RDNApi* api) {
+
+    double x = 0;
+
+    if (api->stack_size(api) < 1) {
+        return api->raise_error(api, "sqrtOf requires 1 operands");
+    }
+
+    if (api->type(api , -1) == RDN_VALUE_DOUBLE) {
+        if (!api->to_number(api , -1 , &x)) {
+            return api->raise_error(api, "sqrtOf requires number operands");
+        }
+        if (!api->pop(api, 1)) {
+            return false;
+        }
+        return api->push_number(api, sqrt(x));
+    }
+    return true;
 }
 
 
 bool rdn_module_init(RDNModule *module) {
     if (!module->register_function(module, "powerOf", powerOf)) {
+        return false;
+    }
+
+    if (!module->register_function(module, "sqrtOf", sqrtOf)) {
         return false;
     }
     return true;
