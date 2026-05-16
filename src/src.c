@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "../include/rdn_native.h"
+#include "../include/src.h"
 
 
 static bool is_token(const char *value, const char *expected) {
@@ -1751,6 +1752,11 @@ static bool apply_call(RDNState *stack, Vars *vars, Funcs *funcs) {
         api.push_number = native_api_push_number;
         api.push_boolean = native_api_push_boolean;
         api.push_string = native_api_push_string;
+        api.push_list = native_api_push_list;
+        api.list_len = native_api_list_len;
+        api.list_append = native_api_list_append;
+        api.list_index = native_api_list_index;
+        api.list_remove = native_api_list_remove;
         api.raise_error = native_api_raise_error;
 
         ok = entry->as.native_function(&api);
@@ -2734,7 +2740,14 @@ static bool evaluate_source(RDNState *stack, Vars* vars, Funcs *funcs, char *sou
     BlockStop stop_reason = BLOCK_STOP_EOF;
     char *cursor = source;
 
-    if (!execute_block(stack, vars, funcs, &cursor, &stop_reason, false)) {
+    RDNState _stack = {0};
+    Vars _vars = {0};
+    Funcs _funcs = {0};
+
+    if (!execute_block(
+                stack == NULL ? &_stack : stack , 
+                vars == NULL ? &_vars : vars, 
+                funcs == NULL ? &_funcs : funcs, &cursor, &stop_reason, false)) {
         return false;
     }
 
@@ -3065,6 +3078,88 @@ static bool native_api_push_boolean(RDNApi *api, bool value) {
 static bool native_api_push_string(RDNApi *api, const char *value) {
     NativeCallState *state = api->userdata;
     return push_value(state->stack, create_string_value_copy(value));
+}
+
+static bool native_api_push_list(RDNApi *api) {
+    NativeCallState *state = api->userdata;
+    return push_value(state->stack, create_list_value());
+}
+
+static bool native_api_list_len(RDNApi *api, long index, size_t *out_length) {
+    NativeCallState *state = api->userdata;
+    Value *value = native_get_stack_value(state->stack, index);
+
+    if (value == NULL || value->type != VALUE_LIST || out_length == NULL) {
+        return false;
+    }
+
+    *out_length = value->as.list.count;
+    return true;
+}
+
+static bool native_api_list_append(RDNApi *api, long list_index, long value_index) {
+    NativeCallState *state = api->userdata;
+    Value *list_value = native_get_stack_value(state->stack, list_index);
+    Value *item_value = native_get_stack_value(state->stack, value_index);
+    Value *item_copy = NULL;
+
+    if (list_value == NULL || list_value->type != VALUE_LIST) {
+        return native_api_raise_error(api, "list_append requires list target");
+    }
+
+    if (item_value == NULL) {
+        return native_api_raise_error(api, "list_append requires existing value");
+    }
+
+    item_copy = clone_value(item_value);
+    if (item_copy == NULL) {
+        return native_api_raise_error(api, "failed to clone appended list value");
+    }
+
+    ray_append(&list_value->as.list, item_copy);
+    return true;
+}
+
+static bool native_api_list_index(RDNApi *api, long list_index, long item_index) {
+    NativeCallState *state = api->userdata;
+    Value *list_value = native_get_stack_value(state->stack, list_index);
+    Value *item_copy = NULL;
+
+    if (list_value == NULL || list_value->type != VALUE_LIST) {
+        return native_api_raise_error(api, "list_index requires list target");
+    }
+
+    if (item_index < 0 || (size_t)item_index >= list_value->as.list.count) {
+        return native_api_raise_error(api, "list_index out of range");
+    }
+
+    item_copy = clone_value(list_value->as.list.items[item_index]);
+    if (item_copy == NULL) {
+        return native_api_raise_error(api, "failed to clone list item");
+    }
+
+    return push_value(state->stack, item_copy);
+}
+
+static bool native_api_list_remove(RDNApi *api, long list_index, long item_index) {
+    NativeCallState *state = api->userdata;
+    Value *list_value = native_get_stack_value(state->stack, list_index);
+    size_t index = 0;
+
+    if (list_value == NULL || list_value->type != VALUE_LIST) {
+        return native_api_raise_error(api, "list_remove requires list target");
+    }
+
+    if (item_index < 0 || (size_t)item_index >= list_value->as.list.count) {
+        return native_api_raise_error(api, "list_remove out of range");
+    }
+
+    free_value(list_value->as.list.items[item_index]);
+    for (index = (size_t)item_index + 1; index < list_value->as.list.count; index++) {
+        list_value->as.list.items[index - 1] = list_value->as.list.items[index];
+    }
+    list_value->as.list.count--;
+    return true;
 }
 
 static bool native_api_raise_error(RDNApi *api, const char *message) {

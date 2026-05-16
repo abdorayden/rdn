@@ -39,6 +39,11 @@ struct RDNApi {
     bool (*push_number)(RDNApi *api, double value);
     bool (*push_boolean)(RDNApi *api, bool value);
     bool (*push_string)(RDNApi *api, const char *value);
+    bool (*push_list)(RDNApi *api);
+    bool (*list_len)(RDNApi *api, long index, size_t *out_length);
+    bool (*list_append)(RDNApi *api, long list_index, long value_index);
+    bool (*list_index)(RDNApi *api, long list_index, long item_index);
+    bool (*list_remove)(RDNApi *api, long list_index, long item_index);
     bool (*raise_error)(RDNApi *api, const char *message);
 };
 

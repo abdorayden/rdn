@@ -35,4 +35,16 @@ state print
 
 "hello" 0 remove print
 
+"\n---------------------------\n" print
+
+"./nativelibs/files.so" loadnative
+"./Makefile" readLines call lines let 
+lines len print
+"\n" print
+lines 0 index print
+"\n" print
+lines 1 index print
+"\n" print
+
+"out.txt" ("a" "b") writeLines call pop
 

@@ -1,0 +1,13 @@
+"../nativelibs/files.so" loadnative
+
+"/tmp/rdn_files_native.txt" ("alpha" "beta") writeLines call print "\n" print
+"/tmp/rdn_files_native.txt" readLines call lines let
+lines len print "\n" print
+lines 0 index print "\n" print
+lines 1 index print "\n" print
+
+"/tmp/rdn_files_native.txt" ("gamma" "delta") appendLines call print "\n" print
+"/tmp/rdn_files_native.txt" readLines call lines let
+lines len print "\n" print
+lines 2 index print "\n" print
+lines 3 index print

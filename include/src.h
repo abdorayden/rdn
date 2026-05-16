@@ -185,7 +185,7 @@ static bool skip_loop(char **cursor);
 static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else);
 static bool evaluate_source(RDNState *stack, Vars* vars, Funcs *funcs, char *source);
 static bool evaluate_file(RDNState *stack, Vars *vars, Funcs *funcs, const char *path);
-#define rdn_do_string(src) do{evaluate_source(NULL , NULL , NULL , (src))}while(0)
+#define rdn_do_string(src) do{evaluate_source(NULL , NULL , NULL , (src));}while(0)
 static char *read_file(const char *path);
 static char *resolve_path_from_current_source(const char *path);
 static bool pop_string_path_operand(RDNState *stack, Vars *vars, const char *context, Value **out_target, char **out_path);
@@ -207,6 +207,11 @@ static bool native_api_push_integer(RDNApi *api, long value);
 static bool native_api_push_number(RDNApi *api, double value);
 static bool native_api_push_boolean(RDNApi *api, bool value);
 static bool native_api_push_string(RDNApi *api, const char *value);
+static bool native_api_push_list(RDNApi *api);
+static bool native_api_list_len(RDNApi *api, long index, size_t *out_length);
+static bool native_api_list_append(RDNApi *api, long list_index, long value_index);
+static bool native_api_list_index(RDNApi *api, long list_index, long item_index);
+static bool native_api_list_remove(RDNApi *api, long list_index, long item_index);
 static bool native_api_raise_error(RDNApi *api, const char *message);
 static NativeModuleReg *create_native_module_reg(const char *name, RDNNativeFunction function);
 static void free_native_module_reg(NativeModuleReg *reg);
