@@ -1167,6 +1167,42 @@ static bool apply_to_string(RDNState *stack, Vars *vars) {
     return true;
 }
 
+static bool append_string_repr(char **target_string, const Value *value) {
+    char *buffer = NULL;
+    size_t length = 0;
+
+    if (target_string == NULL || *target_string == NULL) {
+        return false;
+    }
+
+    buffer = copy_string(*target_string);
+    if (buffer == NULL) {
+        return false;
+    }
+
+    length = strlen(buffer);
+    if (!append_value_repr(&buffer, &length, value)) {
+        free(buffer);
+        return false;
+    }
+
+    free(*target_string);
+    *target_string = buffer;
+    return true;
+}
+
+static Value *create_string_char_value(char ch) {
+    char *buffer = malloc(2);
+
+    if (buffer == NULL) {
+        return NULL;
+    }
+
+    buffer[0] = ch;
+    buffer[1] = '\0';
+    return create_string_value_owned(buffer);
+}
+
 static bool apply_append(RDNState *stack, Vars *vars) {
     Value *item = NULL;
     Value *target = NULL;
@@ -1182,25 +1218,38 @@ static bool apply_append(RDNState *stack, Vars *vars) {
     target = ray_pop(stack);
 
     if (target->type == VALUE_AS_VAR && (entry = find_var_entry(vars, target->as.string)) != NULL) {
-        if (entry->var_value->type != VALUE_LIST) {
-            fprintf(stderr, "append requires list target\n");
-            ray_append(stack, target);
-            ray_append(stack, item);
-            return false;
+        if (entry->var_value->type == VALUE_LIST) {
+            item_copy = clone_value(item);
+            if (item_copy == NULL) {
+                fprintf(stderr, "failed to clone appended item\n");
+                ray_append(stack, target);
+                ray_append(stack, item);
+                return false;
+            }
+
+            ray_append(&entry->var_value->as.list, item_copy);
+            free_value(target);
+            free_value(item);
+            return true;
         }
 
-        item_copy = clone_value(item);
-        if (item_copy == NULL) {
-            fprintf(stderr, "failed to clone appended item\n");
-            ray_append(stack, target);
-            ray_append(stack, item);
-            return false;
+        if (entry->var_value->type == VALUE_STRING) {
+            if (!append_string_repr(&entry->var_value->as.string, item)) {
+                fprintf(stderr, "failed to append string value\n");
+                ray_append(stack, target);
+                ray_append(stack, item);
+                return false;
+            }
+
+            free_value(target);
+            free_value(item);
+            return true;
         }
 
-        ray_append(&entry->var_value->as.list, item_copy);
-        free_value(target);
-        free_value(item);
-        return true;
+        fprintf(stderr, "append requires list or string target\n");
+        ray_append(stack, target);
+        ray_append(stack, item);
+        return false;
     }
 
     target = resolve_value_if_var(vars, target, "append");
@@ -1209,25 +1258,38 @@ static bool apply_append(RDNState *stack, Vars *vars) {
         return false;
     }
 
-    if (target->type != VALUE_LIST) {
-        fprintf(stderr, "append requires list target\n");
+    if (target->type == VALUE_LIST) {
+        item_copy = clone_value(item);
+        if (item_copy == NULL) {
+            fprintf(stderr, "failed to clone appended item\n");
+            ray_append(stack, target);
+            ray_append(stack, item);
+            return false;
+        }
+
+        ray_append(&target->as.list, item_copy);
+        free_value(item);
         ray_append(stack, target);
-        ray_append(stack, item);
-        return false;
+        return true;
     }
 
-    item_copy = clone_value(item);
-    if (item_copy == NULL) {
-        fprintf(stderr, "failed to clone appended item\n");
+    if (target->type == VALUE_STRING) {
+        if (!append_string_repr(&target->as.string, item)) {
+            fprintf(stderr, "failed to append string value\n");
+            ray_append(stack, target);
+            ray_append(stack, item);
+            return false;
+        }
+
+        free_value(item);
         ray_append(stack, target);
-        ray_append(stack, item);
-        return false;
+        return true;
     }
 
-    ray_append(&target->as.list, item_copy);
-    free_value(item);
+    fprintf(stderr, "append requires list or string target\n");
     ray_append(stack, target);
-    return true;
+    ray_append(stack, item);
+    return false;
 }
 
 static bool apply_index(RDNState *stack, Vars *vars) {
@@ -1266,43 +1328,63 @@ static bool apply_index(RDNState *stack, Vars *vars) {
         resolved_target = target;
     }
 
-    if (resolved_target->type != VALUE_LIST) {
-        fprintf(stderr, "index requires list target\n");
-        if (resolved_target == target) {
+    if (resolved_target->type == VALUE_LIST) {
+        Value *result = NULL;
+
+        if (index < 0 || (size_t)index >= resolved_target->as.list.count) {
+            fprintf(stderr, "index out of range\n");
             ray_append(stack, target);
-        } else {
-            ray_append(stack, target);
+            ray_append(stack, index_value);
+            return false;
         }
-        ray_append(stack, index_value);
-        return false;
+
+        result = clone_value(resolved_target->as.list.items[index]);
+        free_value(index_value);
+        free_value(target);
+
+        if (result == NULL) {
+            fprintf(stderr, "failed to clone indexed value\n");
+            return false;
+        }
+
+        ray_append(stack, result);
+        return true;
     }
 
-    if (index < 0 || (size_t)index >= resolved_target->as.list.count) {
-        fprintf(stderr, "index out of range\n");
-        if (resolved_target == target) {
+    if (resolved_target->type == VALUE_STRING) {
+        Value *result = NULL;
+        size_t length = strlen(resolved_target->as.string);
+
+        if (index < 0 || (size_t)index >= length) {
+            fprintf(stderr, "index out of range\n");
             ray_append(stack, target);
-        } else {
-            ray_append(stack, target);
+            ray_append(stack, index_value);
+            return false;
         }
-        ray_append(stack, index_value);
-        return false;
+
+        result = create_string_char_value(resolved_target->as.string[index]);
+        free_value(index_value);
+        free_value(target);
+
+        if (result == NULL) {
+            fprintf(stderr, "failed to create indexed string value\n");
+            return false;
+        }
+
+        ray_append(stack, result);
+        return true;
     }
 
-    Value *result = clone_value(resolved_target->as.list.items[index]);
-    free_value(index_value);
+    fprintf(stderr, "index requires list or string target\n");
     if (resolved_target == target) {
-        free_value(target);
-    } else {
-        free_value(target);
+        if (resolved_target == target) {
+            ray_append(stack, target);
+        } else {
+            ray_append(stack, target);
+        }
+        ray_append(stack, index_value);
     }
-
-    if (result == NULL) {
-        fprintf(stderr, "failed to clone indexed value\n");
-        return false;
-    }
-
-    ray_append(stack, result);
-    return true;
+    return false;
 }
 
 static bool apply_remove(RDNState *stack, Vars *vars) {
@@ -1342,33 +1424,56 @@ static bool apply_remove(RDNState *stack, Vars *vars) {
         resolved_target = target;
     }
 
-    if (resolved_target->type != VALUE_LIST) {
-        fprintf(stderr, "remove requires list target\n");
-        ray_append(stack, target);
-        ray_append(stack, index_value);
-        return false;
+    if (resolved_target->type == VALUE_LIST) {
+        if (index < 0 || (size_t)index >= resolved_target->as.list.count) {
+            fprintf(stderr, "remove index out of range\n");
+            ray_append(stack, target);
+            ray_append(stack, index_value);
+            return false;
+        }
+
+        free_value(resolved_target->as.list.items[index]);
+        for (i = (size_t)index + 1; i < resolved_target->as.list.count; i++) {
+            resolved_target->as.list.items[i - 1] = resolved_target->as.list.items[i];
+        }
+        resolved_target->as.list.count--;
+
+        free_value(index_value);
+        if (resolved_target == target) {
+            ray_append(stack, target);
+        } else {
+            free_value(target);
+        }
+        return true;
     }
 
-    if (index < 0 || (size_t)index >= resolved_target->as.list.count) {
-        fprintf(stderr, "remove index out of range\n");
-        ray_append(stack, target);
-        ray_append(stack, index_value);
-        return false;
+    if (resolved_target->type == VALUE_STRING) {
+        size_t length = strlen(resolved_target->as.string);
+
+        if (index < 0 || (size_t)index >= length) {
+            fprintf(stderr, "remove index out of range\n");
+            ray_append(stack, target);
+            ray_append(stack, index_value);
+            return false;
+        }
+
+        memmove(&resolved_target->as.string[index],
+                &resolved_target->as.string[index + 1],
+                length - (size_t)index);
+
+        free_value(index_value);
+        if (resolved_target == target) {
+            ray_append(stack, target);
+        } else {
+            free_value(target);
+        }
+        return true;
     }
 
-    free_value(resolved_target->as.list.items[index]);
-    for (i = (size_t)index + 1; i < resolved_target->as.list.count; i++) {
-        resolved_target->as.list.items[i - 1] = resolved_target->as.list.items[i];
-    }
-    resolved_target->as.list.count--;
-
-    free_value(index_value);
-    if (resolved_target == target) {
-        ray_append(stack, target);
-    } else {
-        free_value(target);
-    }
-    return true;
+    fprintf(stderr, "remove requires list or string target\n");
+    ray_append(stack, target);
+    ray_append(stack, index_value);
+    return false;
 }
 
 static bool apply_len(RDNState *stack, Vars *vars) {
@@ -1393,18 +1498,17 @@ static bool apply_len(RDNState *stack, Vars *vars) {
         resolved_target = target;
     }
 
-    if (resolved_target->type != VALUE_LIST) {
-        fprintf(stderr, "len requires list target\n");
+    if (resolved_target->type == VALUE_LIST) {
+        result = create_integer_value((long)resolved_target->as.list.count);
+    } else if (resolved_target->type == VALUE_STRING) {
+        result = create_integer_value((long)strlen(resolved_target->as.string));
+    } else {
+        fprintf(stderr, "len requires list or string target\n");
         ray_append(stack, target);
         return false;
     }
 
-    result = create_integer_value((long)resolved_target->as.list.count);
-    if (resolved_target == target) {
-        free_value(target);
-    } else {
-        free_value(target);
-    }
+    free_value(target);
 
     if (result == NULL) {
         fprintf(stderr, "failed to create len result\n");
@@ -2506,7 +2610,8 @@ static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **curs
 
             if (identifier_is_name_target(*cursor)) {
                 resolved = create_var_name_value(token);
-            } else if ((entry = find_var_entry(vars, token)) != NULL && entry->var_value->type == VALUE_LIST) {
+            } else if ((entry = find_var_entry(vars, token)) != NULL &&
+                       (entry->var_value->type == VALUE_LIST || entry->var_value->type == VALUE_STRING)) {
                 resolved = create_var_name_value(token);
             } else if ((entry = find_var_entry(vars, token)) != NULL) {
                 resolved = clone_value(entry->var_value);

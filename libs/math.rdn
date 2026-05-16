@@ -1,0 +1,41 @@
+pow defun
+    power_number let
+    tha_number let
+    1 result let
+
+    power_number 0 > if
+        0 i let
+        i power_number < condition let
+
+        condition loop
+            result tha_number * result set
+
+            i 1 + i let
+            i power_number < condition set
+            condition
+        end
+    else
+        power_number 0 < if
+            power_number -1 * positive_power let
+
+            0 i let
+            i positive_power < condition let
+
+            condition loop
+                result tha_number * result set
+
+                i 1 + i let
+                i positive_power < condition set
+                condition
+            end
+
+            1 result / result set
+        else
+            power_number 0 = if
+                1 result set
+            end
+        end
+    end
+
+    result
+end

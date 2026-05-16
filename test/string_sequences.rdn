@@ -1,0 +1,14 @@
+"ab" "cd" append print "\n" print
+"abc" 1 index print "\n" print
+"abc" 1 remove print "\n" print
+"abc" len print "\n" print
+
+"hi" text let
+text "!" append
+text print "\n" print
+text 1 index print "\n" print
+text 1 remove
+text print "\n" print
+text len print "\n" print
+
+"n=" 42 append print

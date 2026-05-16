@@ -190,6 +190,8 @@ static char *read_file(const char *path);
 static char *resolve_path_from_current_source(const char *path);
 static bool pop_string_path_operand(RDNState *stack, Vars *vars, const char *context, Value **out_target, char **out_path);
 static bool set_owned_error_message(char **slot, const char *message);
+static bool append_string_repr(char **target_string, const Value *value);
+static Value *create_string_char_value(char ch);
 static Value *native_get_stack_value(RDNState *stack, long index);
 static RDNValueType native_value_type_from_value(const Value *value);
 static size_t native_api_stack_size(RDNApi *api);

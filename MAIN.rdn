@@ -31,3 +31,8 @@ state print
 "sqrt\n" print
 4.0 sqrtOf call print
 
+"\n---------------------------\n" print
+
+"hello" 0 remove print
+
+
