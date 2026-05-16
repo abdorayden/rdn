@@ -127,6 +127,7 @@ static Vars_t *find_current_scope_var_entry(const Vars *vars, const char *name);
 static Funcs_t *find_func_entry(const Funcs *funcs, const char *name);
 static bool funcs_define(Funcs *funcs, const char *name, char *body);
 static bool vars_let(Vars *vars, const char *name, const Value *value);
+static bool vars_set(Vars *vars, const char *name, const Value *value);
 static bool vars_const(Vars *vars, const char *name, const Value *value);
 static void free_value(Value *value);
 static void free_stack_values(RDNState *stack);
@@ -172,6 +173,7 @@ static bool is_identifier_token(const char *token);
 static Value *parse_list_literal(char **cursor, Vars *vars);
 static bool identifier_is_name_target(char *cursor);
 static bool apply_let(RDNState *stack, Vars *vars);
+static bool apply_set(RDNState *stack, Vars *vars);
 static bool apply_enum(RDNState *stack, Vars *vars , bool reset);
 static bool apply_const(RDNState *stack, Vars *vars);
 static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else);
@@ -609,6 +611,31 @@ static bool vars_let(Vars *vars, const char *name, const Value *value) {
     }
 
     ray_append(vars, entry);
+    return true;
+}
+
+static bool vars_set(Vars *vars, const char *name, const Value *value) {
+    Vars_t *entry = find_var_entry(vars, name);
+    Value *copy = clone_value(value);
+
+    if (entry == NULL) {
+        fprintf(stderr, "unknown variable '%s'\n", name);
+        return false;
+    }
+
+    if (copy == NULL) {
+        fprintf(stderr, "failed to clone variable value\n");
+        return false;
+    }
+
+    if (entry->is_const) {
+        fprintf(stderr, "cannot change constant '%s'\n", name);
+        free_value(copy);
+        return false;
+    }
+
+    free_value(entry->var_value);
+    entry->var_value = copy;
     return true;
 }
 
@@ -2068,7 +2095,8 @@ static bool identifier_is_name_target(char *cursor) {
     }
 
     if (!is_string &&
-        (is_token(next, "let") || is_token(next, "const") || is_token(next, "defun") || is_token(next, "call"))) {
+        (is_token(next, "let") || is_token(next, "set") || is_token(next, "const") ||
+         is_token(next, "defun") || is_token(next, "call"))) {
         free(next);
         return true;
     }
@@ -2097,6 +2125,36 @@ static bool apply_let(RDNState *stack, Vars *vars) {
     }
 
     if (!vars_let(vars, name->as.string, value)) {
+        ray_append(stack, value);
+        ray_append(stack, name);
+        return false;
+    }
+
+    free_value(name);
+    free_value(value);
+    return true;
+}
+
+static bool apply_set(RDNState *stack, Vars *vars) {
+    Value *name = NULL;
+    Value *value = NULL;
+
+    if (stack->count < 2) {
+        fprintf(stderr, "set requires 2 operands\n");
+        return false;
+    }
+
+    name = ray_pop(stack);
+    value = ray_pop(stack);
+
+    if (name->type != VALUE_AS_VAR) {
+        fprintf(stderr, "set requires variable name\n");
+        ray_append(stack, value);
+        ray_append(stack, name);
+        return false;
+    }
+
+    if (!vars_set(vars, name->as.string, value)) {
         ray_append(stack, value);
         ray_append(stack, name);
         return false;
@@ -2441,6 +2499,13 @@ static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **curs
             continue;
         } else if (is_token(token, "let")) {
             if (!apply_let(stack, vars)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else if (is_token(token, "set")) {
+            if (!apply_set(stack, vars)) {
                 free(token);
                 return false;
             }

@@ -1,0 +1,25 @@
+0 i let
+
+true if
+    i 1 + i set
+end
+
+i print "\n" print
+
+3 n let
+n 0 > cond let
+cond loop
+    n print "\n" print
+    n 1 - n set
+    n 0 > cond set
+    cond
+end
+
+7 outer let
+
+touch defun
+    outer 5 + outer set
+end
+
+touch call
+outer print
