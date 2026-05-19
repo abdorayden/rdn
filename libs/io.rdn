@@ -1,3 +1,20 @@
+[* 
+io.rdn
+Copyright (c) 2023-2026 Ray Den
+SPDX-License-Identifier: MIT
+
+Purpose:
+Tiny output helpers built on top of print.
+
+Exports:
+- println : print the top value, then print a newline
+
+Examples:
+"./libs/io.rdn" load
+"hello" println call
+42 println call
+*]
+
 println defun
     print 
     "\n" print

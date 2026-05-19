@@ -1,0 +1,38 @@
+[* 
+math_native.rdn
+Copyright (c) 2023-2026 Ray Den
+SPDX-License-Identifier: MIT
+
+Purpose:
+Cross-platform wrapper over the native math module.
+
+Loading behavior:
+This module chooses the shared-library suffix from __sharedlib_ext and loads:
+../nativelibs/math(.so|.dylib|.dll)
+
+Exports:
+- sqrt : native square root
+- powf : native floating-point power
+
+Stack contracts:
+number sqrt call -> result
+base exponent powf call -> result
+
+Examples:
+"./libs/math_native.rdn" load
+4 sqrt call print
+"\n" print
+2 0.5 powf call print
+"\n" print
+9 0.5 powf call print
+*]
+
+"../nativelibs/math" __sharedlib_ext to_string swap pop append loadnative
+
+sqrt defun
+    sqrtOf call
+end
+
+powf defun
+    powerOf call
+end

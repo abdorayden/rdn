@@ -1,0 +1,49 @@
+[* 
+unix.rdn
+Copyright (c) 2023-2026 Ray Den
+SPDX-License-Identifier: MIT
+
+Purpose:
+Cross-platform filesystem and working-directory helpers over the native unix module.
+
+Loading behavior:
+This module chooses the shared-library suffix from __sharedlib_ext and loads:
+../nativelibs/unix(.so|.dylib|.dll)
+
+Exports:
+- pwd    : -> current working directory string
+- exists : path -> boolean
+- mkdir  : path -> true
+- rmPath : path -> true
+- ls     : path -> list of entry names
+
+Examples:
+"./libs/unix.rdn" load
+pwd call print
+"\n" print
+"/tmp" exists call print
+"\n" print
+"/tmp" ls call len print
+*]
+
+"../nativelibs/unix" __sharedlib_ext to_string swap pop append loadnative
+
+pwd defun
+    cwd call
+end
+
+exists defun
+    pathExists call
+end
+
+mkdir defun
+    makeDir call
+end
+
+rmPath defun
+    removePath call
+end
+
+ls defun
+    listDir call
+end

@@ -1,0 +1,6 @@
+"../libs/files.rdn" load
+
+"/tmp/rdn_files_text_native.txt" "alpha" spit call print "\n" print
+"/tmp/rdn_files_text_native.txt" slurp call print "\n" print
+"/tmp/rdn_files_text_native.txt" "beta" appendFileText call print "\n" print
+"/tmp/rdn_files_text_native.txt" slurp call print

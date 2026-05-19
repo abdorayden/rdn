@@ -1,3 +1,31 @@
+[* 
+math.rdn
+Copyright (c) 2023-2026 Ray Den
+SPDX-License-Identifier: MIT
+
+Purpose:
+Pure Raden math helpers that do not require native modules.
+
+Exports:
+- pow : integer-friendly exponentiation implemented in Raden itself
+
+Stack contract:
+base exponent pow call -> result
+
+Notes:
+- positive exponents multiply repeatedly
+- zero exponent returns 1
+- negative exponents return the reciprocal
+
+Examples:
+"./libs/math.rdn" load
+2 6 pow call print
+"\n" print
+2 -3 pow call print
+"\n" print
+-2 3 pow call print
+*]
+
 pow defun
     power_number let
     tha_number let

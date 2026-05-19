@@ -1,4 +1,4 @@
-"native/native_test_module.so" loadnative
+"native/native_test_module" __sharedlib_ext to_string swap pop append loadnative
 
 2 5 native_add call print "\n" print
 1.5 2 native_add call print "\n" print

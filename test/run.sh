@@ -7,6 +7,15 @@ TEST_DIR="$ROOT_DIR/test"
 EXPECTED_DIR="$TEST_DIR/expected"
 BIN="$ROOT_DIR/main"
 
+case "$(uname -s)" in
+    Darwin)
+        SHARED_EXT="dylib"
+        ;;
+    *)
+        SHARED_EXT="so"
+        ;;
+esac
+
 RED="$(printf '\033[31m')"
 GREEN="$(printf '\033[32m')"
 YELLOW="$(printf '\033[33m')"
@@ -27,7 +36,7 @@ printf "%sBuilding native test module...%s\n" "$BLUE" "$RESET"
 if ! "${CC:-gcc}" -Wall -Wextra -Werror -fPIC -shared \
     "$TEST_DIR/native/native_test_module.c" \
     -I"$ROOT_DIR" \
-    -o "$TEST_DIR/native/native_test_module.so"; then
+    -o "$TEST_DIR/native/native_test_module.$SHARED_EXT"; then
     printf "%sNative module build failed%s\n" "$RED" "$RESET"
     exit 1
 fi
@@ -36,8 +45,27 @@ printf "%sBuilding file native module...%s\n" "$BLUE" "$RESET"
 if ! "${CC:-gcc}" -Wall -Wextra -Werror -ggdb -std=c11 -fPIC -shared \
     "$ROOT_DIR/nativelibs/files.c" \
     -I"$ROOT_DIR" \
-    -o "$ROOT_DIR/nativelibs/files.so"; then
+    -o "$ROOT_DIR/nativelibs/files.$SHARED_EXT"; then
     printf "%sFile native module build failed%s\n" "$RED" "$RESET"
+    exit 1
+fi
+
+printf "%sBuilding math native module...%s\n" "$BLUE" "$RESET"
+if ! "${CC:-gcc}" -Wall -Wextra -Werror -ggdb -std=c11 -fPIC -shared \
+    "$ROOT_DIR/nativelibs/math.c" \
+    -I"$ROOT_DIR" \
+    -o "$ROOT_DIR/nativelibs/math.$SHARED_EXT" \
+    -lm; then
+    printf "%sMath native module build failed%s\n" "$RED" "$RESET"
+    exit 1
+fi
+
+printf "%sBuilding unix native module...%s\n" "$BLUE" "$RESET"
+if ! "${CC:-gcc}" -Wall -Wextra -Werror -ggdb -std=c11 -fPIC -shared \
+    "$ROOT_DIR/nativelibs/unix.c" \
+    -I"$ROOT_DIR" \
+    -o "$ROOT_DIR/nativelibs/unix.$SHARED_EXT"; then
+    printf "%sUnix native module build failed%s\n" "$RED" "$RESET"
     exit 1
 fi
 

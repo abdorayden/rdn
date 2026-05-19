@@ -1,4 +1,4 @@
-"../nativelibs/files.so" loadnative
+"../libs/files.rdn" load
 
 "/tmp/rdn_files_native.txt" ("alpha" "beta") writeLines call print "\n" print
 "/tmp/rdn_files_native.txt" readLines call lines let

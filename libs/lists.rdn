@@ -1,0 +1,24 @@
+[* 
+lists.rdn
+Copyright (c) 2023-2026 Ray Den
+SPDX-License-Identifier: MIT
+
+Purpose:
+Reserved module for future list-oriented helpers.
+
+Current status:
+This file intentionally exports no functions yet. Use the builtins directly:
+- append
+- index
+- remove
+- len
+
+Examples:
+(1 2) 3 append print
+"\n" print
+(10 20 30) 1 index print
+"\n" print
+(1 2 3) 1 remove print
+"\n" print
+(1 2 3) len print
+*]

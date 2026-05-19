@@ -1,0 +1,20 @@
+"../libs/unix.rdn" load
+"../libs/files.rdn" load
+
+"/tmp/rdn_unix_native_dir/file.txt" exists call if
+    "/tmp/rdn_unix_native_dir/file.txt" rmPath call pop
+end
+
+"/tmp/rdn_unix_native_dir" exists call if
+    "/tmp/rdn_unix_native_dir" rmPath call pop
+end
+
+pwd call len 0 > print "\n" print
+"/tmp/rdn_unix_native_dir" exists call print "\n" print
+"/tmp/rdn_unix_native_dir" mkdir call print "\n" print
+"/tmp/rdn_unix_native_dir" ls call len print "\n" print
+"/tmp/rdn_unix_native_dir/file.txt" ("hello") writeLines call print "\n" print
+"/tmp/rdn_unix_native_dir" ls call len print "\n" print
+"/tmp/rdn_unix_native_dir/file.txt" exists call print "\n" print
+"/tmp/rdn_unix_native_dir/file.txt" rmPath call print "\n" print
+"/tmp/rdn_unix_native_dir" rmPath call print

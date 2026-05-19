@@ -1,0 +1,42 @@
+[* 
+files.rdn
+Copyright (c) 2023-2026 Ray Den
+SPDX-License-Identifier: MIT
+
+Purpose:
+Cross-platform wrapper over the native file IO module.
+
+Loading behavior:
+This module chooses the shared-library suffix from __sharedlib_ext and loads:
+../nativelibs/files(.so|.dylib|.dll)
+
+Exports:
+- readLines   : native function, path -> list of lines
+- writeLines  : native function, path list -> true
+- appendLines : native function, path list -> true
+- slurp       : wrapper, path -> full text string
+- spit        : wrapper, path text -> true
+- appendFileText : wrapper, path text -> true
+
+Examples:
+"./libs/files.rdn" load
+"/tmp/demo.txt" ("alpha" "beta") writeLines call pop
+"/tmp/demo.txt" readLines call print
+"\n" print
+"/tmp/demo.txt" "gamma" spit call pop
+"/tmp/demo.txt" slurp call print
+*]
+
+"../nativelibs/files" __sharedlib_ext to_string swap pop append loadnative
+
+slurp defun
+    readText call
+end
+
+spit defun
+    writeText call
+end
+
+appendFileText defun
+    appendText call
+end

@@ -1,3 +1,28 @@
+[* 
+core.rdn
+Copyright (c) 2023-2026 Ray Den
+SPDX-License-Identifier: MIT
+
+Purpose:
+Small aliases for core builtins so code can use function-call style names.
+
+Exports:
+- not : boolean negation, wraps !
+- shl : integer left shift, wraps <<
+- shr : integer right shift, wraps >>
+
+Examples:
+"./libs/core.rdn" load
+true not call print
+"\n" print
+4 1 shl call print
+"\n" print
+8 2 shr call print
+
+TODO: add function to get platform type
+
+*]
+
 not defun ! end
 shl defun << end
 shr defun >> end

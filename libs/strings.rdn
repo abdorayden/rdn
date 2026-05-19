@@ -1,0 +1,25 @@
+[* 
+strings.rdn
+Copyright (c) 2023-2026 Ray Den
+SPDX-License-Identifier: MIT
+
+Purpose:
+Reserved module for future string-oriented helpers.
+
+Current status:
+This file intentionally exports no functions yet. Use the builtins directly:
+- append
+- index
+- remove
+- len
+- to_string
+
+Examples:
+"ab" "cd" append print
+"\n" print
+"hello" 1 index print
+"\n" print
+"hello" 1 remove print
+"\n" print
+99 to_string print
+*]
