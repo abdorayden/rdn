@@ -14,6 +14,7 @@ main.o: main.c include/src.h include/rdn_native.h src/src.c src/stack.h
 lib: ./nativelibs/math.c
 	$(CC) $(CFLAGS) -fPIC -shared ./nativelibs/math.c -I. -o ./nativelibs/math.so -lm 
 	$(CC) $(CFLAGS) -fPIC -shared ./nativelibs/files.c -I. -o ./nativelibs/files.so
+	$(CC) $(CFLAGS) -fPIC -shared ./nativelibs/unix.c -I. -o ./nativelibs/unix.so
 
 clean:
 	rm -f $(OBJECTS) $(TARGET)
