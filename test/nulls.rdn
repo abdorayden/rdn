@@ -1,0 +1,7 @@
+null print "\n" print
+null type print "\n" print
+null to_string swap pop print "\n" print
+null null = print "\n" print
+null 0 = print "\n" print
+(null 1 "x") print "\n" print
+(null 1 "x") 0 index print
