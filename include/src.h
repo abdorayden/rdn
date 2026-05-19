@@ -23,6 +23,7 @@ typedef RLList(NativeModuleReg*) NativeModuleRegs;
 static void free_value(Value *value);
 
 enum ValueType{
+    VALUE_NULL,
     VALUE_INTEGER,
     VALUE_DOUBLE,
     VALUE_STRING,
@@ -101,6 +102,7 @@ static const char *g_current_source_path = NULL;
 static bool is_token(const char *value, const char *expected);
 static bool is_operator_token(const char *value);
 static char *copy_string(const char *text) ;
+static Value *create_null_value(void);
 static Value *create_integer_value(long integer);
 static Value *create_double_value(double number);
 static Value *create_boolean_value(bool boolean);

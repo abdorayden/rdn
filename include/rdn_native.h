@@ -36,6 +36,7 @@ typedef struct RDNModule RDNModule;
  */
 typedef enum RDNValueType {
     RDN_VALUE_NONE = 0,
+    RDN_VALUE_NULL,
     RDN_VALUE_INTEGER,
     RDN_VALUE_DOUBLE,
     RDN_VALUE_STRING,
