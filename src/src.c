@@ -983,33 +983,48 @@ static bool apply_exit(RDNState *stack , Vars *vars, int* exit_status) {
     return true;
 }
 
-static bool apply_type(RDNState *stack, Vars *vars) {
+static bool apply_type(RDNState *stack, Vars *vars, Funcs *funcs) {
     Value *value = NULL;
     Value *result = NULL;
+    Vars_t *var_entry = NULL;
 
     if (stack->count < 1) {
         fprintf(stderr, "type requires 1 operand\n");
         return false;
     }
 
-    value = resolve_value_if_var(vars, ray_pop(stack), "type");
-    if (value == NULL) {
-        return false;
+    value = ray_pop(stack);
+    if (value->type == VALUE_AS_VAR) {
+        var_entry = find_var_entry(vars, value->as.string);
+        if (var_entry == NULL && find_func_entry(funcs, value->as.string) != NULL) {
+            result = create_string_value_copy("function");
+            free_value(value);
+            value = NULL;
+        } else {
+            value = resolve_value_if_var(vars, value, "type");
+            if (value == NULL) {
+                return false;
+            }
+        }
     }
 
-    if (value->type == VALUE_INTEGER) {
-        result = create_string_value_copy("integer");
-    } else if (value->type == VALUE_DOUBLE) {
-        result = create_string_value_copy("double");
-    } else if (value->type == VALUE_BOOLEAN) {
-        result = create_string_value_copy("boolean");
-    } else if (value->type == VALUE_LIST) {
-        result = create_string_value_copy("list");
-    } else {
-        result = create_string_value_copy("string");
+    if (result == NULL) {
+        if (value->type == VALUE_INTEGER) {
+            result = create_string_value_copy("integer");
+        } else if (value->type == VALUE_DOUBLE) {
+            result = create_string_value_copy("double");
+        } else if (value->type == VALUE_BOOLEAN) {
+            result = create_string_value_copy("boolean");
+        } else if (value->type == VALUE_LIST) {
+            result = create_string_value_copy("list");
+        } else {
+            result = create_string_value_copy("string");
+        }
     }
 
-    free_value(value);
+    if (value != NULL) {
+        free_value(value);
+    }
 
     if (result == NULL) {
         fprintf(stderr, "failed to allocate type result\n");
@@ -2020,75 +2035,296 @@ static bool is_value_token(const char *token, bool is_string) {
     return is_token(token, "true") || is_token(token, "false");
 }
 
-static Value *parse_list_literal(char **cursor, Vars *vars) {
-    Value *list = create_list_value();
+static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char **cursor) {
     char *token = NULL;
     bool is_string = false;
+
+    while (true) {
+        if (!next_token(cursor, &token, &is_string)) {
+            return false;
+        }
+
+        if (token == NULL) {
+            fprintf(stderr, "unterminated list literal\n");
+            return false;
+        }
+
+        if (!is_string && is_token(token, ")")) {
+            free(token);
+            return true;
+        }
+
+        if (!is_string && is_token(token, "(")) {
+            Value *list_value = NULL;
+
+            free(token);
+            list_value = parse_list_literal(cursor, vars, funcs);
+            if (list_value == NULL) {
+                return false;
+            }
+            ray_append(stack, list_value);
+            continue;
+        } else if (is_token(token, "else")) {
+            fprintf(stderr, "unexpected else\n");
+            free(token);
+            return false;
+        } else if (is_token(token, "end")) {
+            fprintf(stderr, "unexpected end\n");
+            free(token);
+            return false;
+        } else if (is_token(token, "if")) {
+            BlockStop stop_reason = BLOCK_STOP_EOF;
+
+            free(token);
+            if (!apply_if(stack, vars, funcs, cursor, &stop_reason)) {
+                return false;
+            }
+            if (stop_reason == BLOCK_STOP_BREAK) {
+                fprintf(stderr, "unexpected break\n");
+                return false;
+            }
+            if (stop_reason == BLOCK_STOP_CONTINUE) {
+                fprintf(stderr, "unexpected continue\n");
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "loop")) {
+            free(token);
+            if (!apply_loop(stack, vars, funcs, cursor)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "defun")) {
+            free(token);
+            if (!apply_defun(stack, funcs, cursor)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "call")) {
+            free(token);
+            if (!apply_call(stack, vars, funcs)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "break")) {
+            fprintf(stderr, "unexpected break\n");
+            free(token);
+            return false;
+        } else if (is_token(token, "continue")) {
+            fprintf(stderr, "unexpected continue\n");
+            free(token);
+            return false;
+        } else if (is_value_token(token, is_string)) {
+            if (!push_token_value(stack, token, is_string)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else if (is_operator_token(token)) {
+            if (!apply_binary_operator(stack, vars, token)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else if (is_token(token, "print")) {
+            if (!apply_print(stack, vars)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else if (is_token(token, "type")) {
+            if (!apply_type(stack, vars, funcs)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else if (is_token(token, "exit")) {
+            int ret = 0;
+
+            if (!apply_exit(stack, vars, &ret)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            free_stack_values(stack);
+            exit(ret);
+        } else if (is_token(token, "pop")) {
+            if (!apply_pop(stack)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else if (is_token(token, "swap")) {
+            if (!apply_swap(stack)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else if (is_token(token, "dup")) {
+            if (!apply_dup(stack, vars)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else if (is_token(token, "let")) {
+            if (!apply_let(stack, vars)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else if (is_token(token, "set")) {
+            if (!apply_set(stack, vars)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else if (is_token(token, "enum")) {
+            if (!apply_enum(stack, vars, false)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else if (is_token(token, "reset")) {
+            if (!apply_enum(stack, vars, true)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else if (is_token(token, "const")) {
+            if (!apply_const(stack, vars)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else if (is_token(token, "to_string")) {
+            if (!apply_to_string(stack, vars)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else if (is_token(token, "append")) {
+            if (!apply_append(stack, vars)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else if (is_token(token, "remove")) {
+            if (!apply_remove(stack, vars)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else if (is_token(token, "index")) {
+            if (!apply_index(stack, vars)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else if (is_token(token, "len")) {
+            if (!apply_len(stack, vars)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else if (is_token(token, "load")) {
+            if (!apply_load(stack, vars, funcs)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else if (is_token(token, "loadnative")) {
+            if (!apply_loadnative(stack, vars, funcs)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else if (is_identifier_token(token)) {
+            Value *resolved = NULL;
+            Vars_t *entry = NULL;
+
+            if (identifier_is_name_target(*cursor)) {
+                resolved = create_var_name_value(token);
+            } else if ((entry = find_var_entry(vars, token)) != NULL &&
+                       (entry->var_value->type == VALUE_LIST || entry->var_value->type == VALUE_STRING)) {
+                resolved = create_var_name_value(token);
+            } else if ((entry = find_var_entry(vars, token)) != NULL) {
+                resolved = clone_value(entry->var_value);
+            } else {
+                resolved = create_var_name_value(token);
+            }
+
+            if (!push_value(stack, resolved)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else {
+            fprintf(stderr, "unknown token: %s\n", token);
+            free(token);
+            return false;
+        }
+    }
+}
+
+static Value *parse_list_literal(char **cursor, Vars *vars, Funcs *funcs) {
+    Value *list = create_list_value();
+    RDNState list_stack = {0};
+    size_t index = 0;
 
     if (list == NULL) {
         return NULL;
     }
 
-    while (true) {
-        Value *item = NULL;
+    if (!execute_list_literal(&list_stack, vars, funcs, cursor)) {
+        free_stack_values(&list_stack);
+        free_value(list);
+        return NULL;
+    }
+
+    for (index = 0; index < list_stack.count; index++) {
         Vars_t *entry = NULL;
+        Value *item = list_stack.items[index];
 
-        if (!next_token(cursor, &token, &is_string)) {
-            free_value(list);
-            return NULL;
-        }
+        if (item->type == VALUE_AS_VAR && (entry = find_var_entry(vars, item->as.string)) != NULL) {
+            Value *resolved_item = clone_value(entry->var_value);
 
-        if (token == NULL) {
-            fprintf(stderr, "unterminated list literal\n");
-            free_value(list);
-            return NULL;
-        }
-
-        if (!is_string && is_token(token, ")")) {
-            free(token);
-            return list;
-        }
-
-        if (!is_string && is_token(token, "(")) {
-            free(token);
-            item = parse_list_literal(cursor, vars);
-        } else if (is_value_token(token, is_string)) {
-            long integer_value = 0;
-            double double_value = 0;
-
-            if (is_string) {
-                item = create_string_value_copy(token);
-            } else if (parse_integer_token(token, &integer_value)) {
-                item = create_integer_value(integer_value);
-            } else if (parse_double_token(token, &double_value)) {
-                item = create_double_value(double_value);
-            } else if (is_token(token, "true")) {
-                item = create_boolean_value(true);
-            } else if (is_token(token, "false")) {
-                item = create_boolean_value(false);
+            free_value(item);
+            item = resolved_item;
+            if (item == NULL) {
+                fprintf(stderr, "failed to allocate list item\n");
+                list_stack.items[index] = NULL;
+                free_stack_values(&list_stack);
+                free_value(list);
+                return NULL;
             }
-            free(token);
-        } else if (is_identifier_token(token) && (entry = find_var_entry(vars, token)) != NULL) {
-            item = clone_value(entry->var_value);
-            free(token);
-        } else if (is_identifier_token(token)) {
-            item = create_var_name_value(token);
-            free(token);
-        } else {
-            fprintf(stderr, "invalid list item: %s\n", token);
-            free(token);
-            free_value(list);
-            return NULL;
-        }
-
-        if (item == NULL) {
-            fprintf(stderr, "failed to allocate list item\n");
-            free_value(list);
-            return NULL;
         }
 
         ray_append(&list->as.list, item);
+        list_stack.items[index] = NULL;
     }
+
+    free(list_stack.items);
+    return list;
 }
 
 static bool is_identifier_token(const char *token) {
@@ -2414,7 +2650,7 @@ static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **curs
         }
 
         if (!is_string && is_token(token, "(")) {
-            Value *list_value = parse_list_literal(cursor, vars);
+            Value *list_value = parse_list_literal(cursor, vars, funcs);
             free(token);
             if (list_value == NULL) {
                 return false;
@@ -2490,7 +2726,7 @@ static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **curs
             free(token);
             continue;
         } else if (is_token(token, "type")) {
-            if (!apply_type(stack, vars)) {
+            if (!apply_type(stack, vars, funcs)) {
                 free(token);
                 return false;
             }
