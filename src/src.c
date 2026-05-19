@@ -3537,6 +3537,8 @@ static int run_repl(void) {
     size_t source_length = 0;
     bool complete = true;
 
+    apply_host_environment(&vars);
+
     printf("raden repl\n");
     printf("press Ctrl-D to exit\n");
 
@@ -3592,6 +3594,51 @@ static int run_repl(void) {
     return EXIT_SUCCESS;
 }
 
+static const char *host_os_name(void) {
+#if defined(_WIN32)
+    return "windows";
+#elif defined(__APPLE__)
+    return "macos";
+#elif defined(__linux__)
+    return "linux";
+#elif defined(__FreeBSD__)
+    return "freebsd";
+#elif defined(__unix__)
+    return "unix";
+#else
+    return "unknown";
+#endif
+}
+
+static const char *host_shared_library_extension(void) {
+#if defined(_WIN32)
+    return ".dll";
+#elif defined(__APPLE__)
+    return ".dylib";
+#else
+    return ".so";
+#endif
+}
+
+static void apply_host_environment(Vars *vars) {
+    Vars_t *host_os_var = NULL;
+    Vars_t *shared_lib_ext_var = NULL;
+
+    host_os_var = create_var_entry("__host_os", create_string_value_copy(host_os_name()), true);
+    if (host_os_var != NULL) {
+        ray_append(vars, host_os_var);
+    }
+
+    shared_lib_ext_var = create_var_entry(
+        "__sharedlib_ext",
+        create_string_value_copy(host_shared_library_extension()),
+        true
+    );
+    if (shared_lib_ext_var != NULL) {
+        ray_append(vars, shared_lib_ext_var);
+    }
+}
+
 static void apply_argv(Vars* vars , const char* path, int argc , char** argv) {
 
     Value* argv_list = create_list_value();
@@ -3620,6 +3667,7 @@ int rdn_main(int argc , char** argv) {
     }
 
     path = argv[1];
+    apply_host_environment(&vars);
     apply_argv(&vars, path, argc ,  argv);
 
     if (!evaluate_file(&stack, &vars, &funcs, path)) {

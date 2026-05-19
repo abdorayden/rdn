@@ -222,6 +222,9 @@ static bool native_module_set_error(RDNModule *module, const char *message);
 static bool append_text(char **buffer, size_t *length, const char *text);
 static bool source_has_complete_blocks(const char *source, bool *out_complete);
 static int run_repl(void);
+static const char *host_os_name(void);
+static const char *host_shared_library_extension(void);
+static void apply_host_environment(Vars *vars);
 static void apply_argv(Vars* vars , const char* path, int argc , char** argv);
 int rdn_main(int argc , char** argv);
 
