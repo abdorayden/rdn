@@ -47,3 +47,27 @@ end
 ls defun
     listDir call
 end
+
+[* "../libs/io.rdn" load *]
+[* "../libs/lists.rdn" load *]
+[**]
+[* "." ls call println map call *]
+[* result *]
+[* MAIN.rdn *]
+[* libs *]
+[* nativelibs *]
+[* main *]
+[* src *]
+[* .nvimlog *]
+[* nvim *]
+[* README.md *]
+[* main.o *]
+[* LICENSE *]
+[* BUGS.rdn *]
+[* main.c *]
+[* Makefile *]
+[* .git *]
+[* test *]
+[* treesitter *]
+[* embed *]
+[* include *]

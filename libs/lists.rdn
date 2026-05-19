@@ -4,21 +4,33 @@ Copyright (c) 2023-2026 Ray Den
 SPDX-License-Identifier: MIT
 
 Purpose:
-Reserved module for future list-oriented helpers.
+List-oriented helpers built in Raden itself.
 
-Current status:
-This file intentionally exports no functions yet. Use the builtins directly:
-- append
-- index
-- remove
-- len
+Exports:
+- map : iterate a list and call a callback for each item
 
 Examples:
-(1 2) 3 append print
-"\n" print
-(10 20 30) 1 index print
-"\n" print
-(1 2 3) 1 remove print
-"\n" print
-(1 2 3) len print
+printer defun
+  print
+  "\n" print
+end
+
+(1 2 3) printer map call
+
+printer callback let
+(4 5 6) callback map call
 *]
+
+map defun
+    callback let
+    tha-list let
+    0 i let
+    tha-list len list-length let
+    i list-length < loop
+        tha-list i index callback call
+        i 1 + i set
+        i list-length <
+    end
+end
+
+map foreach let

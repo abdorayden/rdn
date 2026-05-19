@@ -2,7 +2,6 @@
 
 // TODO: create native cross platform libs for rdn with bindings
 // TODO: introduce big ints 
-// TODO: introduce null type
 // TODO: better error report
 // TODO: finish std native and nonative libs
 
