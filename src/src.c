@@ -1758,6 +1758,8 @@ static bool apply_defun(RDNState *stack, Funcs *funcs, char **cursor) {
 
 static bool apply_call(RDNState *stack, Vars *vars, Funcs *funcs) {
     Value *name = NULL;
+    Value *resolved_name = NULL;
+    Vars_t *var_entry = NULL;
     Funcs_t *entry = NULL;
     BlockStop stop_reason = BLOCK_STOP_EOF;
     char *cursor = NULL;
@@ -1774,9 +1776,31 @@ static bool apply_call(RDNState *stack, Vars *vars, Funcs *funcs) {
         return false;
     }
 
-    entry = find_func_entry(funcs, name->as.string);
+    var_entry = find_var_entry(vars, name->as.string);
+    if (var_entry != NULL) {
+        resolved_name = clone_value(var_entry->var_value);
+        if (resolved_name == NULL) {
+            fprintf(stderr, "failed to resolve function variable '%s'\n", name->as.string);
+            free_value(name);
+            return false;
+        }
+
+        if (resolved_name->type != VALUE_AS_VAR) {
+            fprintf(stderr, "call requires function name\n");
+            free_value(name);
+            ray_append(stack, resolved_name);
+            return false;
+        }
+
+        entry = find_func_entry(funcs, resolved_name->as.string);
+    } else {
+        entry = find_func_entry(funcs, name->as.string);
+    }
+
     if (entry == NULL) {
-        fprintf(stderr, "unknown function: %s\n", name->as.string);
+        fprintf(stderr, "unknown function: %s\n",
+                resolved_name != NULL ? resolved_name->as.string : name->as.string);
+        free_value(resolved_name);
         ray_append(stack, name);
         return false;
     }
@@ -1812,6 +1836,7 @@ static bool apply_call(RDNState *stack, Vars *vars, Funcs *funcs) {
         api.raise_error = native_api_raise_error;
 
         ok = entry->as.native_function(&api);
+        free_value(resolved_name);
         free_value(name);
         if (!ok) {
             fprintf(stderr, "%s\n", call_state.error_message == NULL ? "native function call failed" : call_state.error_message);
@@ -1824,6 +1849,7 @@ static bool apply_call(RDNState *stack, Vars *vars, Funcs *funcs) {
     }
 
     if (!vars_push_scope(vars)) {
+        free_value(resolved_name);
         ray_append(stack, name);
         return false;
     }
@@ -1831,11 +1857,13 @@ static bool apply_call(RDNState *stack, Vars *vars, Funcs *funcs) {
     cursor = entry->as.func_body;
     if (!execute_block(stack, vars, funcs, &cursor, &stop_reason, false)) {
         vars_pop_scope(vars);
+        free_value(resolved_name);
         free_value(name);
         return false;
     }
 
     vars_pop_scope(vars);
+    free_value(resolved_name);
     free_value(name);
 
     if (stop_reason == BLOCK_STOP_BREAK) {

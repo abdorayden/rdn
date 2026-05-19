@@ -1,0 +1,16 @@
+foo defun
+    "hello"
+end
+
+foo my_foo let
+my_foo type print "\n" print
+my_foo call print "\n" print
+
+"../libs/lists.rdn" load
+
+printer defun
+    print "\n" print
+end
+
+printer callback let
+(1 2 3) callback map call
