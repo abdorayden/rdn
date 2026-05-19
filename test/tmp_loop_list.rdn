@@ -1,0 +1,7 @@
+0 i let
+
+( i 10 < loop
+    i
+    i 1 + i set
+    i 10 <
+end) print

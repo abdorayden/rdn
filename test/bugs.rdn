@@ -1,0 +1,14 @@
+foo defun
+    "foo"
+end
+
+foo type print "\n" print
+("hello" foo call) print "\n" print
+(
+    2 
+    3 
+    1 
+    true if 
+        10 
+    end
+) 3 index print "\n" print

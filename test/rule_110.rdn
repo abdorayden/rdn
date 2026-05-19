@@ -1,0 +1,66 @@
+[* Rule 110 is historically important because it is computationally universal.
+   This test does not prove the language is Turing complete, but it checks that
+   Raden can express a nontrivial cellular automaton update loop. *]
+
+rule110 defun
+    right let
+    center let
+    left let
+
+    [* left*4 + center*2 + right *]
+    left 4 * center 2 * + right + pattern let
+
+    pattern 0 = if
+        0
+    else
+        pattern 4 = if
+            0
+        else
+            pattern 7 = if
+                0
+            else
+                1
+            end
+        end
+    end
+end
+
+(0 0 0 0 0 1 0 0 0 0 0) current let
+() next let
+0 gen let
+0 i let
+0 left let
+0 center let
+0 right let
+
+current print "\n" print
+
+gen 9 < loop
+    () next set
+    0 i set
+
+    i current len < loop
+        0 left set
+        0 right set
+
+        i 0 > if
+            current i 1 - index left set
+        end
+
+        i current len 1 - < if
+            current i 1 + index right set
+        end
+
+        current i index center set
+        next left center right rule110 call append
+
+        i 1 + i set
+        i current len <
+    end
+
+    next dup current set pop
+    current print "\n" print
+
+    gen 1 + gen set
+    gen 9 <
+end
