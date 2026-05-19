@@ -48,6 +48,8 @@ static RDNValueType native_value_type_from_value(const Value *value) {
     }
 
     switch (value->type) {
+        case VALUE_NULL:
+            return RDN_VALUE_NULL;
         case VALUE_INTEGER:
             return RDN_VALUE_INTEGER;
         case VALUE_DOUBLE:

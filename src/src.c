@@ -36,6 +36,18 @@ static char *copy_string(const char *text) {
     return copy;
 }
 
+static Value *create_null_value(void) {
+    Value *value = malloc(sizeof(*value));
+
+    if (value == NULL) {
+        return NULL;
+    }
+
+    value->type = VALUE_NULL;
+    value->as.integer = 0;
+    return value;
+}
+
 static Value *create_integer_value(long integer) {
     Value *value = malloc(sizeof(*value));
 
@@ -134,6 +146,8 @@ static Value *clone_value(const Value *value) {
     }
 
     switch (value->type) {
+        case VALUE_NULL:
+            return create_null_value();
         case VALUE_INTEGER:
             return create_integer_value(value->as.integer);
         case VALUE_DOUBLE:
@@ -653,6 +667,10 @@ static bool append_value_repr(char **buffer, size_t *length, const Value *value)
         return append_text(buffer, length, tmp);
     }
 
+    if (value->type == VALUE_NULL) {
+        return append_text(buffer, length, "null");
+    }
+
     if (value->type == VALUE_DOUBLE) {
         snprintf(tmp, sizeof(tmp), "%.15g", value->as.number);
         return append_text(buffer, length, tmp);
@@ -699,6 +717,10 @@ static bool values_equal(const Value *left, const Value *right) {
         return false;
     }
 
+    if (left->type == VALUE_NULL) {
+        return true;
+    }
+
     if (left->type == VALUE_BOOLEAN) {
         return left->as.boolean == right->as.boolean;
     }
@@ -740,6 +762,11 @@ static void print_value(const Value *value) {
 
     if (value->type == VALUE_INTEGER) {
         printf("%ld", value->as.integer);
+        return;
+    }
+
+    if (value->type == VALUE_NULL) {
+        printf("null");
         return;
     }
 
@@ -1009,6 +1036,9 @@ static bool apply_type(RDNState *stack, Vars *vars, Funcs *funcs) {
     }
 
     if (result == NULL) {
+        if (value->type == VALUE_NULL) {
+            result = create_string_value_copy("null");
+        } else
         if (value->type == VALUE_INTEGER) {
             result = create_string_value_copy("integer");
         } else if (value->type == VALUE_DOUBLE) {
@@ -1077,6 +1107,10 @@ static bool apply_dup(RDNState *stack, Vars *vars) {
     Value* dup2;
 
     switch (value->type) {
+        case VALUE_NULL:{
+            dup1 = create_null_value();
+            dup2 = create_null_value();
+        }break;
         case VALUE_BOOLEAN:{
             dup1 = create_boolean_value(value->as.boolean);
             dup2 = create_boolean_value(value->as.boolean);
@@ -1130,6 +1164,9 @@ static bool apply_to_string(RDNState *stack, Vars *vars) {
     Value* converted;
 
     switch (value->type) {
+        case VALUE_NULL:{
+            converted = create_string_value_copy("null");
+        }break;
         case VALUE_BOOLEAN:{
             if (value->as.boolean) {
                 converted = create_string_value_copy("true");
@@ -2004,6 +2041,10 @@ static bool push_token_value(RDNState *stack, const char *token, bool is_string)
         return push_value(stack, create_double_value(double_value));
     }
 
+    if (is_token(token, "null")) {
+        return push_value(stack, create_null_value());
+    }
+
     if (is_token(token, "true")) {
         return push_value(stack, create_boolean_value(true));
     }
@@ -2032,7 +2073,7 @@ static bool is_value_token(const char *token, bool is_string) {
         return true;
     }
 
-    return is_token(token, "true") || is_token(token, "false");
+    return is_token(token, "null") || is_token(token, "true") || is_token(token, "false");
 }
 
 static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char **cursor) {
@@ -3188,6 +3229,8 @@ static RDNValueType native_value_type_from_value(const Value *value) {
     }
 
     switch (value->type) {
+        case VALUE_NULL:
+            return RDN_VALUE_NULL;
         case VALUE_INTEGER:
             return RDN_VALUE_INTEGER;
         case VALUE_DOUBLE:
