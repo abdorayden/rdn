@@ -16,6 +16,7 @@ syntax match radenNumber /\v[-+]?0o[0-7]+/
 syntax match radenFloat /\v[-+]?\d+\.\d+([eE][-+]?\d+)?/
 syntax match radenFloat /\v[-+]?\d+[eE][-+]?\d+/
 
+syntax keyword radenNull null
 syntax keyword radenBoolean true false
 
 syntax keyword radenConditional if else end
@@ -40,6 +41,7 @@ highlight default link radenString String
 highlight default link radenEscape SpecialChar
 highlight default link radenNumber Number
 highlight default link radenFloat Float
+highlight default link radenNull Constant
 highlight default link radenBoolean Boolean
 highlight default link radenConditional Conditional
 highlight default link radenRepeat Repeat
