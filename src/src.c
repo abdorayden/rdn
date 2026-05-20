@@ -1708,6 +1708,75 @@ static bool apply_len(RDNState *stack, Vars *vars) {
     return true;
 }
 
+// TODO: rayden was here
+static bool apply_add_load_path(RDNState *stack, Vars *vars) {
+    Value *target = NULL;
+    char *path = NULL;
+    char *resolved = NULL;
+    char *canonical = NULL;
+    bool ok = false;
+
+    if (!pop_string_path_operand(stack, vars, "add_load_path", &target, &path)) {
+        return false;
+    }
+
+    resolved = resolve_path_from_current_source(path);
+    if (resolved == NULL) {
+        free_value(target);
+        return diagnostic_error_current("failed to resolve search path '%s'", path);
+    }
+
+    canonical = canonicalize_existing_path(resolved);
+    if (canonical != NULL) {
+        free(resolved);
+        resolved = canonical;
+    }
+
+    ok = push_search_path(&g_script_search_paths, resolved);
+    free(resolved);
+    free_value(target);
+
+    if (!ok) {
+        return diagnostic_error_current("failed to add load search path");
+    }
+
+    return true;
+}
+
+static bool apply_add_native_path(RDNState *stack, Vars *vars) {
+    Value *target = NULL;
+    char *path = NULL;
+    char *resolved = NULL;
+    char *canonical = NULL;
+    bool ok = false;
+
+    if (!pop_string_path_operand(stack, vars, "add_native_path", &target, &path)) {
+        return false;
+    }
+
+    resolved = resolve_path_from_current_source(path);
+    if (resolved == NULL) {
+        free_value(target);
+        return diagnostic_error_current("failed to resolve native search path '%s'", path);
+    }
+
+    canonical = canonicalize_existing_path(resolved);
+    if (canonical != NULL) {
+        free(resolved);
+        resolved = canonical;
+    }
+
+    ok = push_search_path(&g_native_search_paths, resolved);
+    free(resolved);
+    free_value(target);
+
+    if (!ok) {
+        return diagnostic_error_current("failed to add native search path");
+    }
+
+    return true;
+}
+
 static bool apply_load(RDNState *stack, Vars *vars, Funcs *funcs){
     char *source = NULL;
     char *resolved_path = NULL;
@@ -1728,7 +1797,7 @@ static bool apply_load(RDNState *stack, Vars *vars, Funcs *funcs){
         return diagnostic_error_current("failed to allocate load path");
     }
 
-    resolved_path = resolve_path_from_current_source(path);
+    resolved_path = resolve_load_path_candidate(path, &g_script_search_paths);
     if (resolved_path == NULL) {
         free_value(target);
         ok = diagnostic_error_current("failed to resolve path '%s'", path_copy);
@@ -1814,7 +1883,7 @@ static bool apply_loadnative(RDNState *stack, Vars *vars, Funcs *funcs) {
         return diagnostic_error_current("failed to allocate native load path");
     }
 
-    resolved_path = resolve_path_from_current_source(path);
+    resolved_path = resolve_load_path_candidate(path, &g_native_search_paths);
     if (resolved_path == NULL) {
         free_value(target);
         ok = diagnostic_error_current("failed to resolve path '%s'", path_copy);
@@ -2572,6 +2641,20 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
             }
             free(token);
             continue;
+        } else if (is_token(token, "add_load_path")) {
+            if (!apply_add_load_path(stack, vars)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else if (is_token(token, "add_native_path")) {
+            if (!apply_add_native_path(stack, vars)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
         } else if (is_token(token, "load")) {
             if (!apply_load(stack, vars, funcs)) {
                 free(token);
@@ -3164,6 +3247,20 @@ static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **curs
             }
             free(token);
             continue;
+        } else if (is_token(token, "add_load_path")) {
+            if (!apply_add_load_path(stack, vars)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else if (is_token(token, "add_native_path")) {
+            if (!apply_add_native_path(stack, vars)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
         }else if(is_token(token, "load")) {
             if (!apply_load(stack, vars, funcs)) {
                 free(token);
@@ -3406,6 +3503,22 @@ static char *read_file(const char *path) {
     return buffer;
 }
 
+static bool path_is_readable_file(const char *path) {
+    FILE *file = NULL;
+
+    if (path == NULL) {
+        return false;
+    }
+
+    file = fopen(path, "rb");
+    if (file == NULL) {
+        return false;
+    }
+
+    fclose(file);
+    return true;
+}
+
 static char *resolve_path_from_current_source(const char *path) {
     const char *slash = NULL;
     size_t dir_length = 0;
@@ -3435,6 +3548,103 @@ static char *resolve_path_from_current_source(const char *path) {
     memcpy(resolved, g_current_source_path, dir_length);
     memcpy(resolved + dir_length, path, path_length + 1);
     return resolved;
+}
+
+static char *join_paths(const char *base, const char *path) {
+    size_t base_length = 0;
+    size_t path_length = 0;
+    bool need_sep = false;
+    char *joined = NULL;
+
+    if (base == NULL || path == NULL) {
+        return NULL;
+    }
+
+    base_length = strlen(base);
+    path_length = strlen(path);
+    need_sep = base_length > 0 && base[base_length - 1] != '/';
+
+    joined = malloc(base_length + path_length + (need_sep ? 2 : 1));
+    if (joined == NULL) {
+        return NULL;
+    }
+
+    memcpy(joined, base, base_length);
+    if (need_sep) {
+        joined[base_length] = '/';
+        memcpy(joined + base_length + 1, path, path_length + 1);
+    } else {
+        memcpy(joined + base_length, path, path_length + 1);
+    }
+
+    return joined;
+}
+
+static bool path_has_separator(const char *path) {
+    return path != NULL && (strchr(path, '/') != NULL || strchr(path, '\\') != NULL);
+}
+
+static bool path_is_absolute(const char *path) {
+    if (path == NULL || path[0] == '\0') {
+        return false;
+    }
+
+    if (path[0] == '/' || path[0] == '\\') {
+        return true;
+    }
+
+    if (((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z')) &&
+        path[1] == ':' && (path[2] == '/' || path[2] == '\\')) {
+        return true;
+    }
+
+    return false;
+}
+
+static char *resolve_load_path_candidate(const char *path, const SearchPathStack *search_paths) {
+    char *candidate = NULL;
+    char *canonical = NULL;
+    size_t index = 0;
+
+    if (path == NULL) {
+        return NULL;
+    }
+
+    candidate = resolve_path_from_current_source(path);
+    if (candidate != NULL && path_is_readable_file(candidate)) {
+        canonical = canonicalize_existing_path(candidate);
+        if (canonical != NULL) {
+            free(candidate);
+            candidate = canonical;
+        }
+        return candidate;
+    }
+    free(candidate);
+
+    if (path_is_absolute(path) || path_has_separator(path)) {
+        return NULL;
+    }
+
+    for (index = 0; index < search_paths->count; index++) {
+        candidate = join_paths(search_paths->items[index], path);
+        if (candidate == NULL) {
+            return NULL;
+        }
+
+        if (path_is_readable_file(candidate)) {
+            canonical = canonicalize_existing_path(candidate);
+            if (canonical != NULL) {
+                free(candidate);
+                candidate = canonical;
+            }
+            return candidate;
+        }
+
+        free(candidate);
+        candidate = NULL;
+    }
+
+    return NULL;
 }
 
 static char *canonicalize_existing_path(const char *path) {
@@ -3553,6 +3763,57 @@ static void pop_load_path(void) {
 
     path = ray_pop(&g_load_path_stack);
     free(path);
+}
+
+static void free_search_path_stack(SearchPathStack *paths) {
+    while (paths->count > 0) {
+        free(ray_pop(paths));
+    }
+
+    ray_clear(paths);
+}
+
+static bool search_path_stack_contains(const SearchPathStack *paths, const char *path) {
+    size_t index = 0;
+
+    for (index = 0; index < paths->count; index++) {
+        if (strcmp(paths->items[index], path) == 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static bool push_search_path(SearchPathStack *paths, const char *path) {
+    char *copy = NULL;
+
+    if (search_path_stack_contains(paths, path)) {
+        return true;
+    }
+
+    copy = copy_string(path);
+    if (copy == NULL) {
+        return false;
+    }
+
+    ray_append(paths, copy);
+    return true;
+}
+
+// TODO: rayden was here
+static bool reset_search_paths(void) {
+    free_search_path_stack(&g_script_search_paths);
+    free_search_path_stack(&g_native_search_paths);
+
+    if (!push_search_path(&g_script_search_paths, "libs")) {
+        return false;
+    }
+    if (!push_search_path(&g_native_search_paths, "nativelibs")) {
+        return false;
+    }
+
+    return true;
 }
 
 static bool pop_string_path_operand(RDNState *stack, Vars *vars, const char *context, Value **out_target, char **out_path) {
@@ -3997,6 +4258,11 @@ static int run_repl(void) {
     size_t source_length = 0;
     bool complete = true;
 
+    if (!reset_search_paths()) {
+        fprintf(stderr, "failed to initialize search paths\n");
+        return EXIT_FAILURE;
+    }
+
     apply_host_environment(&vars);
 
     printf("raden repl\n");
@@ -4127,6 +4393,10 @@ int rdn_main(int argc , char** argv) {
     }
 
     path = argv[1];
+    if (!reset_search_paths()) {
+        fprintf(stderr, "failed to initialize search paths\n");
+        return exit_code;
+    }
     apply_host_environment(&vars);
     apply_argv(&vars, path, argc ,  argv);
 

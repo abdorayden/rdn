@@ -16,6 +16,7 @@ typedef struct NativeModuleReg NativeModuleReg;
 typedef struct NativeModuleLoadState NativeModuleLoadState;
 typedef struct DiagnosticContext DiagnosticContext;
 typedef RLList(char *) LoadPathStack;
+typedef RLList(char *) SearchPathStack;
 
 typedef RLStack(Value *) RDNState;
 typedef RLList(Vars_t*) Vars;
@@ -114,6 +115,8 @@ struct DiagnosticContext {
 static const char *g_current_source_path = NULL;
 static DiagnosticContext g_diagnostic_context = {0};
 static LoadPathStack g_load_path_stack = {0};
+static SearchPathStack g_script_search_paths = {0};
+static SearchPathStack g_native_search_paths = {0};
 
 static bool is_token(const char *value, const char *expected);
 static bool is_operator_token(const char *value);
@@ -172,6 +175,8 @@ static bool apply_append(RDNState *stack, Vars *vars);
 static bool apply_remove(RDNState *stack, Vars *vars);
 static bool apply_index(RDNState *stack, Vars *vars);
 static bool apply_len(RDNState *stack, Vars *vars);
+static bool apply_add_load_path(RDNState *stack, Vars *vars);
+static bool apply_add_native_path(RDNState *stack, Vars *vars);
 static bool apply_load(RDNState *stack, Vars *vars, Funcs *funcs);
 static bool apply_loadnative(RDNState *stack, Vars *vars, Funcs *funcs);
 static bool apply_defun(RDNState *stack, Funcs *funcs, char **cursor);
@@ -207,11 +212,20 @@ static bool evaluate_source(RDNState *stack, Vars* vars, Funcs *funcs, char *sou
 static bool evaluate_file(RDNState *stack, Vars *vars, Funcs *funcs, const char *path);
 #define rdn_do_string(src) do{evaluate_source(NULL , NULL , NULL , (src));}while(0)
 static char *read_file(const char *path);
+static bool path_is_readable_file(const char *path);
 static char *resolve_path_from_current_source(const char *path);
 static char *canonicalize_existing_path(const char *path);
+static char *join_paths(const char *base, const char *path);
+static bool path_has_separator(const char *path);
+static bool path_is_absolute(const char *path);
+static char *resolve_load_path_candidate(const char *path, const SearchPathStack *search_paths);
 static bool load_path_stack_contains(const char *path);
 static bool push_load_path(const char *path);
 static void pop_load_path(void);
+static void free_search_path_stack(SearchPathStack *paths);
+static bool search_path_stack_contains(const SearchPathStack *paths, const char *path);
+static bool push_search_path(SearchPathStack *paths, const char *path);
+static bool reset_search_paths(void);
 static bool pop_string_path_operand(RDNState *stack, Vars *vars, const char *context, Value **out_target, char **out_path);
 static bool set_owned_error_message(char **slot, const char *message);
 static bool append_string_repr(char **target_string, const Value *value);
