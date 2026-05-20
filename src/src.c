@@ -1711,7 +1711,10 @@ static bool apply_len(RDNState *stack, Vars *vars) {
 static bool apply_load(RDNState *stack, Vars *vars, Funcs *funcs){
     char *source = NULL;
     char *resolved_path = NULL;
+    char *canonical_path = NULL;
+    char *canonical_current_path = NULL;
     char *path = NULL;
+    char *path_copy = NULL;
     Value *target = NULL;
     bool ok = false;
 
@@ -1719,10 +1722,43 @@ static bool apply_load(RDNState *stack, Vars *vars, Funcs *funcs){
         return false;
     }
 
+    path_copy = copy_string(path);
+    if (path_copy == NULL) {
+        free_value(target);
+        return diagnostic_error_current("failed to allocate load path");
+    }
+
     resolved_path = resolve_path_from_current_source(path);
     if (resolved_path == NULL) {
         free_value(target);
-        return diagnostic_error_current("failed to resolve path '%s'", path);
+        ok = diagnostic_error_current("failed to resolve path '%s'", path_copy);
+        free(path_copy);
+        return ok;
+    }
+
+    canonical_path = canonicalize_existing_path(resolved_path);
+    if (canonical_path != NULL) {
+        free(resolved_path);
+        resolved_path = canonical_path;
+    }
+
+    canonical_current_path = canonicalize_existing_path(g_current_source_path);
+    if (canonical_current_path != NULL && strcmp(canonical_current_path, resolved_path) == 0) {
+        free(canonical_current_path);
+        free_value(target);
+        ok = diagnostic_error_current("recursive load detected for '%s'", resolved_path);
+        free(resolved_path);
+        free(path_copy);
+        return ok;
+    }
+    free(canonical_current_path);
+
+    if (load_path_stack_contains(resolved_path)) {
+        free_value(target);
+        ok = diagnostic_error_current("recursive load detected for '%s'", resolved_path);
+        free(resolved_path);
+        free(path_copy);
+        return ok;
     }
 
     source = read_file(resolved_path);
@@ -1732,6 +1768,15 @@ static bool apply_load(RDNState *stack, Vars *vars, Funcs *funcs){
         return false;
     }
 
+    if (!push_load_path(resolved_path)) {
+        free(source);
+        free(resolved_path);
+        free_value(target);
+        ok = diagnostic_error_current("failed to track loaded path '%s'", path_copy);
+        free(path_copy);
+        return ok;
+    }
+
     {
         const char *previous_path = g_current_source_path;
         g_current_source_path = resolved_path;
@@ -1739,15 +1784,19 @@ static bool apply_load(RDNState *stack, Vars *vars, Funcs *funcs){
         g_current_source_path = previous_path;
     }
 
+    pop_load_path();
     free(source);
     free(resolved_path);
     free_value(target);
+    free(path_copy);
     return ok;
 }
 
 static bool apply_loadnative(RDNState *stack, Vars *vars, Funcs *funcs) {
     char *resolved_path = NULL;
+    char *canonical_path = NULL;
     char *path = NULL;
+    char *path_copy = NULL;
     Value *target = NULL;
     void *handle = NULL;
     RDNModuleInit init_function = NULL;
@@ -1759,10 +1808,24 @@ static bool apply_loadnative(RDNState *stack, Vars *vars, Funcs *funcs) {
         return false;
     }
 
+    path_copy = copy_string(path);
+    if (path_copy == NULL) {
+        free_value(target);
+        return diagnostic_error_current("failed to allocate native load path");
+    }
+
     resolved_path = resolve_path_from_current_source(path);
     if (resolved_path == NULL) {
         free_value(target);
-        return diagnostic_error_current("failed to resolve path '%s'", path);
+        ok = diagnostic_error_current("failed to resolve path '%s'", path_copy);
+        free(path_copy);
+        return ok;
+    }
+
+    canonical_path = canonicalize_existing_path(resolved_path);
+    if (canonical_path != NULL) {
+        free(resolved_path);
+        resolved_path = canonical_path;
     }
 
     handle = dlopen(resolved_path, RTLD_NOW | RTLD_LOCAL);
@@ -1832,6 +1895,7 @@ static bool apply_loadnative(RDNState *stack, Vars *vars, Funcs *funcs) {
     free(module_state.error_message);
     free(resolved_path);
     free_value(target);
+    free(path_copy);
     return true;
 }
 
@@ -3371,6 +3435,124 @@ static char *resolve_path_from_current_source(const char *path) {
     memcpy(resolved, g_current_source_path, dir_length);
     memcpy(resolved + dir_length, path, path_length + 1);
     return resolved;
+}
+
+static char *canonicalize_existing_path(const char *path) {
+    size_t length = 0;
+    size_t out_length = 0;
+    bool absolute = false;
+    char *normalized = NULL;
+    const char *cursor = NULL;
+
+    if (path == NULL) {
+        return NULL;
+    }
+
+    length = strlen(path);
+    normalized = malloc(length + 2);
+    if (normalized == NULL) {
+        return NULL;
+    }
+
+    absolute = path[0] == '/';
+    cursor = path;
+
+    if (absolute) {
+        normalized[out_length++] = '/';
+        cursor++;
+    }
+
+    while (*cursor != '\0') {
+        const char *segment_start = cursor;
+        size_t segment_length = 0;
+
+        while (*cursor == '/') {
+            cursor++;
+        }
+        segment_start = cursor;
+
+        while (*cursor != '\0' && *cursor != '/') {
+            cursor++;
+        }
+
+        segment_length = (size_t)(cursor - segment_start);
+        if (segment_length == 0) {
+            continue;
+        }
+
+        if (segment_length == 1 && segment_start[0] == '.') {
+            continue;
+        }
+
+        if (segment_length == 2 && segment_start[0] == '.' && segment_start[1] == '.') {
+            if (out_length > 0 && !(out_length == 1 && normalized[0] == '/')) {
+                if (normalized[out_length - 1] == '/') {
+                    out_length--;
+                }
+                while (out_length > 0 && normalized[out_length - 1] != '/') {
+                    out_length--;
+                }
+                if (out_length == 0 && absolute) {
+                    normalized[out_length++] = '/';
+                }
+            } else if (!absolute) {
+                if (out_length > 0 && normalized[out_length - 1] != '/') {
+                    normalized[out_length++] = '/';
+                }
+                normalized[out_length++] = '.';
+                normalized[out_length++] = '.';
+            }
+            continue;
+        }
+
+        if (out_length > 0 && normalized[out_length - 1] != '/') {
+            normalized[out_length++] = '/';
+        }
+
+        memcpy(normalized + out_length, segment_start, segment_length);
+        out_length += segment_length;
+    }
+
+    if (out_length == 0) {
+        normalized[out_length++] = absolute ? '/' : '.';
+    }
+
+    normalized[out_length] = '\0';
+    return normalized;
+}
+
+static bool load_path_stack_contains(const char *path) {
+    size_t index = 0;
+
+    for (index = 0; index < g_load_path_stack.count; index++) {
+        if (strcmp(g_load_path_stack.items[index], path) == 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static bool push_load_path(const char *path) {
+    char *copy = copy_string(path);
+
+    if (copy == NULL) {
+        return false;
+    }
+
+    ray_append(&g_load_path_stack, copy);
+    return true;
+}
+
+static void pop_load_path(void) {
+    char *path = NULL;
+
+    if (g_load_path_stack.count == 0) {
+        return;
+    }
+
+    path = ray_pop(&g_load_path_stack);
+    free(path);
 }
 
 static bool pop_string_path_operand(RDNState *stack, Vars *vars, const char *context, Value **out_target, char **out_path) {
