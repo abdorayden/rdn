@@ -4,11 +4,18 @@ Copyright (c) 2023-2026 Ray Den
 SPDX-License-Identifier: MIT
 
 Purpose:
-String-oriented helpers built in Raden itself.
+String-oriented helpers built in Raden itself, plus native helpers inspired by
+Go's `strings` package.
 
 Exports:
 - concatBy : concatenate two values with a separator
 - concat   : concatenate two values directly
+- contains : text part -> boolean
+- hasPrefix : text prefix -> boolean
+- hasSuffix : text suffix -> boolean
+- trimSpace : text -> string
+- split     : text separator -> list of strings
+- replaceAll : text old new -> string
 
 Examples:
 "\n" print
@@ -19,6 +26,8 @@ Examples:
 "\n" print
 "n=" 42 concat call print
 *]
+
+"../nativelibs/strings" __sharedlib_ext to_string swap pop append loadnative
 
 stringValue defun
     to_string
@@ -44,4 +53,28 @@ concat defun
     first stringValue call
     second stringValue call
     append
+end
+
+contains defun
+    strContains call
+end
+
+hasPrefix defun
+    strHasPrefix call
+end
+
+hasSuffix defun
+    strHasSuffix call
+end
+
+trimSpace defun
+    strTrimSpace call
+end
+
+split defun
+    strSplit call
+end
+
+replaceAll defun
+    strReplaceAll call
 end

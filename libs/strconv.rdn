@@ -1,0 +1,27 @@
+[* 
+strconv.rdn
+Copyright (c) 2023-2026 Ray Den
+SPDX-License-Identifier: MIT
+
+Purpose:
+Conversion helpers inspired by Go's `strconv` package.
+
+Loading behavior:
+This module chooses the shared-library suffix from __sharedlib_ext and loads:
+../nativelibs/strconv(.so|.dylib|.dll)
+
+Exports:
+- atoi       : text -> integer
+- atof       : text -> double
+- parseBool  : text -> boolean
+- itoa       : integer -> string
+- formatBool : boolean -> string
+
+Examples:
+"./libs/strconv.rdn" load
+"42" atoi call print
+"\n" print
+true formatBool call print
+*]
+
+"../nativelibs/strconv" __sharedlib_ext to_string swap pop append loadnative
