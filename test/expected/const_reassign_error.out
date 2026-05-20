@@ -1,1 +1,3 @@
-cannot change constant 'i'
+/home/rayden/prog/raden/test/const_reassign_error.rdn:2:5: error: cannot change constant 'i'
+4 i let
+    ^

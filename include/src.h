@@ -14,6 +14,7 @@ typedef struct RDNSharedState RDNSharedState;
 typedef struct NativeCallState NativeCallState;
 typedef struct NativeModuleReg NativeModuleReg;
 typedef struct NativeModuleLoadState NativeModuleLoadState;
+typedef struct DiagnosticContext DiagnosticContext;
 
 typedef RLStack(Value *) RDNState;
 typedef RLList(Vars_t*) Vars;
@@ -64,6 +65,9 @@ struct Funcs_t {
         char *func_body;
         RDNNativeFunction native_function;
     } as;
+    char *source_path;
+    size_t source_line;
+    size_t source_column;
     void *native_library_handle;
 };
 
@@ -97,7 +101,17 @@ struct RDNSharedState {
     Funcs   rdn_funcs;
 };
 
+struct DiagnosticContext {
+    const char *path;
+    const char *source;
+    size_t base_line;
+    size_t base_column;
+    const char *last_token_start;
+    const char *last_token_end;
+};
+
 static const char *g_current_source_path = NULL;
+static DiagnosticContext g_diagnostic_context = {0};
 
 static bool is_token(const char *value, const char *expected);
 static bool is_operator_token(const char *value);
@@ -113,7 +127,7 @@ static Value *create_var_name_value(const char *name);
 static Value *clone_value(const Value *value);
 static Vars_t *create_scope_marker(void);
 static Vars_t *create_var_entry(const char *name, Value *value, bool is_const);
-static Funcs_t *create_func_entry(const char *name, char *body);
+static Funcs_t *create_func_entry(const char *name, char *body, const char *source_path, size_t source_line, size_t source_column);
 static Funcs_t *create_native_func_entry(const char *name, RDNNativeFunction native_function, void *native_library_handle);
 static void free_var_entry(Vars_t *entry);
 static void free_vars(Vars *vars);
@@ -124,7 +138,7 @@ static void vars_pop_scope(Vars *vars);
 static Vars_t *find_var_entry(const Vars *vars, const char *name);
 static Vars_t *find_current_scope_var_entry(const Vars *vars, const char *name);
 static Funcs_t *find_func_entry(const Funcs *funcs, const char *name);
-static bool funcs_define(Funcs *funcs, const char *name, char *body);
+static bool funcs_define(Funcs *funcs, const char *name, char *body, const char *source_path, size_t source_line, size_t source_column);
 static bool funcs_define_native(Funcs *funcs, const char *name, RDNNativeFunction native_function, void *native_library_handle);
 static bool vars_let(Vars *vars, const char *name, const Value *value);
 static bool vars_set(Vars *vars, const char *name, const Value *value);
@@ -160,6 +174,7 @@ static bool apply_load(RDNState *stack, Vars *vars, Funcs *funcs);
 static bool apply_loadnative(RDNState *stack, Vars *vars, Funcs *funcs);
 static bool apply_defun(RDNState *stack, Funcs *funcs, char **cursor);
 static bool apply_call(RDNState *stack, Vars *vars, Funcs *funcs);
+static bool materialize_scope_references(RDNState *stack, Vars *vars, size_t start_index);
 
 // to_string builtin function convert value from the top stack to string without remove it
 static bool apply_to_string(RDNState *stack, Vars *vars);
@@ -222,6 +237,11 @@ static void free_native_module_regs(NativeModuleRegs *regs);
 static bool native_module_register_function(RDNModule *module, const char *name, RDNNativeFunction function);
 static bool native_module_set_error(RDNModule *module, const char *message);
 static bool append_text(char **buffer, size_t *length, const char *text);
+static void diagnostic_set_source(const char *path, const char *source, size_t base_line, size_t base_column);
+static void diagnostic_set_last_token(const char *start, const char *end);
+static bool diagnostic_error_at(const char *pointer, const char *fmt, ...);
+static bool diagnostic_error_current(const char *fmt, ...);
+static bool diagnostic_note_current(const char *fmt, ...);
 static bool source_has_complete_blocks(const char *source, bool *out_complete);
 static int run_repl(void);
 static const char *host_os_name(void);

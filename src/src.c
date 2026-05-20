@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <string.h>
 
 #include "../include/rdn_native.h"
@@ -34,6 +35,131 @@ static char *copy_string(const char *text) {
 
     memcpy(copy, text, length);
     return copy;
+}
+
+static void diagnostic_set_source(const char *path, const char *source, size_t base_line, size_t base_column) {
+    g_diagnostic_context.path = path;
+    g_diagnostic_context.source = source;
+    g_diagnostic_context.base_line = base_line == 0 ? 1 : base_line;
+    g_diagnostic_context.base_column = base_column == 0 ? 1 : base_column;
+    g_diagnostic_context.last_token_start = source;
+    g_diagnostic_context.last_token_end = source;
+}
+
+static void diagnostic_set_last_token(const char *start, const char *end) {
+    g_diagnostic_context.last_token_start = start;
+    g_diagnostic_context.last_token_end = end;
+}
+
+static void diagnostic_compute_location(const char *pointer, size_t *out_line, size_t *out_column,
+                                        const char **out_line_start, const char **out_line_end) {
+    const char *source = g_diagnostic_context.source;
+    const char *scan = NULL;
+    const char *line_start = NULL;
+    const char *line_end = NULL;
+    size_t line = g_diagnostic_context.base_line == 0 ? 1 : g_diagnostic_context.base_line;
+    size_t column = g_diagnostic_context.base_column == 0 ? 1 : g_diagnostic_context.base_column;
+
+    if (source == NULL) {
+        if (out_line != NULL) {
+            *out_line = 1;
+        }
+        if (out_column != NULL) {
+            *out_column = 1;
+        }
+        if (out_line_start != NULL) {
+            *out_line_start = NULL;
+        }
+        if (out_line_end != NULL) {
+            *out_line_end = NULL;
+        }
+        return;
+    }
+
+    if (pointer == NULL) {
+        pointer = g_diagnostic_context.last_token_start != NULL ? g_diagnostic_context.last_token_start : source;
+    }
+
+    if (pointer < source) {
+        pointer = source;
+    }
+
+    line_start = source;
+    scan = source;
+    while (*scan != '\0' && scan < pointer) {
+        if (*scan == '\n') {
+            line++;
+            column = 1;
+            line_start = scan + 1;
+        } else {
+            column++;
+        }
+        scan++;
+    }
+
+    line_end = line_start;
+    while (*line_end != '\0' && *line_end != '\n') {
+        line_end++;
+    }
+
+    if (out_line != NULL) {
+        *out_line = line;
+    }
+    if (out_column != NULL) {
+        *out_column = column;
+    }
+    if (out_line_start != NULL) {
+        *out_line_start = line_start;
+    }
+    if (out_line_end != NULL) {
+        *out_line_end = line_end;
+    }
+}
+
+static bool diagnostic_emitv(const char *kind, const char *pointer, const char *fmt, va_list args) {
+    char message[1024];
+    size_t line = 1;
+    size_t column = 1;
+    const char *line_start = NULL;
+    const char *line_end = NULL;
+    const char *path = g_diagnostic_context.path != NULL ? g_diagnostic_context.path : "<repl>";
+
+    vsnprintf(message, sizeof(message), fmt, args);
+    diagnostic_compute_location(pointer, &line, &column, &line_start, &line_end);
+
+    fprintf(stderr, "%s:%zu:%zu: %s: %s\n", path, line, column, kind, message);
+    if (line_start != NULL && line_end != NULL) {
+        fprintf(stderr, "%.*s\n", (int)(line_end - line_start), line_start);
+        for (size_t i = 1; i < column; i++) {
+            fputc(' ', stderr);
+        }
+        fprintf(stderr, "^\n");
+    }
+    return false;
+}
+
+static bool diagnostic_error_at(const char *pointer, const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    diagnostic_emitv("error", pointer, fmt, args);
+    va_end(args);
+    return false;
+}
+
+static bool diagnostic_error_current(const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    diagnostic_emitv("error", g_diagnostic_context.last_token_start, fmt, args);
+    va_end(args);
+    return false;
+}
+
+static bool diagnostic_note_current(const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    diagnostic_emitv("note", g_diagnostic_context.last_token_start, fmt, args);
+    va_end(args);
+    return false;
 }
 
 static Value *create_null_value(void) {
@@ -211,7 +337,7 @@ static Vars_t *create_var_entry(const char *name, Value *value, bool is_const) {
     return entry;
 }
 
-static Funcs_t *create_func_entry(const char *name, char *body) {
+static Funcs_t *create_func_entry(const char *name, char *body, const char *source_path, size_t source_line, size_t source_column) {
     Funcs_t *entry = malloc(sizeof(*entry));
 
     if (entry == NULL) {
@@ -228,6 +354,15 @@ static Funcs_t *create_func_entry(const char *name, char *body) {
 
     entry->type = FUNC_SCRIPT;
     entry->as.func_body = body;
+    entry->source_path = copy_string(source_path == NULL ? "<repl>" : source_path);
+    if (entry->source_path == NULL) {
+        free(entry->func_name);
+        free(body);
+        free(entry);
+        return NULL;
+    }
+    entry->source_line = source_line;
+    entry->source_column = source_column;
     entry->native_library_handle = NULL;
     return entry;
 }
@@ -247,6 +382,9 @@ static Funcs_t *create_native_func_entry(const char *name, RDNNativeFunction nat
 
     entry->type = FUNC_NATIVE;
     entry->as.native_function = native_function;
+    entry->source_path = NULL;
+    entry->source_line = 0;
+    entry->source_column = 0;
     entry->native_library_handle = native_library_handle;
     return entry;
 }
@@ -278,6 +416,7 @@ static void free_func_entry(Funcs_t *entry) {
     if (entry->type == FUNC_SCRIPT) {
         free(entry->as.func_body);
     }
+    free(entry->source_path);
     free(entry);
 }
 
@@ -309,8 +448,7 @@ static bool vars_push_scope(Vars *vars) {
     Vars_t *marker = create_scope_marker();
 
     if (marker == NULL) {
-        fprintf(stderr, "failed to allocate scope marker\n");
-        return false;
+        return diagnostic_error_current("failed to allocate scope marker");
     }
 
     ray_append(vars, marker);
@@ -379,7 +517,7 @@ static Funcs_t *find_func_entry(const Funcs *funcs, const char *name) {
     return NULL;
 }
 
-static bool funcs_define(Funcs *funcs, const char *name, char *body) {
+static bool funcs_define(Funcs *funcs, const char *name, char *body, const char *source_path, size_t source_line, size_t source_column) {
     Funcs_t *entry = find_func_entry(funcs, name);
 
     if (entry != NULL) {
@@ -388,14 +526,21 @@ static bool funcs_define(Funcs *funcs, const char *name, char *body) {
         }
         entry->type = FUNC_SCRIPT;
         entry->as.func_body = body;
+        free(entry->source_path);
+        entry->source_path = copy_string(source_path == NULL ? "<repl>" : source_path);
+        if (entry->source_path == NULL) {
+            free(body);
+            return diagnostic_error_current("failed to allocate function source path");
+        }
+        entry->source_line = source_line;
+        entry->source_column = source_column;
         entry->native_library_handle = NULL;
         return true;
     }
 
-    entry = create_func_entry(name, body);
+    entry = create_func_entry(name, body, source_path, source_line, source_column);
     if (entry == NULL) {
-        fprintf(stderr, "failed to allocate function entry\n");
-        return false;
+        return diagnostic_error_current("failed to allocate function entry");
     }
 
     ray_append(funcs, entry);
@@ -430,15 +575,13 @@ static bool vars_let(Vars *vars, const char *name, const Value *value) {
     Value *copy = clone_value(value);
 
     if (copy == NULL) {
-        fprintf(stderr, "failed to clone variable value\n");
-        return false;
+        return diagnostic_error_current("failed to clone variable value");
     }
 
     if (entry != NULL) {
         if (entry->is_const) {
-            fprintf(stderr, "cannot change constant '%s'\n", name);
             free_value(copy);
-            return false;
+            return diagnostic_error_current("cannot change constant '%s'", name);
         }
         free_value(entry->var_value);
         entry->var_value = copy;
@@ -447,9 +590,8 @@ static bool vars_let(Vars *vars, const char *name, const Value *value) {
 
     entry = create_var_entry(name, copy, false);
     if (entry == NULL) {
-        fprintf(stderr, "failed to allocate variable entry\n");
         free_value(copy);
-        return false;
+        return diagnostic_error_current("failed to allocate variable entry");
     }
 
     ray_append(vars, entry);
@@ -461,19 +603,16 @@ static bool vars_set(Vars *vars, const char *name, const Value *value) {
     Value *copy = clone_value(value);
 
     if (entry == NULL) {
-        fprintf(stderr, "unknown variable '%s'\n", name);
-        return false;
+        return diagnostic_error_current("unknown variable '%s'", name);
     }
 
     if (copy == NULL) {
-        fprintf(stderr, "failed to clone variable value\n");
-        return false;
+        return diagnostic_error_current("failed to clone variable value");
     }
 
     if (entry->is_const) {
-        fprintf(stderr, "cannot change constant '%s'\n", name);
         free_value(copy);
-        return false;
+        return diagnostic_error_current("cannot change constant '%s'", name);
     }
 
     free_value(entry->var_value);
@@ -486,20 +625,17 @@ static bool vars_const(Vars *vars, const char *name, const Value *value) {
     Value *copy = clone_value(value);
 
     if (entry != NULL) {
-        fprintf(stderr, "'%s' already exists in current scope\n", name);
-        return false;
+        return diagnostic_error_current("'%s' already exists in current scope", name);
     }
 
     if (copy == NULL) {
-        fprintf(stderr, "failed to clone constant value\n");
-        return false;
+        return diagnostic_error_current("failed to clone constant value");
     }
 
     entry = create_var_entry(name, copy, true);
     if (entry == NULL) {
-        fprintf(stderr, "failed to allocate constant entry\n");
         free_value(copy);
-        return false;
+        return diagnostic_error_current("failed to allocate constant entry");
     }
 
     ray_append(vars, entry);
@@ -649,7 +785,7 @@ static Value *resolve_value_if_var(const Vars *vars, Value *value, const char *c
 
     entry = find_var_entry(vars, value->as.string);
     if (entry == NULL) {
-        fprintf(stderr, "%s requires known variable '%s'\n", context == NULL ? "(UNKNOWN)" : context, value->as.string);
+        diagnostic_error_current("%s requires known variable '%s'", context == NULL ? "(UNKNOWN)" : context, value->as.string);
         free_value(value);
         return NULL;
     }
@@ -1586,8 +1722,7 @@ static bool apply_load(RDNState *stack, Vars *vars, Funcs *funcs){
     resolved_path = resolve_path_from_current_source(path);
     if (resolved_path == NULL) {
         free_value(target);
-        fprintf(stderr, "failed to resolve path '%s'\n", path);
-        return false;
+        return diagnostic_error_current("failed to resolve path '%s'", path);
     }
 
     source = read_file(resolved_path);
@@ -1626,26 +1761,39 @@ static bool apply_loadnative(RDNState *stack, Vars *vars, Funcs *funcs) {
 
     resolved_path = resolve_path_from_current_source(path);
     if (resolved_path == NULL) {
-        fprintf(stderr, "failed to resolve path '%s'\n", path);
         free_value(target);
-        return false;
+        return diagnostic_error_current("failed to resolve path '%s'", path);
     }
 
     handle = dlopen(resolved_path, RTLD_NOW | RTLD_LOCAL);
     if (handle == NULL) {
-        fprintf(stderr, "failed to load native module '%s': %s\n", resolved_path, dlerror());
+        char *diagnostic_path = copy_string(resolved_path);
         free(resolved_path);
         free_value(target);
-        return false;
+        if (diagnostic_path == NULL) {
+            return diagnostic_error_current("failed to load native module: %s", dlerror());
+        }
+        {
+            bool ok = diagnostic_error_current("failed to load native module '%s': %s", diagnostic_path, dlerror());
+            free(diagnostic_path);
+            return ok;
+        }
     }
 
     init_function = (RDNModuleInit)dlsym(handle, "rdn_module_init");
     if (init_function == NULL) {
-        fprintf(stderr, "native module '%s' is missing rdn_module_init: %s\n", resolved_path, dlerror());
+        char *diagnostic_path = copy_string(resolved_path);
         dlclose(handle);
         free(resolved_path);
         free_value(target);
-        return false;
+        if (diagnostic_path == NULL) {
+            return diagnostic_error_current("native module is missing rdn_module_init: %s", dlerror());
+        }
+        {
+            bool ok = diagnostic_error_current("native module '%s' is missing rdn_module_init: %s", diagnostic_path, dlerror());
+            free(diagnostic_path);
+            return ok;
+        }
     }
 
     module_state.regs.items = NULL;
@@ -1659,7 +1807,7 @@ static bool apply_loadnative(RDNState *stack, Vars *vars, Funcs *funcs) {
 
     ok = init_function(&module);
     if (!ok) {
-        fprintf(stderr, "%s\n", module_state.error_message == NULL ? "native module initialization failed" : module_state.error_message);
+        diagnostic_error_current("%s", module_state.error_message == NULL ? "native module initialization failed" : module_state.error_message);
         free_native_module_regs(&module_state.regs);
         free(module_state.error_message);
         dlclose(handle);
@@ -1695,18 +1843,21 @@ static bool apply_defun(RDNState *stack, Funcs *funcs, char **cursor) {
     char *token = NULL;
     bool is_string = false;
     int depth = 1;
+    size_t source_line = 1;
+    size_t source_column = 1;
 
     if (stack->count < 1) {
-        fprintf(stderr, "defun requires function name\n");
-        return false;
+        return diagnostic_error_current("defun requires function name");
     }
 
     name = ray_pop(stack);
     if (name->type != VALUE_AS_VAR) {
-        fprintf(stderr, "defun requires function name\n");
+        diagnostic_error_current("defun requires function name");
         ray_append(stack, name);
         return false;
     }
+
+    diagnostic_compute_location(body_start, &source_line, &source_column, NULL, NULL);
 
     while (true) {
         char *token_start = scan;
@@ -1717,7 +1868,7 @@ static bool apply_defun(RDNState *stack, Funcs *funcs, char **cursor) {
         }
 
         if (token == NULL) {
-            fprintf(stderr, "defun missing end\n");
+            diagnostic_error_at(scan, "defun missing end");
             free_value(name);
             return false;
         }
@@ -1730,7 +1881,7 @@ static bool apply_defun(RDNState *stack, Funcs *funcs, char **cursor) {
                 size_t body_length = (size_t)(token_start - body_start);
                 body = malloc(body_length + 1);
                 if (body == NULL) {
-                    fprintf(stderr, "failed to allocate function body\n");
+                    diagnostic_error_at(token_start, "failed to allocate function body");
                     free(token);
                     free_value(name);
                     return false;
@@ -1739,7 +1890,7 @@ static bool apply_defun(RDNState *stack, Funcs *funcs, char **cursor) {
                 memcpy(body, body_start, body_length);
                 body[body_length] = '\0';
 
-                if (!funcs_define(funcs, name->as.string, body)) {
+                if (!funcs_define(funcs, name->as.string, body, g_current_source_path, source_line, source_column)) {
                     free(token);
                     free_value(name);
                     return false;
@@ -1763,15 +1914,15 @@ static bool apply_call(RDNState *stack, Vars *vars, Funcs *funcs) {
     Funcs_t *entry = NULL;
     BlockStop stop_reason = BLOCK_STOP_EOF;
     char *cursor = NULL;
+    size_t stack_start = stack->count - 1;
 
     if (stack->count < 1) {
-        fprintf(stderr, "call requires function name\n");
-        return false;
+        return diagnostic_error_current("call requires function name");
     }
 
     name = ray_pop(stack);
     if (name->type != VALUE_AS_VAR) {
-        fprintf(stderr, "call requires function name\n");
+        diagnostic_error_current("call requires function name");
         ray_append(stack, name);
         return false;
     }
@@ -1780,13 +1931,13 @@ static bool apply_call(RDNState *stack, Vars *vars, Funcs *funcs) {
     if (var_entry != NULL) {
         resolved_name = clone_value(var_entry->var_value);
         if (resolved_name == NULL) {
-            fprintf(stderr, "failed to resolve function variable '%s'\n", name->as.string);
+            diagnostic_error_current("failed to resolve function variable '%s'", name->as.string);
             free_value(name);
             return false;
         }
 
         if (resolved_name->type != VALUE_AS_VAR) {
-            fprintf(stderr, "call requires function name\n");
+            diagnostic_error_current("call requires function name");
             free_value(name);
             ray_append(stack, resolved_name);
             return false;
@@ -1798,8 +1949,8 @@ static bool apply_call(RDNState *stack, Vars *vars, Funcs *funcs) {
     }
 
     if (entry == NULL) {
-        fprintf(stderr, "unknown function: %s\n",
-                resolved_name != NULL ? resolved_name->as.string : name->as.string);
+        diagnostic_error_current("unknown function: %s",
+                                 resolved_name != NULL ? resolved_name->as.string : name->as.string);
         free_value(resolved_name);
         ray_append(stack, name);
         return false;
@@ -1839,7 +1990,7 @@ static bool apply_call(RDNState *stack, Vars *vars, Funcs *funcs) {
         free_value(resolved_name);
         free_value(name);
         if (!ok) {
-            fprintf(stderr, "%s\n", call_state.error_message == NULL ? "native function call failed" : call_state.error_message);
+            diagnostic_error_current("%s", call_state.error_message == NULL ? "native function call failed" : call_state.error_message);
             free(call_state.error_message);
             return false;
         }
@@ -1848,6 +1999,8 @@ static bool apply_call(RDNState *stack, Vars *vars, Funcs *funcs) {
         return true;
     }
 
+    stack_start = stack->count;
+
     if (!vars_push_scope(vars)) {
         free_value(resolved_name);
         ray_append(stack, name);
@@ -1855,7 +2008,21 @@ static bool apply_call(RDNState *stack, Vars *vars, Funcs *funcs) {
     }
 
     cursor = entry->as.func_body;
-    if (!execute_block(stack, vars, funcs, &cursor, &stop_reason, false)) {
+    {
+        DiagnosticContext previous_context = g_diagnostic_context;
+        diagnostic_set_source(entry->source_path, entry->as.func_body, entry->source_line, entry->source_column);
+        if (!execute_block(stack, vars, funcs, &cursor, &stop_reason, false)) {
+            g_diagnostic_context = previous_context;
+            diagnostic_note_current("while calling function '%s'", entry->func_name);
+            vars_pop_scope(vars);
+            free_value(resolved_name);
+            free_value(name);
+            return false;
+        }
+        g_diagnostic_context = previous_context;
+    }
+
+    if (!materialize_scope_references(stack, vars, stack_start)) {
         vars_pop_scope(vars);
         free_value(resolved_name);
         free_value(name);
@@ -1867,24 +2034,51 @@ static bool apply_call(RDNState *stack, Vars *vars, Funcs *funcs) {
     free_value(name);
 
     if (stop_reason == BLOCK_STOP_BREAK) {
-        fprintf(stderr, "unexpected break\n");
-        return false;
+        return diagnostic_error_current("unexpected break");
     }
 
     if (stop_reason == BLOCK_STOP_CONTINUE) {
-        fprintf(stderr, "unexpected continue\n");
-        return false;
+        return diagnostic_error_current("unexpected continue");
     }
 
     if (stop_reason != BLOCK_STOP_EOF) {
-        fprintf(stderr, "unexpected block terminator\n");
-        return false;
+        return diagnostic_error_current("unexpected block terminator");
+    }
+
+    return true;
+}
+
+static bool materialize_scope_references(RDNState *stack, Vars *vars, size_t start_index) {
+    size_t index = 0;
+
+    for (index = start_index; index < stack->count; index++) {
+        Value *value = stack->items[index];
+        Vars_t *entry = NULL;
+        Value *resolved = NULL;
+
+        if (value == NULL || value->type != VALUE_AS_VAR) {
+            continue;
+        }
+
+        entry = find_current_scope_var_entry(vars, value->as.string);
+        if (entry == NULL) {
+            continue;
+        }
+
+        resolved = clone_value(entry->var_value);
+        if (resolved == NULL) {
+            return diagnostic_error_current("failed to materialize scoped value '%s'", value->as.string);
+        }
+
+        free_value(value);
+        stack->items[index] = resolved;
     }
 
     return true;
 }
 
 static bool skip_comment(char **cursor) {
+    const char *comment_start = *cursor;
     *cursor += 2;
 
     while (**cursor != '\0') {
@@ -1895,8 +2089,7 @@ static bool skip_comment(char **cursor) {
         (*cursor)++;
     }
 
-    fprintf(stderr, "unterminated comment\n");
-    return false;
+    return diagnostic_error_at(comment_start, "unterminated comment");
 }
 
 static bool append_char(char **buffer, size_t *length, size_t *capacity, char ch) {
@@ -1917,6 +2110,7 @@ static bool append_char(char **buffer, size_t *length, size_t *capacity, char ch
 }
 
 static bool read_string_token(char **cursor, char **out_token) {
+    const char *string_start = *cursor;
     char *buffer = NULL;
     size_t length = 0;
     size_t capacity = 0;
@@ -1972,7 +2166,7 @@ static bool read_string_token(char **cursor, char **out_token) {
         (*cursor)++;
     }
 
-    fprintf(stderr, "unterminated string literal\n");
+    diagnostic_error_at(string_start, "unterminated string literal");
     free(buffer);
     return false;
 }
@@ -2045,6 +2239,8 @@ static bool next_token(char **cursor, char **out_token, bool *out_is_string) {
         return true;
     }
 
+    diagnostic_set_last_token(*cursor, *cursor);
+
     if (**cursor == '"') {
         *out_is_string = true;
         return read_string_token(cursor, out_token);
@@ -2081,8 +2277,7 @@ static bool push_token_value(RDNState *stack, const char *token, bool is_string)
         return push_value(stack, create_boolean_value(false));
     }
 
-    fprintf(stderr, "unknown token: %s\n", token);
-    return false;
+    return diagnostic_error_current("unknown token: %s", token);
 }
 
 static bool is_value_token(const char *token, bool is_string) {
@@ -2444,15 +2639,14 @@ static bool apply_let(RDNState *stack, Vars *vars) {
     Value *value = NULL;
 
     if (stack->count < 2) {
-        fprintf(stderr, "let requires 2 operands\n");
-        return false;
+        return diagnostic_error_current("let requires 2 operands");
     }
 
     name = ray_pop(stack);
     value = ray_pop(stack);
 
     if (name->type != VALUE_AS_VAR) {
-        fprintf(stderr, "let requires variable name\n");
+        diagnostic_error_current("let requires variable name");
         ray_append(stack, value);
         ray_append(stack, name);
         return false;
@@ -2474,15 +2668,14 @@ static bool apply_set(RDNState *stack, Vars *vars) {
     Value *value = NULL;
 
     if (stack->count < 2) {
-        fprintf(stderr, "set requires 2 operands\n");
-        return false;
+        return diagnostic_error_current("set requires 2 operands");
     }
 
     name = ray_pop(stack);
     value = ray_pop(stack);
 
     if (name->type != VALUE_AS_VAR) {
-        fprintf(stderr, "set requires variable name\n");
+        diagnostic_error_current("set requires variable name");
         ray_append(stack, value);
         ray_append(stack, name);
         return false;
@@ -2516,15 +2709,14 @@ static bool apply_const(RDNState *stack, Vars *vars) {
     Value *value = NULL;
 
     if (stack->count < 2) {
-        fprintf(stderr, "const requires 2 operands\n");
-        return false;
+        return diagnostic_error_current("const requires 2 operands");
     }
 
     name = ray_pop(stack);
     value = ray_pop(stack);
 
     if (name->type != VALUE_AS_VAR) {
-        fprintf(stderr, "const requires variable name\n");
+        diagnostic_error_current("const requires variable name");
         ray_append(stack, value);
         ray_append(stack, name);
         return false;
@@ -2550,13 +2742,12 @@ static bool apply_if(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor, B
     BlockStop branch_stop = BLOCK_STOP_EOF;
 
     if (stack->count < 1) {
-        fprintf(stderr, "if requires 1 operand\n");
-        return false;
+        return diagnostic_error_current("if requires 1 operand");
     }
 
     condition = ray_pop(stack);
     if (!value_to_boolean(condition, &condition_value)) {
-        fprintf(stderr, "if requires a boolean operand\n");
+        diagnostic_error_current("if requires a boolean operand");
         ray_append(stack, condition);
         return false;
     }
@@ -2564,6 +2755,7 @@ static bool apply_if(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor, B
     free_value(condition);
 
     if (condition_value) {
+        size_t stack_start = stack->count;
         if (!vars_push_scope(vars)) {
             return false;
         }
@@ -2574,7 +2766,11 @@ static bool apply_if(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor, B
 
         if (branch_stop == BLOCK_STOP_EOF) {
             vars_pop_scope(vars);
-            fprintf(stderr, "if missing end\n");
+            return diagnostic_error_current("if missing end");
+        }
+
+        if (!materialize_scope_references(stack, vars, stack_start)) {
+            vars_pop_scope(vars);
             return false;
         }
 
@@ -2591,8 +2787,7 @@ static bool apply_if(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor, B
             }
 
             if (branch_stop != BLOCK_STOP_END) {
-                fprintf(stderr, "else missing end\n");
-                return false;
+                return diagnostic_error_current("else missing end");
             }
         }
 
@@ -2605,11 +2800,11 @@ static bool apply_if(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor, B
     }
 
     if (branch_stop == BLOCK_STOP_EOF) {
-        fprintf(stderr, "if missing end\n");
-        return false;
+        return diagnostic_error_current("if missing end");
     }
 
     if (branch_stop == BLOCK_STOP_ELSE) {
+        size_t stack_start = stack->count;
         if (!vars_push_scope(vars)) {
             return false;
         }
@@ -2619,6 +2814,10 @@ static bool apply_if(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor, B
         }
 
         if (branch_stop == BLOCK_STOP_BREAK || branch_stop == BLOCK_STOP_CONTINUE) {
+            if (!materialize_scope_references(stack, vars, stack_start)) {
+                vars_pop_scope(vars);
+                return false;
+            }
             vars_pop_scope(vars);
             *stop_reason = branch_stop;
             return true;
@@ -2626,7 +2825,11 @@ static bool apply_if(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor, B
 
         if (branch_stop != BLOCK_STOP_END) {
             vars_pop_scope(vars);
-            fprintf(stderr, "else missing end\n");
+            return diagnostic_error_current("else missing end");
+        }
+
+        if (!materialize_scope_references(stack, vars, stack_start)) {
+            vars_pop_scope(vars);
             return false;
         }
 
@@ -2647,13 +2850,12 @@ static bool apply_loop(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor)
     char *body_end = NULL;
 
     if (stack->count < 1) {
-        fprintf(stderr, "loop requires 1 operand\n");
-        return false;
+        return diagnostic_error_current("loop requires 1 operand");
     }
 
     condition = ray_pop(stack);
     if (!value_to_boolean(condition, &condition_value)) {
-        fprintf(stderr, "loop requires a boolean operand\n");
+        diagnostic_error_current("loop requires a boolean operand");
         ray_append(stack, condition);
         return false;
     }
@@ -2665,8 +2867,7 @@ static bool apply_loop(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor)
     }
 
     if (stop_reason != BLOCK_STOP_END) {
-        fprintf(stderr, "loop missing end\n");
-        return false;
+        return diagnostic_error_current("loop missing end");
     }
 
     while (condition_value) {
@@ -2682,18 +2883,16 @@ static bool apply_loop(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor)
         }
 
         if (stop_reason != BLOCK_STOP_END && stop_reason != BLOCK_STOP_CONTINUE) {
-            fprintf(stderr, "loop missing end\n");
-            return false;
+            return diagnostic_error_current("loop missing end");
         }
 
         if (stack->count < 1) {
-            fprintf(stderr, "loop body must leave boolean condition on stack\n");
-            return false;
+            return diagnostic_error_current("loop body must leave boolean condition on stack");
         }
 
         condition = ray_pop(stack);
         if (!value_to_boolean(condition, &condition_value)) {
-            fprintf(stderr, "loop body must leave boolean condition on stack\n");
+            diagnostic_error_current("loop body must leave boolean condition on stack");
             ray_append(stack, condition);
             return false;
         }
@@ -2729,8 +2928,7 @@ static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **curs
         } else if (is_token(token, "else")) {
             free(token);
             if (!allow_else) {
-                fprintf(stderr, "unexpected else\n");
-                return false;
+                return diagnostic_error_current("unexpected else");
             }
             *stop_reason = BLOCK_STOP_ELSE;
             return true;
@@ -2937,7 +3135,7 @@ static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **curs
             free(token);
             continue;
         }else {
-            fprintf(stderr, "unknown token: %s\n", token);
+            diagnostic_error_current("unknown token: %s", token);
             free(token);
             return false;
         }
@@ -2953,8 +3151,7 @@ static bool skip_if(char **cursor) {
     }
 
     if (stop_reason == BLOCK_STOP_EOF) {
-        fprintf(stderr, "if missing end\n");
-        return false;
+        return diagnostic_error_current("if missing end");
     }
 
     if (stop_reason == BLOCK_STOP_ELSE) {
@@ -2963,8 +3160,7 @@ static bool skip_if(char **cursor) {
         }
 
         if (stop_reason != BLOCK_STOP_END) {
-            fprintf(stderr, "else missing end\n");
-            return false;
+            return diagnostic_error_current("else missing end");
         }
     }
 
@@ -2979,8 +3175,7 @@ static bool skip_loop(char **cursor) {
     }
 
     if (stop_reason != BLOCK_STOP_END) {
-        fprintf(stderr, "loop missing end\n");
-        return false;
+        return diagnostic_error_current("loop missing end");
     }
 
     return true;
@@ -3003,8 +3198,7 @@ static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else) {
         if (is_token(token, "else")) {
             free(token);
             if (!allow_else) {
-                fprintf(stderr, "unexpected else\n");
-                return false;
+                return diagnostic_error_current("unexpected else");
             }
             *stop_reason = BLOCK_STOP_ELSE;
             return true;
@@ -3044,33 +3238,38 @@ static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else) {
 static bool evaluate_source(RDNState *stack, Vars* vars, Funcs *funcs, char *source) {
     BlockStop stop_reason = BLOCK_STOP_EOF;
     char *cursor = source;
+    DiagnosticContext previous_context = g_diagnostic_context;
 
     RDNState _stack = {0};
     Vars _vars = {0};
     Funcs _funcs = {0};
 
+    diagnostic_set_source(g_current_source_path, source, 1, 1);
+
     if (!execute_block(
                 stack == NULL ? &_stack : stack , 
                 vars == NULL ? &_vars : vars, 
                 funcs == NULL ? &_funcs : funcs, &cursor, &stop_reason, false)) {
+        g_diagnostic_context = previous_context;
         return false;
     }
 
     if (stop_reason == BLOCK_STOP_BREAK) {
-        fprintf(stderr, "unexpected break\n");
-        return false;
+        g_diagnostic_context = previous_context;
+        return diagnostic_error_current("unexpected break");
     }
 
     if (stop_reason == BLOCK_STOP_CONTINUE) {
-        fprintf(stderr, "unexpected continue\n");
-        return false;
+        g_diagnostic_context = previous_context;
+        return diagnostic_error_current("unexpected continue");
     }
 
     if (stop_reason != BLOCK_STOP_EOF) {
-        fprintf(stderr, "unexpected block terminator\n");
-        return false;
+        g_diagnostic_context = previous_context;
+        return diagnostic_error_current("unexpected block terminator");
     }
 
+    g_diagnostic_context = previous_context;
     return true;
 }
 
@@ -3099,39 +3298,39 @@ static char *read_file(const char *path) {
     size_t bytes_read = 0;
 
     if (file == NULL) {
-        fprintf(stderr, "failed to open '%s'\n", path);
+        diagnostic_error_current("failed to open '%s'", path);
         return NULL;
     }
 
     if (fseek(file, 0, SEEK_END) != 0) {
-        fprintf(stderr, "failed to seek '%s'\n", path);
+        diagnostic_error_current("failed to seek '%s'", path);
         fclose(file);
         return NULL;
     }
 
     length = ftell(file);
     if (length < 0) {
-        fprintf(stderr, "failed to read size of '%s'\n", path);
+        diagnostic_error_current("failed to read size of '%s'", path);
         fclose(file);
         return NULL;
     }
 
     if (fseek(file, 0, SEEK_SET) != 0) {
-        fprintf(stderr, "failed to rewind '%s'\n", path);
+        diagnostic_error_current("failed to rewind '%s'", path);
         fclose(file);
         return NULL;
     }
 
     buffer = malloc((size_t)length + 1);
     if (buffer == NULL) {
-        fprintf(stderr, "failed to allocate file buffer\n");
+        diagnostic_error_current("failed to allocate file buffer");
         fclose(file);
         return NULL;
     }
 
     bytes_read = fread(buffer, 1, (size_t)length, file);
     if (bytes_read != (size_t)length) {
-        fprintf(stderr, "failed to read '%s'\n", path);
+        diagnostic_error_current("failed to read '%s'", path);
         free(buffer);
         fclose(file);
         return NULL;
@@ -3177,23 +3376,20 @@ static bool pop_string_path_operand(RDNState *stack, Vars *vars, const char *con
     Value *target = NULL;
 
     if (stack->count < 1) {
-        fprintf(stderr, "%s requires 1 operand\n", context);
-        return false;
+        return diagnostic_error_current("%s requires 1 operand", context);
     }
 
     target = ray_pop(stack);
     if (target->type == VALUE_AS_VAR) {
         Vars_t *entry = find_var_entry(vars, target->as.string);
         if (entry == NULL) {
-            fprintf(stderr, "%s requires existing variable path\n", context);
             free_value(target);
-            return false;
+            return diagnostic_error_current("%s requires existing variable path", context);
         }
 
         if (entry->var_value->type != VALUE_STRING) {
-            fprintf(stderr, "%s requires string type\n", context);
             free_value(target);
-            return false;
+            return diagnostic_error_current("%s requires string type", context);
         }
 
         *out_target = target;
@@ -3202,9 +3398,8 @@ static bool pop_string_path_operand(RDNState *stack, Vars *vars, const char *con
     }
 
     if (target->type != VALUE_STRING) {
-        fprintf(stderr, "%s accepts a string path\n", context);
         free_value(target);
-        return false;
+        return diagnostic_error_current("%s accepts a string path", context);
     }
 
     *out_target = target;
@@ -3569,6 +3764,9 @@ static bool source_has_complete_blocks(const char *source, bool *out_complete) {
     char *token = NULL;
     bool is_string = false;
     int depth = 0;
+    DiagnosticContext previous_context = g_diagnostic_context;
+
+    diagnostic_set_source(NULL, source, 1, 1);
 
     while (true) {
         if (!next_token(&cursor, &token, &is_string)) {
@@ -3577,6 +3775,7 @@ static bool source_has_complete_blocks(const char *source, bool *out_complete) {
 
         if (token == NULL) {
             *out_complete = (depth == 0);
+            g_diagnostic_context = previous_context;
             return true;
         }
 
@@ -3585,13 +3784,15 @@ static bool source_has_complete_blocks(const char *source, bool *out_complete) {
         } else if (!is_string && is_token(token, "end")) {
             depth--;
             if (depth < 0) {
-                fprintf(stderr, "unexpected end\n");
+                diagnostic_error_current("unexpected end");
                 free(token);
+                g_diagnostic_context = previous_context;
                 return false;
             }
         } else if (!is_string && is_token(token, "else") && depth == 0) {
-            fprintf(stderr, "unexpected else\n");
+            diagnostic_error_current("unexpected else");
             free(token);
+            g_diagnostic_context = previous_context;
             return false;
         }
 
@@ -3721,7 +3922,7 @@ static void apply_argv(Vars* vars , const char* path, int argc , char** argv) {
         ray_append(&argv_list->as.list, val);
     }
 
-    Vars_t* argv_var = create_var_entry("__argv", argv_list, true);
+    Vars_t* argv_var = create_var_entry("__argv", argv_list, false);
     ray_append(vars, argv_var);
 
 }

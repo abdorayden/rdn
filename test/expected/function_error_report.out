@@ -1,0 +1,9 @@
+/home/rayden/prog/raden/test/function_error_report.rdn:3:9: error: cannot change constant 'i'
+    4 i let
+        ^
+/home/rayden/prog/raden/test/function_error_report.rdn:7:11: note: while calling function 'inner'
+    inner call
+          ^
+/home/rayden/prog/raden/test/function_error_report.rdn:10:7: note: while calling function 'outer'
+outer call
+      ^

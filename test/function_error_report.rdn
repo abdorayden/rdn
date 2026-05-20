@@ -1,0 +1,10 @@
+inner defun
+    3 i const
+    4 i let
+end
+
+outer defun
+    inner call
+end
+
+outer call
