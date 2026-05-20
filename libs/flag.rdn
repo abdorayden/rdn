@@ -1,0 +1,201 @@
+[* 
+flag.rdn
+Copyright (c) 2023-2026 Ray Den
+SPDX-License-Identifier: MIT
+
+Purpose:
+Simple command-line flag parsing helpers built in Raden itself.
+
+Conventions:
+- Flags are registered as short/long pairs such as `-h` and `--help`.
+- Flags that do not take a value still receive one callback argument: `null`.
+- Unrecognized tokens that start with `-` are treated as errors.
+- Tokens after `--` are collected as positional arguments without parsing.
+
+Exports:
+- resetFlags  : clear parser state and reinstall the default help flag
+- addFlag     : short long takesValue description callback -> register flag
+- add-my-flag : backward-compatible alias of addFlag
+- executeOn   : argv-list -> positional-args-list
+- execute     : parse `__argv`
+- positionals : -> cloned positional args list from the last parse
+- programName : -> program path/name from the last parse
+- printHelp   : -> print usage and registered flags
+
+Examples:
+"./libs/flag.rdn" load
+
+setName defun
+  value let
+  value println call
+end
+
+setVerbose defun
+  ignored let
+  "verbose enabled" println call
+end
+
+"-n" "--name" true "set the program name" setName addFlag call
+"-v" "--verbose" false "enable verbose mode" setVerbose addFlag call
+("demo" "-n" "raden" "-v" "file1" "--" "--raw") executeOn call print
+*]
+
+"./lists.rdn" load
+"./io.rdn" load
+
+() __flag_specs let
+() __flag_positionals let
+null __flag_program let
+
+fail defun
+    message let
+    "flag error: " print
+    message println call
+    1 exit
+end
+
+stringValue defun
+    to_string
+    swap pop
+end
+
+looksLikeFlag defun
+    token let
+    token len 0 > if
+        token 0 index "-" =
+    else
+        false
+    end
+end
+
+printHelp defun
+    "usage: " print
+    __flag_program print
+    " [options] [args...]" print
+    "\n" print
+    "flags:" println call
+
+    0 i let
+    __flag_specs len spec-count let
+    i spec-count < loop
+        __flag_specs i index spec let
+        "  " print
+        spec 0 index print
+        ", " print
+        spec 1 index print
+        spec 2 index if
+            " <value>" print
+        end
+        " : " print
+        spec 3 index println call
+        i 1 + i set
+        i spec-count <
+    end
+end
+
+defaultHelp defun
+    ignored let
+    printHelp call
+end
+
+installDefaultFlags defun
+    "-h" "--help" false "print help message" defaultHelp addFlag call
+end
+
+resetFlags defun
+    () __flag_specs set
+    () __flag_positionals set
+    null __flag_program set
+    installDefaultFlags call
+end
+
+addFlag defun
+    callback let
+    description let
+    takesValue let
+    longName let
+    shortName let
+
+    __flag_specs (shortName longName takesValue description callback) append
+end
+
+addFlag add-my-flag let
+
+findFlagIndex defun
+    token let
+    0 i let
+    null found let
+    __flag_specs len spec-count let
+
+    i spec-count < found null = & loop
+        __flag_specs i index spec let
+        token spec 0 index = token spec 1 index = | if
+            i found set
+        end
+        i 1 + i set
+        i spec-count < found null = &
+    end
+
+    found
+end
+
+positionals defun
+    __flag_positionals copy call
+end
+
+programName defun
+    __flag_program
+end
+
+executeOn defun
+    args let
+    () __flag_positionals set
+    args copy call work let
+
+    work len 0 > if
+        work shift call stringValue call __flag_program set
+    else
+        null __flag_program set
+    end
+
+    work len 0 > loop
+        work shift call stringValue call current let
+
+        current "--" = if
+            work len 0 > loop
+                __flag_positionals work shift call stringValue call append
+                work len 0 >
+            end
+        else
+            current findFlagIndex call specIndex let
+            specIndex null != if
+                __flag_specs specIndex index spec let
+                spec 2 index if
+                    work len 0 > if
+                        work shift call stringValue call spec 4 index call
+                    else
+                        "missing value for " current append fail call
+                    end
+                else
+                    null spec 4 index call
+                end
+            else
+                current looksLikeFlag call if
+                    "unknown flag " current append fail call
+                else
+                    __flag_positionals current stringValue call append
+                end
+            end
+        end
+
+        work len 0 >
+    end
+
+    __flag_positionals copy call
+end
+
+execute defun
+    __argv executeOn call
+end
+
+resetFlags call

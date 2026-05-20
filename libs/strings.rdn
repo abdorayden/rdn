@@ -4,22 +4,44 @@ Copyright (c) 2023-2026 Ray Den
 SPDX-License-Identifier: MIT
 
 Purpose:
-Reserved module for future string-oriented helpers.
+String-oriented helpers built in Raden itself.
 
-Current status:
-This file intentionally exports no functions yet. Use the builtins directly:
-- append
-- index
-- remove
-- len
-- to_string
+Exports:
+- concatBy : concatenate two values with a separator
+- concat   : concatenate two values directly
 
 Examples:
-"ab" "cd" append print
 "\n" print
-"hello" 1 index print
+"foo" "bar" concat call print
 "\n" print
-"hello" 1 remove print
 "\n" print
-99 to_string print
+"foo" "bar" "-" concatBy call print
+"\n" print
+"n=" 42 concat call print
 *]
+
+stringValue defun
+    to_string
+    swap pop
+end
+
+concatBy defun
+    by let
+    second let
+    first let
+
+    first stringValue call
+    by stringValue call
+    append
+    second stringValue call
+    append
+end
+
+concat defun
+    second let
+    first let
+
+    first stringValue call
+    second stringValue call
+    append
+end

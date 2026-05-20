@@ -7,21 +7,51 @@ Purpose:
 List-oriented helpers built in Raden itself.
 
 Exports:
-- map : iterate a list and call a callback for each item
+- each / foreach : list callback -> run callback for every item
+- map            : list callback -> alias of each for side-effect iteration
+- collect        : list callback -> new list of callback results
+- filter         : list callback -> new list of items whose callback result is true
+- reduce         : list initial callback -> accumulated value
+- copy           : list -> cloned list
+- reverse        : list -> reversed cloned list
+- concat         : left right -> new list containing both lists
+- first / head   : list -> first item or null
+- last           : list -> last item or null
+- tail / rest    : list -> new list without the first item
+- count          : list -> integer length
+- isEmpty        : list -> boolean
+- includes       : list value -> boolean
+- any            : list callback -> boolean
+- all            : list callback -> boolean
+- shift          : list-var -> first item removed from the list, or null
+- popLast        : list-var -> last item removed from the list, or null
 
 Examples:
-printer defun
-  print
-  "\n" print
+"./libs/lists.rdn" load
+
+(1 2 3) doubler collect call print
+"\n" print
+(1 2 3 4) aboveTwo filter call print
+"\n" print
+(1 2 3 4) 0 add2 reduce call print
+"\n" print
+(1 2 3) reverse call print
+"\n" print
+
+doubler defun
+  2 *
 end
 
-(1 2 3) printer map call
+aboveTwo defun
+  2 >
+end
 
-printer callback let
-(4 5 6) callback map call
+add2 defun
+  +
+end
 *]
 
-map defun
+each defun
     callback let
     tha-list let
     0 i let
@@ -33,4 +63,213 @@ map defun
     end
 end
 
-map foreach let
+each map let
+each foreach let
+
+copy defun
+    tha-list let
+    0 i let
+    tha-list len list-length let
+    (
+        i list-length < loop
+            tha-list i index
+            i 1 + i set
+            i list-length <
+        end
+    )
+end
+
+collect defun
+    callback let
+    tha-list let
+    0 i let
+    tha-list len list-length let
+    (
+        i list-length < loop
+            tha-list i index callback call
+            i 1 + i set
+            i list-length <
+        end
+    )
+end
+
+filter defun
+    callback let
+    tha-list let
+    0 i let
+    tha-list len list-length let
+    (
+        i list-length < loop
+            tha-list i index
+            dup callback call if
+            else
+                pop
+            end
+            i 1 + i set
+            i list-length <
+        end
+    )
+end
+
+reduce defun
+    callback let
+    accumulator let
+    tha-list let
+    0 i let
+    tha-list len list-length let
+    i list-length < loop
+        accumulator tha-list i index callback call
+        accumulator set
+        i 1 + i set
+        i list-length <
+    end
+    accumulator
+end
+
+reverse defun
+    tha-list let
+    tha-list len i let
+    (
+        i 0 > loop
+            tha-list i 1 - index
+            i 1 - i set
+            i 0 >
+        end
+    )
+end
+
+concat defun
+    right let
+    left let
+    0 i let
+    0 j let
+    left len left-length let
+    right len list-length let
+    (
+        i left-length < loop
+            left i index
+            i 1 + i set
+            i left-length <
+        end
+        j list-length < loop
+            right j index
+            j 1 + j set
+            j list-length <
+        end
+    )
+end
+
+first defun
+    tha-list let
+    tha-list len 0 > if
+        tha-list 0 index
+    else
+        null
+    end
+end
+
+first head let
+
+last defun
+    tha-list let
+    tha-list len list-length let
+    list-length 0 > if
+        tha-list list-length 1 - index
+    else
+        null
+    end
+end
+
+tail defun
+    tha-list let
+    1 i let
+    tha-list len list-length let
+    (
+        i list-length < loop
+            tha-list i index
+            i 1 + i set
+            i list-length <
+        end
+    )
+end
+
+tail rest let
+
+count defun
+    len
+end
+
+isEmpty defun
+    len 0 =
+end
+
+includes defun
+    needle let
+    tha-list let
+    0 i let
+    false found let
+    tha-list len list-length let
+    i list-length < found ! & loop
+        tha-list i index needle = if
+            true found set
+        end
+        i 1 + i set
+        i list-length < found ! &
+    end
+    found
+end
+
+any defun
+    callback let
+    tha-list let
+    0 i let
+    false found let
+    tha-list len list-length let
+    i list-length < found ! & loop
+        tha-list i index callback call if
+            true found set
+        end
+        i 1 + i set
+        i list-length < found ! &
+    end
+    found
+end
+
+all defun
+    callback let
+    tha-list let
+    0 i let
+    true ok let
+    tha-list len list-length let
+    i list-length < ok & loop
+        tha-list i index callback call ! if
+            false ok set
+        end
+        i 1 + i set
+        i list-length < ok &
+    end
+    ok
+end
+
+shift defun
+    tha-list let
+    tha-list len 0 > if 
+        tha-list 0 index forRet let
+        tha-list 0 remove
+        forRet
+    else
+        null
+    end
+end
+
+popLast defun
+    tha-list let
+    tha-list len list-length let
+    list-length 0 > if
+        tha-list list-length 1 - index forRet let
+        tha-list list-length 1 - remove
+        forRet
+    else
+        null
+    end
+end

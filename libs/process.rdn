@@ -1,0 +1,26 @@
+[* 
+process.rdn
+Copyright (c) 2023-2026 Ray Den
+SPDX-License-Identifier: MIT
+
+Purpose:
+Cross-platform process helpers over the native process module.
+
+Loading behavior:
+This module chooses the shared-library suffix from __sharedlib_ext and loads:
+../nativelibs/process(.so|.dylib|.dll)
+
+Exports:
+- status : command -> exit status
+- output : command -> stdout text
+*]
+
+"../nativelibs/process" __sharedlib_ext to_string swap pop append loadnative
+
+status defun
+    execStatus call
+end
+
+output defun
+    execOutput call
+end

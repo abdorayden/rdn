@@ -1,0 +1,31 @@
+[* 
+json.rdn
+Copyright (c) 2023-2026 Ray Den
+SPDX-License-Identifier: MIT
+
+Purpose:
+Small JSON parsing and serialization helpers over the native json module.
+
+Conventions:
+- JSON arrays become normal Raden lists.
+- JSON objects become lists of (key value) pair lists.
+- Lists of (key value) pairs stringify back to JSON objects.
+
+Loading behavior:
+This module chooses the shared-library suffix from __sharedlib_ext and loads:
+../nativelibs/json(.so|.dylib|.dll)
+
+Exports:
+- parse     : json-text -> value
+- stringify : value -> json-text
+*]
+
+"../nativelibs/json" __sharedlib_ext to_string swap pop append loadnative
+
+parse defun
+    parseJson call
+end
+
+stringify defun
+    stringifyJson call
+end

@@ -1,0 +1,31 @@
+[* 
+net.rdn
+Copyright (c) 2023-2026 Ray Den
+SPDX-License-Identifier: MIT
+
+Purpose:
+Cross-platform network-adjacent helpers over the native net module.
+
+Loading behavior:
+This module chooses the shared-library suffix from __sharedlib_ext and loads:
+../nativelibs/net(.so|.dylib|.dll)
+
+Exports:
+- host      : -> local host name
+- encodeUrl : text -> percent-encoded text
+- decodeUrl : text -> decoded text
+*]
+
+"../nativelibs/net" __sharedlib_ext to_string swap pop append loadnative
+
+host defun
+    hostName call
+end
+
+encodeUrl defun
+    urlEncode call
+end
+
+decodeUrl defun
+    urlDecode call
+end

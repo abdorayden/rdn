@@ -4,18 +4,122 @@ Copyright (c) 2023-2026 Ray Den
 SPDX-License-Identifier: MIT
 
 Purpose:
-Tiny output helpers built on top of print.
+Small input/output helpers built on top of `print` and the native io module.
+
+Conventions:
+- `print` consumes values, so the wrappers here are mainly for formatting and
+  repeated output patterns.
 
 Exports:
-- println : print the top value, then print a newline
+- readLine   : -> string | null
+- readln     : alias of readLine
+- readAll    : -> remaining stdin text
+- prompt     : prompt-text -> input line or null
+- nl         : -> print a newline
+- println    : value -> print value, then newline
+- say        : alias of println
+- printWith  : value suffix -> print value, then suffix
+- printPair  : left right -> print left then right
+- printTriplet : first second third -> print three values in order
+- printAll   : list -> print every item with no separator
+- printLines : list -> print every item followed by a newline
+- printJoin  : list separator -> print list items separated by separator
 
 Examples:
 "./libs/io.rdn" load
+"name: " prompt call print
+nl call
 "hello" println call
-42 println call
+("a" "b" "c") printLines call
+("a" "b" "c") ", " printJoin call
+nl call
 *]
 
-println defun
-    print 
+"../nativelibs/io" __sharedlib_ext to_string swap pop append loadnative
+
+stringValue defun
+    to_string
+    swap pop
+end
+
+readLine readln let
+
+readAll defun
+    readAllInput call
+end
+
+prompt defun
+    stringValue call print
+    readLine call
+end
+
+nl defun
     "\n" print
+end
+
+println defun
+    print
+    nl call
+end
+
+println say let
+
+printWith defun
+    suffix let
+    value let
+    value print
+    suffix print
+end
+
+printPair defun
+    right let
+    left let
+    left print
+    right print
+end
+
+printTriplet defun
+    third let
+    second let
+    first let
+    first print
+    second print
+    third print
+end
+
+printAll defun
+    tha-list let
+    0 i let
+    tha-list len list-length let
+    i list-length < loop
+        tha-list i index print
+        i 1 + i set
+        i list-length <
+    end
+end
+
+printLines defun
+    tha-list let
+    0 i let
+    tha-list len list-length let
+    i list-length < loop
+        tha-list i index println call
+        i 1 + i set
+        i list-length <
+    end
+end
+
+printJoin defun
+    separator let
+    tha-list let
+    0 i let
+    tha-list len list-length let
+    i list-length < loop
+        tha-list i index print
+        i list-length 1 - < if
+            separator print
+        end
+        i 1 + i set
+        i list-length <
+    end
 end

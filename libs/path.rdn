@@ -1,0 +1,41 @@
+[* 
+path.rdn
+Copyright (c) 2023-2026 Ray Den
+SPDX-License-Identifier: MIT
+
+Purpose:
+Cross-platform path helpers over the native path module.
+
+Loading behavior:
+This module chooses the shared-library suffix from __sharedlib_ext and loads:
+../nativelibs/path(.so|.dylib|.dll)
+
+Exports:
+- join      : left right -> path
+- basename  : path -> final component
+- dirname   : path -> parent directory
+- extname   : path -> extension or null
+- absolute  : path -> boolean
+*]
+
+"../nativelibs/path" __sharedlib_ext to_string swap pop append loadnative
+
+join defun
+    joinPath call
+end
+
+basename defun
+    baseName call
+end
+
+dirname defun
+    dirName call
+end
+
+extname defun
+    extName call
+end
+
+absolute defun
+    isAbsolutePath call
+end
