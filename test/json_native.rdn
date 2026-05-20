@@ -1,0 +1,6 @@
+"../libs/json.rdn" load
+
+"[1, true, null, \"x\"]" parse call print "\n" print
+"{\"a\":1,\"b\":true}" parse call print "\n" print
+(1 true null "x") stringify call print "\n" print
+(("a" 1) ("b" true)) stringify call print

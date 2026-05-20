@@ -1,0 +1,4 @@
+"../libs/process.rdn" load
+
+"true" status call print "\n" print
+"printf raden-process" output call print

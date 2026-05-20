@@ -1,0 +1,5 @@
+"../libs/net.rdn" load
+
+host call type print "\n" print
+"a b+c" encodeUrl call print "\n" print
+"a%20b%2Bc" decodeUrl call print

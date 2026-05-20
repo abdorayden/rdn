@@ -1,0 +1,8 @@
+"../libs/path.rdn" load
+
+"a" "b" join call print "\n" print
+"/tmp/demo.txt" basename call print "\n" print
+"/tmp/demo.txt" dirname call print "\n" print
+"/tmp/demo.txt" extname call print "\n" print
+"README" extname call type print "\n" print
+"/tmp/demo.txt" absolute call print

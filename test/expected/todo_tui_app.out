@@ -1,0 +1,47 @@
+
+Raden Todo TUI
+----------------
+commands:
+  help   show this help
+  list   show pending and done tasks
+  add    add a new pending task
+  done   move a pending task to done by exact title
+  undo   move a done task back to pending by exact title
+  clear  remove all done tasks
+  quit   exit the app
+
+cmd> new task> added task.
+
+cmd> new task> added task.
+
+cmd> 
+pending tasks
+  1. buy milk
+  2. write code
+
+done tasks
+  (empty)
+
+cmd> done task title> marked done.
+
+cmd> 
+pending tasks
+  1. write code
+
+done tasks
+  1. buy milk
+
+cmd> undo task title> moved back to pending.
+
+cmd> cleared done tasks.
+
+cmd> 
+pending tasks
+  1. write code
+  2. buy milk
+
+done tasks
+  (empty)
+
+cmd> 
+bye.

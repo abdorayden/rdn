@@ -69,10 +69,65 @@ if ! "${CC:-gcc}" -Wall -Wextra -Werror -ggdb -std=c11 -fPIC -shared \
     exit 1
 fi
 
+printf "%sBuilding syscall native module...%s\n" "$BLUE" "$RESET"
+if ! "${CC:-gcc}" -Wall -Wextra -Werror -ggdb -std=c11 -fPIC -shared \
+    "$ROOT_DIR/nativelibs/syscall.c" \
+    -I"$ROOT_DIR" \
+    -o "$ROOT_DIR/nativelibs/syscall.$SHARED_EXT"; then
+    printf "%sSyscall native module build failed%s\n" "$RED" "$RESET"
+    exit 1
+fi
+
+printf "%sBuilding path native module...%s\n" "$BLUE" "$RESET"
+if ! "${CC:-gcc}" -Wall -Wextra -Werror -ggdb -std=c11 -fPIC -shared \
+    "$ROOT_DIR/nativelibs/path.c" \
+    -I"$ROOT_DIR" \
+    -o "$ROOT_DIR/nativelibs/path.$SHARED_EXT"; then
+    printf "%sPath native module build failed%s\n" "$RED" "$RESET"
+    exit 1
+fi
+
+printf "%sBuilding process native module...%s\n" "$BLUE" "$RESET"
+if ! "${CC:-gcc}" -Wall -Wextra -Werror -ggdb -std=c11 -fPIC -shared \
+    "$ROOT_DIR/nativelibs/process.c" \
+    -I"$ROOT_DIR" \
+    -o "$ROOT_DIR/nativelibs/process.$SHARED_EXT"; then
+    printf "%sProcess native module build failed%s\n" "$RED" "$RESET"
+    exit 1
+fi
+
+printf "%sBuilding net native module...%s\n" "$BLUE" "$RESET"
+if ! "${CC:-gcc}" -Wall -Wextra -Werror -ggdb -std=c11 -fPIC -shared \
+    "$ROOT_DIR/nativelibs/net.c" \
+    -I"$ROOT_DIR" \
+    -o "$ROOT_DIR/nativelibs/net.$SHARED_EXT"; then
+    printf "%sNet native module build failed%s\n" "$RED" "$RESET"
+    exit 1
+fi
+
+printf "%sBuilding json native module...%s\n" "$BLUE" "$RESET"
+if ! "${CC:-gcc}" -Wall -Wextra -Werror -ggdb -std=c11 -fPIC -shared \
+    "$ROOT_DIR/nativelibs/json.c" \
+    -I"$ROOT_DIR" \
+    -o "$ROOT_DIR/nativelibs/json.$SHARED_EXT"; then
+    printf "%sJson native module build failed%s\n" "$RED" "$RESET"
+    exit 1
+fi
+
+printf "%sBuilding io native module...%s\n" "$BLUE" "$RESET"
+if ! "${CC:-gcc}" -Wall -Wextra -Werror -ggdb -std=c11 -fPIC -shared \
+    "$ROOT_DIR/nativelibs/io.c" \
+    -I"$ROOT_DIR" \
+    -o "$ROOT_DIR/nativelibs/io.$SHARED_EXT"; then
+    printf "%sIo native module build failed%s\n" "$RED" "$RESET"
+    exit 1
+fi
+
 for test_file in "$TEST_DIR"/*.rdn; do
     test_name="$(basename "$test_file" .rdn)"
     expected_out="$EXPECTED_DIR/$test_name.out"
     expected_status="$EXPECTED_DIR/$test_name.status"
+    stdin_file="$TEST_DIR/$test_name.stdin"
 
     if [[ ! -f "$expected_out" ]]; then
         printf "%sSKIP%s %s (missing %s)\n" "$YELLOW" "$RESET" "$test_name" "$(basename "$expected_out")"
@@ -84,7 +139,11 @@ for test_file in "$TEST_DIR"/*.rdn; do
         want_status="$(tr -d '[:space:]' < "$expected_status")"
     fi
 
-    output="$("$BIN" "$test_file" 2>&1)"
+    if [[ -f "$stdin_file" ]]; then
+        output="$("$BIN" "$test_file" < "$stdin_file" 2>&1)"
+    else
+        output="$("$BIN" "$test_file" 2>&1)"
+    fi
     got_status=$?
     expected_output="$(cat "$expected_out")"
 

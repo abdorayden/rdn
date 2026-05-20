@@ -1,0 +1,7 @@
+"../libs/os.rdn" load
+
+pid call type print "\n" print
+"PATH" env call type print "\n" print
+"__RDN_ENV_SHOULD_NOT_EXIST__" env call type print "\n" print
+0 sleep call print "\n" print
+now call type print

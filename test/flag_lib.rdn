@@ -1,0 +1,23 @@
+"../libs/flag.rdn" load
+
+false verbose let
+null chosenName let
+
+setName defun
+    value let
+    value to_string swap pop chosenName set
+end
+
+enableVerbose defun
+    ignored let
+    true verbose set
+end
+
+"-n" "--name" true "set chosen name" setName addFlag call
+"-v" "--verbose" false "enable verbose mode" enableVerbose addFlag call
+
+("demo.rdn" "-v" "-n" "raden" "file1" "--" "--literal" "-x") executeOn call print "\n" print
+chosenName print "\n" print
+verbose print "\n" print
+programName call print "\n" print
+positionals call print

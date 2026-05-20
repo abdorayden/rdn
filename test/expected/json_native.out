@@ -1,0 +1,4 @@
+(1 true null x)
+((a 1) (b true))
+[1,true,null,"x"]
+{"a":1,"b":true}

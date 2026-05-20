@@ -1,0 +1,6 @@
+"../libs/io.rdn" load
+
+"name: " prompt call print "\n" print
+readLine call print "\n" print
+readAll call print
+readLine call type print
