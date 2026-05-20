@@ -1,0 +1,9 @@
+countdown defun
+    n let
+    n print "\n" print
+    n 0 > if
+        n 1 - countdown call
+    end
+end
+
+3 countdown call

@@ -1,0 +1,3 @@
+/home/rayden/prog/raden/test/recursion_self_load.rdn:1:29: error: recursive load detected for '/home/rayden/prog/raden/test/recursion_self_load.rdn'
+"./recursion_self_load.rdn" load
+                            ^

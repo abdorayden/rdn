@@ -105,6 +105,24 @@ if ! "${CC:-gcc}" -Wall -Wextra -Werror -ggdb -std=c11 -fPIC -shared \
     exit 1
 fi
 
+printf "%sBuilding strings native module...%s\n" "$BLUE" "$RESET"
+if ! "${CC:-gcc}" -Wall -Wextra -Werror -ggdb -std=c11 -fPIC -shared \
+    "$ROOT_DIR/nativelibs/strings.c" \
+    -I"$ROOT_DIR" \
+    -o "$ROOT_DIR/nativelibs/strings.$SHARED_EXT"; then
+    printf "%sStrings native module build failed%s\n" "$RED" "$RESET"
+    exit 1
+fi
+
+printf "%sBuilding strconv native module...%s\n" "$BLUE" "$RESET"
+if ! "${CC:-gcc}" -Wall -Wextra -Werror -ggdb -std=c11 -fPIC -shared \
+    "$ROOT_DIR/nativelibs/strconv.c" \
+    -I"$ROOT_DIR" \
+    -o "$ROOT_DIR/nativelibs/strconv.$SHARED_EXT"; then
+    printf "%sStrconv native module build failed%s\n" "$RED" "$RESET"
+    exit 1
+fi
+
 printf "%sBuilding json native module...%s\n" "$BLUE" "$RESET"
 if ! "${CC:-gcc}" -Wall -Wextra -Werror -ggdb -std=c11 -fPIC -shared \
     "$ROOT_DIR/nativelibs/json.c" \

@@ -1,0 +1,7 @@
+"../libs/strconv.rdn" load
+
+"42" atoi call print "\n" print
+"3.5" atof call print "\n" print
+"true" parseBool call print "\n" print
+123 itoa call print "\n" print
+false formatBool call print
