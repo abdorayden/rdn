@@ -125,6 +125,7 @@ struct RDNApi {
     /*
      * Push scalar values onto the stack.
      */
+    bool (*push_null)(RDNApi *api);
     bool (*push_integer)(RDNApi *api, long value);
     bool (*push_number)(RDNApi *api, double value);
     bool (*push_boolean)(RDNApi *api, bool value);

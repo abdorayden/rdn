@@ -1975,6 +1975,7 @@ static bool apply_call(RDNState *stack, Vars *vars, Funcs *funcs) {
         api.to_string = native_api_to_string;
         api.to_identifier = native_api_to_identifier;
         api.pop = native_api_pop;
+        api.push_null = native_api_push_null;
         api.push_integer = native_api_push_integer;
         api.push_number = native_api_push_number;
         api.push_boolean = native_api_push_boolean;
@@ -3560,6 +3561,11 @@ static bool native_api_pop(RDNApi *api, size_t count) {
     }
 
     return true;
+}
+
+static bool native_api_push_null(RDNApi *api) {
+    NativeCallState *state = api->userdata;
+    return push_value(state->stack, create_null_value());
 }
 
 static bool native_api_push_integer(RDNApi *api, long value) {

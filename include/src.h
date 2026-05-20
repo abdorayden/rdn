@@ -221,6 +221,7 @@ static bool native_api_to_boolean(RDNApi *api, long index, bool *out_value);
 static const char *native_api_to_string(RDNApi *api, long index);
 static const char *native_api_to_identifier(RDNApi *api, long index);
 static bool native_api_pop(RDNApi *api, size_t count);
+static bool native_api_push_null(RDNApi *api);
 static bool native_api_push_integer(RDNApi *api, long value);
 static bool native_api_push_number(RDNApi *api, double value);
 static bool native_api_push_boolean(RDNApi *api, bool value);

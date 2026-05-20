@@ -158,6 +158,11 @@ static bool native_api_pop(RDNApi *api, size_t count) {
     return true;
 }
 
+static bool native_api_push_null(RDNApi *api) {
+    NativeCallState *state = api->userdata;
+    return push_value(state->stack, create_null_value());
+}
+
 static bool native_api_push_integer(RDNApi *api, long value) {
     NativeCallState *state = api->userdata;
     return push_value(state->stack, create_integer_value(value));
