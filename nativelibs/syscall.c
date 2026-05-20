@@ -4,9 +4,141 @@
  * SPDX-License-Identifier: MIT
  *
  * Purpose:
- * Reserved for future process/system-call bindings.
+ * Native process and runtime helpers for Raden.
  *
- * Status:
- * This module intentionally exports nothing yet.
- * Add only portable or carefully isolated host-specific process helpers here.
+ * Exports:
+ * - pid() -> integer
+ * - getEnv(name) -> string | null
+ * - sleepMs(milliseconds) -> true
+ * - epochTime() -> integer
+ *
+ * Example Raden usage:
+ * "./libs/os.rdn" load
+ * pid call print
+ * "\n" print
+ * "PATH" env call type print
+ * "\n" print
+ * now call print
  */
+
+#define _POSIX_C_SOURCE 200809L
+
+#include "../include/rdn_native.h"
+
+#include <errno.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
+#if defined(_WIN32)
+#include <processthreadsapi.h>
+#include <synchapi.h>
+#else
+#include <sys/types.h>
+#include <unistd.h>
+#endif
+
+static bool pid(RDNApi *api) {
+#if defined(_WIN32)
+    return api->push_integer(api, (long)GetCurrentProcessId());
+#else
+    return api->push_integer(api, (long)getpid());
+#endif
+}
+
+static bool getEnv(RDNApi *api) {
+    const char *name = NULL;
+    const char *value = NULL;
+
+    if (api->stack_size(api) < 1) {
+        return api->raise_error(api, "getEnv requires 1 param");
+    }
+
+    if (api->type(api, -1) != RDN_VALUE_STRING) {
+        return api->raise_error(api, "getEnv requires string name");
+    }
+
+    name = api->to_string(api, -1);
+    if (name == NULL) {
+        return api->raise_error(api, "getEnv requires string name");
+    }
+
+    value = getenv(name);
+
+    if (!api->pop(api, 1)) {
+        return false;
+    }
+
+    if (value == NULL) {
+        return api->push_null(api);
+    }
+
+    return api->push_string(api, value);
+}
+
+static bool sleepMs(RDNApi *api) {
+    long milliseconds = 0;
+
+    if (api->stack_size(api) < 1) {
+        return api->raise_error(api, "sleepMs requires 1 param");
+    }
+
+    if (!api->to_integer(api, -1, &milliseconds)) {
+        return api->raise_error(api, "sleepMs requires integer milliseconds");
+    }
+
+    if (milliseconds < 0) {
+        return api->raise_error(api, "sleepMs requires non-negative milliseconds");
+    }
+
+    if (!api->pop(api, 1)) {
+        return false;
+    }
+
+#if defined(_WIN32)
+    Sleep((DWORD)milliseconds);
+#else
+    {
+        struct timespec request;
+        struct timespec remaining;
+
+        request.tv_sec = milliseconds / 1000;
+        request.tv_nsec = (long)(milliseconds % 1000) * 1000000L;
+
+        while (nanosleep(&request, &remaining) != 0) {
+            if (errno != EINTR) {
+                return api->raise_error(api, "sleepMs failed");
+            }
+            request = remaining;
+        }
+    }
+#endif
+
+    return api->push_boolean(api, true);
+}
+
+static bool epochTime(RDNApi *api) {
+    time_t now = time(NULL);
+
+    if (now == (time_t)-1) {
+        return api->raise_error(api, "epochTime failed");
+    }
+
+    return api->push_integer(api, (long)now);
+}
+
+bool rdn_module_init(RDNModule *module) {
+    if (!module->register_function(module, "pid", pid)) {
+        return false;
+    }
+    if (!module->register_function(module, "getEnv", getEnv)) {
+        return false;
+    }
+    if (!module->register_function(module, "sleepMs", sleepMs)) {
+        return false;
+    }
+    if (!module->register_function(module, "epochTime", epochTime)) {
+        return false;
+    }
+    return true;
+}
