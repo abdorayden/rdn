@@ -57,6 +57,7 @@ struct Vars_t {
 
 enum FuncType {
     FUNC_SCRIPT,
+    FUNC_APPLY,
     FUNC_NATIVE,
 };
 
@@ -144,6 +145,7 @@ static Vars_t *find_var_entry(const Vars *vars, const char *name);
 static Vars_t *find_current_scope_var_entry(const Vars *vars, const char *name);
 static Funcs_t *find_func_entry(const Funcs *funcs, const char *name);
 static bool funcs_define(Funcs *funcs, const char *name, char *body, const char *source_path, size_t source_line, size_t source_column);
+static bool funcs_define_apply(Funcs *funcs, const char *name, char *body, const char *source_path, size_t source_line, size_t source_column);
 static bool funcs_define_native(Funcs *funcs, const char *name, RDNNativeFunction native_function, void *native_library_handle);
 static bool vars_let(Vars *vars, const char *name, const Value *value);
 static bool vars_set(Vars *vars, const char *name, const Value *value);
@@ -180,7 +182,9 @@ static bool apply_add_native_path(RDNState *stack, Vars *vars);
 static bool apply_load(RDNState *stack, Vars *vars, Funcs *funcs);
 static bool apply_loadnative(RDNState *stack, Vars *vars, Funcs *funcs);
 static bool apply_defun(RDNState *stack, Funcs *funcs, char **cursor);
+static bool apply_apply(RDNState *stack, Funcs *funcs, char **cursor);
 static bool apply_call(RDNState *stack, Vars *vars, Funcs *funcs);
+static bool execute_named_entry(RDNState *stack, Vars *vars, Funcs *funcs, Funcs_t *entry, const char *context_kind, const char *context_name);
 static bool materialize_scope_references(RDNState *stack, Vars *vars, size_t start_index);
 
 // to_string builtin function convert value from the top stack to string without remove it

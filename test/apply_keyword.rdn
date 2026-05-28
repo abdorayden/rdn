@@ -1,0 +1,15 @@
+step1 apply
+    "step1"
+end
+
+step2 apply
+    "step2"
+end
+
+step1
+step2
+print "\n" print
+print "\n" print
+
+step1 call
+print

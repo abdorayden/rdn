@@ -413,7 +413,7 @@ static void free_func_entry(Funcs_t *entry) {
     }
 
     free(entry->func_name);
-    if (entry->type == FUNC_SCRIPT) {
+    if (entry->type == FUNC_SCRIPT || entry->type == FUNC_APPLY) {
         free(entry->as.func_body);
     }
     free(entry->source_path);
@@ -521,7 +521,7 @@ static bool funcs_define(Funcs *funcs, const char *name, char *body, const char 
     Funcs_t *entry = find_func_entry(funcs, name);
 
     if (entry != NULL) {
-        if (entry->type == FUNC_SCRIPT) {
+        if (entry->type == FUNC_SCRIPT || entry->type == FUNC_APPLY) {
             free(entry->as.func_body);
         }
         entry->type = FUNC_SCRIPT;
@@ -547,11 +547,42 @@ static bool funcs_define(Funcs *funcs, const char *name, char *body, const char 
     return true;
 }
 
+static bool funcs_define_apply(Funcs *funcs, const char *name, char *body, const char *source_path, size_t source_line, size_t source_column) {
+    Funcs_t *entry = find_func_entry(funcs, name);
+
+    if (entry != NULL) {
+        if (entry->type == FUNC_SCRIPT || entry->type == FUNC_APPLY) {
+            free(entry->as.func_body);
+        }
+        entry->type = FUNC_APPLY;
+        entry->as.func_body = body;
+        free(entry->source_path);
+        entry->source_path = copy_string(source_path == NULL ? "<repl>" : source_path);
+        if (entry->source_path == NULL) {
+            free(body);
+            return diagnostic_error_current("failed to allocate function source path");
+        }
+        entry->source_line = source_line;
+        entry->source_column = source_column;
+        entry->native_library_handle = NULL;
+        return true;
+    }
+
+    entry = create_func_entry(name, body, source_path, source_line, source_column);
+    if (entry == NULL) {
+        return diagnostic_error_current("failed to allocate function entry");
+    }
+
+    entry->type = FUNC_APPLY;
+    ray_append(funcs, entry);
+    return true;
+}
+
 static bool funcs_define_native(Funcs *funcs, const char *name, RDNNativeFunction native_function, void *native_library_handle) {
     Funcs_t *entry = find_func_entry(funcs, name);
 
     if (entry != NULL) {
-        if (entry->type == FUNC_SCRIPT) {
+        if (entry->type == FUNC_SCRIPT || entry->type == FUNC_APPLY) {
             free(entry->as.func_body);
         }
         entry->type = FUNC_NATIVE;
@@ -2006,7 +2037,7 @@ static bool apply_defun(RDNState *stack, Funcs *funcs, char **cursor) {
             return false;
         }
 
-        if (!is_string && (is_token(token, "if") || is_token(token, "loop") || is_token(token, "defun"))) {
+        if (!is_string && (is_token(token, "if") || is_token(token, "loop") || is_token(token, "defun") || is_token(token, "apply"))) {
             depth++;
         } else if (!is_string && is_token(token, "end")) {
             depth--;
@@ -2040,14 +2071,170 @@ static bool apply_defun(RDNState *stack, Funcs *funcs, char **cursor) {
     }
 }
 
+static bool apply_apply(RDNState *stack, Funcs *funcs, char **cursor) {
+    Value *name = NULL;
+    char *body = NULL;
+    char *body_start = *cursor;
+    char *scan = *cursor;
+    char *token = NULL;
+    bool is_string = false;
+    int depth = 1;
+    size_t source_line = 1;
+    size_t source_column = 1;
+
+    if (stack->count < 1) {
+        return diagnostic_error_current("apply requires function name");
+    }
+
+    name = ray_pop(stack);
+    if (name->type != VALUE_AS_VAR) {
+        diagnostic_error_current("apply requires function name");
+        ray_append(stack, name);
+        return false;
+    }
+
+    diagnostic_compute_location(body_start, &source_line, &source_column, NULL, NULL);
+
+    while (true) {
+        char *token_start = scan;
+
+        if (!next_token(&scan, &token, &is_string)) {
+            free_value(name);
+            return false;
+        }
+
+        if (token == NULL) {
+            diagnostic_error_at(scan, "apply missing end");
+            free_value(name);
+            return false;
+        }
+
+        if (!is_string && (is_token(token, "if") || is_token(token, "loop") || is_token(token, "defun") || is_token(token, "apply"))) {
+            depth++;
+        } else if (!is_string && is_token(token, "end")) {
+            depth--;
+            if (depth == 0) {
+                size_t body_length = (size_t)(token_start - body_start);
+                body = malloc(body_length + 1);
+                if (body == NULL) {
+                    diagnostic_error_at(token_start, "failed to allocate apply body");
+                    free(token);
+                    free_value(name);
+                    return false;
+                }
+
+                memcpy(body, body_start, body_length);
+                body[body_length] = '\0';
+
+                if (!funcs_define_apply(funcs, name->as.string, body, g_current_source_path, source_line, source_column)) {
+                    free(token);
+                    free_value(name);
+                    return false;
+                }
+
+                free(token);
+                free_value(name);
+                *cursor = scan;
+                return true;
+            }
+        }
+
+        free(token);
+    }
+}
+
+static bool execute_named_entry(RDNState *stack, Vars *vars, Funcs *funcs, Funcs_t *entry, const char *context_kind, const char *context_name) {
+    BlockStop stop_reason = BLOCK_STOP_EOF;
+    char *cursor = NULL;
+    size_t stack_start = stack->count;
+
+    if (entry->type == FUNC_NATIVE) {
+        RDNApi api = {0};
+        NativeCallState call_state = {0};
+        bool ok = false;
+
+        call_state.stack = stack;
+        call_state.vars = vars;
+        call_state.error_message = NULL;
+
+        api.userdata = &call_state;
+        api.stack_size = native_api_stack_size;
+        api.type = native_api_type;
+        api.is_number = native_api_is_number;
+        api.to_integer = native_api_to_integer;
+        api.to_number = native_api_to_number;
+        api.to_boolean = native_api_to_boolean;
+        api.to_string = native_api_to_string;
+        api.to_identifier = native_api_to_identifier;
+        api.pop = native_api_pop;
+        api.push_null = native_api_push_null;
+        api.push_integer = native_api_push_integer;
+        api.push_number = native_api_push_number;
+        api.push_boolean = native_api_push_boolean;
+        api.push_string = native_api_push_string;
+        api.push_list = native_api_push_list;
+        api.list_len = native_api_list_len;
+        api.list_append = native_api_list_append;
+        api.list_index = native_api_list_index;
+        api.list_remove = native_api_list_remove;
+        api.raise_error = native_api_raise_error;
+
+        ok = entry->as.native_function(&api);
+        if (!ok) {
+            diagnostic_error_current("%s", call_state.error_message == NULL ? "native function call failed" : call_state.error_message);
+            free(call_state.error_message);
+            return false;
+        }
+
+        free(call_state.error_message);
+        return true;
+    }
+
+    if (!vars_push_scope(vars)) {
+        return false;
+    }
+
+    cursor = entry->as.func_body;
+    {
+        DiagnosticContext previous_context = g_diagnostic_context;
+        diagnostic_set_source(entry->source_path, entry->as.func_body, entry->source_line, entry->source_column);
+        if (!execute_block(stack, vars, funcs, &cursor, &stop_reason, false)) {
+            g_diagnostic_context = previous_context;
+            diagnostic_note_current("while %s '%s'", context_kind, context_name);
+            vars_pop_scope(vars);
+            return false;
+        }
+        g_diagnostic_context = previous_context;
+    }
+
+    if (!materialize_scope_references(stack, vars, stack_start)) {
+        vars_pop_scope(vars);
+        return false;
+    }
+
+    vars_pop_scope(vars);
+
+    if (stop_reason == BLOCK_STOP_BREAK) {
+        return diagnostic_error_current("unexpected break");
+    }
+
+    if (stop_reason == BLOCK_STOP_CONTINUE) {
+        return diagnostic_error_current("unexpected continue");
+    }
+
+    if (stop_reason != BLOCK_STOP_END && stop_reason != BLOCK_STOP_EOF) {
+        return diagnostic_error_current("function body terminated unexpectedly");
+    }
+
+    return true;
+}
+
 static bool apply_call(RDNState *stack, Vars *vars, Funcs *funcs) {
     Value *name = NULL;
     Value *resolved_name = NULL;
     Vars_t *var_entry = NULL;
     Funcs_t *entry = NULL;
-    BlockStop stop_reason = BLOCK_STOP_EOF;
-    char *cursor = NULL;
-    size_t stack_start = stack->count - 1;
+    bool ok = false;
 
     if (stack->count < 1) {
         return diagnostic_error_current("call requires function name");
@@ -2089,97 +2276,10 @@ static bool apply_call(RDNState *stack, Vars *vars, Funcs *funcs) {
         return false;
     }
 
-    if (entry->type == FUNC_NATIVE) {
-        RDNApi api = {0};
-        NativeCallState call_state = {0};
-        bool ok = false;
-
-        call_state.stack = stack;
-        call_state.vars = vars;
-        call_state.error_message = NULL;
-
-        api.userdata = &call_state;
-        api.stack_size = native_api_stack_size;
-        api.type = native_api_type;
-        api.is_number = native_api_is_number;
-        api.to_integer = native_api_to_integer;
-        api.to_number = native_api_to_number;
-        api.to_boolean = native_api_to_boolean;
-        api.to_string = native_api_to_string;
-        api.to_identifier = native_api_to_identifier;
-        api.pop = native_api_pop;
-        api.push_null = native_api_push_null;
-        api.push_integer = native_api_push_integer;
-        api.push_number = native_api_push_number;
-        api.push_boolean = native_api_push_boolean;
-        api.push_string = native_api_push_string;
-        api.push_list = native_api_push_list;
-        api.list_len = native_api_list_len;
-        api.list_append = native_api_list_append;
-        api.list_index = native_api_list_index;
-        api.list_remove = native_api_list_remove;
-        api.raise_error = native_api_raise_error;
-
-        ok = entry->as.native_function(&api);
-        free_value(resolved_name);
-        free_value(name);
-        if (!ok) {
-            diagnostic_error_current("%s", call_state.error_message == NULL ? "native function call failed" : call_state.error_message);
-            free(call_state.error_message);
-            return false;
-        }
-
-        free(call_state.error_message);
-        return true;
-    }
-
-    stack_start = stack->count;
-
-    if (!vars_push_scope(vars)) {
-        free_value(resolved_name);
-        ray_append(stack, name);
-        return false;
-    }
-
-    cursor = entry->as.func_body;
-    {
-        DiagnosticContext previous_context = g_diagnostic_context;
-        diagnostic_set_source(entry->source_path, entry->as.func_body, entry->source_line, entry->source_column);
-        if (!execute_block(stack, vars, funcs, &cursor, &stop_reason, false)) {
-            g_diagnostic_context = previous_context;
-            diagnostic_note_current("while calling function '%s'", entry->func_name);
-            vars_pop_scope(vars);
-            free_value(resolved_name);
-            free_value(name);
-            return false;
-        }
-        g_diagnostic_context = previous_context;
-    }
-
-    if (!materialize_scope_references(stack, vars, stack_start)) {
-        vars_pop_scope(vars);
-        free_value(resolved_name);
-        free_value(name);
-        return false;
-    }
-
-    vars_pop_scope(vars);
+    ok = execute_named_entry(stack, vars, funcs, entry, "calling function", entry->func_name);
     free_value(resolved_name);
     free_value(name);
-
-    if (stop_reason == BLOCK_STOP_BREAK) {
-        return diagnostic_error_current("unexpected break");
-    }
-
-    if (stop_reason == BLOCK_STOP_CONTINUE) {
-        return diagnostic_error_current("unexpected continue");
-    }
-
-    if (stop_reason != BLOCK_STOP_EOF) {
-        return diagnostic_error_current("unexpected block terminator");
-    }
-
-    return true;
+    return ok;
 }
 
 static bool materialize_scope_references(RDNState *stack, Vars *vars, size_t start_index) {
@@ -2279,6 +2379,8 @@ static bool read_string_token(char **cursor, char **out_token) {
                 escaped = '\\';
             } else if (**cursor == '"') {
                 escaped = '"';
+            } else if (**cursor == 'e') {
+                escaped = '\x1b';
             } else {
                 escaped = **cursor;
             }
@@ -2498,6 +2600,12 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
                 return false;
             }
             continue;
+        } else if (is_token(token, "apply")) {
+            free(token);
+            if (!apply_apply(stack, funcs, cursor)) {
+                return false;
+            }
+            continue;
         } else if (is_token(token, "call")) {
             free(token);
             if (!apply_call(stack, vars, funcs)) {
@@ -2671,15 +2779,23 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
             continue;
         } else if (is_identifier_token(token)) {
             Value *resolved = NULL;
-            Vars_t *entry = NULL;
+            Vars_t *var_entry = NULL;
+            Funcs_t *func_entry = NULL;
 
             if (identifier_is_name_target(*cursor)) {
                 resolved = create_var_name_value(token);
-            } else if ((entry = find_var_entry(vars, token)) != NULL &&
-                       (entry->var_value->type == VALUE_LIST || entry->var_value->type == VALUE_STRING)) {
+            } else if ((var_entry = find_var_entry(vars, token)) != NULL &&
+                       (var_entry->var_value->type == VALUE_LIST || var_entry->var_value->type == VALUE_STRING)) {
                 resolved = create_var_name_value(token);
-            } else if ((entry = find_var_entry(vars, token)) != NULL) {
-                resolved = clone_value(entry->var_value);
+            } else if ((var_entry = find_var_entry(vars, token)) != NULL) {
+                resolved = clone_value(var_entry->var_value);
+            } else if ((func_entry = find_func_entry(funcs, token)) != NULL && func_entry->type == FUNC_APPLY) {
+                bool ok = execute_named_entry(stack, vars, funcs, func_entry, "applying body", func_entry->func_name);
+                free(token);
+                if (!ok) {
+                    return false;
+                }
+                continue;
             } else {
                 resolved = create_var_name_value(token);
             }
@@ -2773,7 +2889,7 @@ static bool identifier_is_name_target(char *cursor) {
 
     if (!is_string &&
         (is_token(next, "let") || is_token(next, "set") || is_token(next, "const") ||
-         is_token(next, "defun") || is_token(next, "call"))) {
+         is_token(next, "defun") || is_token(next, "apply") || is_token(next, "call"))) {
         free(next);
         return true;
     }
@@ -3105,6 +3221,12 @@ static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **curs
                 return false;
             }
             continue;
+        } else if (is_token(token, "apply")) {
+            free(token);
+            if (!apply_apply(stack, funcs, cursor)) {
+                return false;
+            }
+            continue;
         } else if (is_token(token, "call")) {
             free(token);
             if (!apply_call(stack, vars, funcs)) {
@@ -3277,15 +3399,23 @@ static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **curs
             continue;
         } else if (is_identifier_token(token)) {
             Value *resolved = NULL;
-            Vars_t *entry = NULL;
+            Vars_t *var_entry = NULL;
+            Funcs_t *func_entry = NULL;
 
             if (identifier_is_name_target(*cursor)) {
                 resolved = create_var_name_value(token);
-            } else if ((entry = find_var_entry(vars, token)) != NULL &&
-                       (entry->var_value->type == VALUE_LIST || entry->var_value->type == VALUE_STRING)) {
+            } else if ((var_entry = find_var_entry(vars, token)) != NULL &&
+                       (var_entry->var_value->type == VALUE_LIST || var_entry->var_value->type == VALUE_STRING)) {
                 resolved = create_var_name_value(token);
-            } else if ((entry = find_var_entry(vars, token)) != NULL) {
-                resolved = clone_value(entry->var_value);
+            } else if ((var_entry = find_var_entry(vars, token)) != NULL) {
+                resolved = clone_value(var_entry->var_value);
+            } else if ((func_entry = find_func_entry(funcs, token)) != NULL && func_entry->type == FUNC_APPLY) {
+                bool ok = execute_named_entry(stack, vars, funcs, func_entry, "applying body", func_entry->func_name);
+                free(token);
+                if (!ok) {
+                    return false;
+                }
+                continue;
             } else {
                 resolved = create_var_name_value(token);
             }
@@ -3380,7 +3510,7 @@ static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else) {
             continue;
         }
 
-        if (is_token(token, "loop") || is_token(token, "defun")) {
+        if (is_token(token, "loop") || is_token(token, "defun") || is_token(token, "apply")) {
             free(token);
             if (!skip_loop(cursor)) {
                 return false;
@@ -4228,7 +4358,7 @@ static bool source_has_complete_blocks(const char *source, bool *out_complete) {
             return true;
         }
 
-        if (!is_string && (is_token(token, "if") || is_token(token, "loop") || is_token(token, "defun"))) {
+        if (!is_string && (is_token(token, "if") || is_token(token, "loop") || is_token(token, "defun") || is_token(token, "apply"))) {
             depth++;
         } else if (!is_string && is_token(token, "end")) {
             depth--;
