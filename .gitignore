@@ -1,2 +1,3 @@
 main.o
 main
+nativelibs/*.so
