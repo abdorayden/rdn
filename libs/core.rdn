@@ -23,6 +23,97 @@ TODO: add function to get platform type
 
 *]
 
-not defun ! end
-shl defun << end
-shr defun >> end
+not apply !  end
+shl apply << end
+shr apply >> end
+add apply +  end
+sub apply -  end
+mul apply *  end
+div apply /  end
+eq  apply =  end
+neq apply != end
+le  apply <= end 
+ge  apply >= end 
+gt  apply >  end 
+lt  apply <  end 
+xor apply ^  end
+and apply &  end
+or  apply |  end
+
+is_null apply type "null" eq end
+is_int apply type "integer" eq end
+is_float apply type "double" eq end
+is_bool apply type "boolean" eq end
+is_list apply type "list" eq end
+is_str apply type "string" eq end
+nil apply null end
+str apply to_string swap pop end
+
+[* Numeric helpers *]
+inc  apply 1 + end [* increment by 1 *]
+dec  apply 1 - end [* increment by 1 *]
+abs  apply dup 0 < if neg end end [* absolute value *]
+even apply 2 % 0 = end [* integer parity check *]
+odd  apply even not end [* odd check *]
+
+[* Comparison / ordering *]
+min     apply b let a let a b < if a else b end end
+max     apply b let a let a b > if a else b end end
+between apply hi let lo let val let val lo >= val hi <= & end
+clamp   apply hi let lo let val let val lo < if lo end val hi > if hi else val end end
+
+[* Functional / combinators *]
+
+[* Forward pipe: value fn -> fn(value) *]
+pipe apply fn let val let val fn call end
+[* Call fn on value for side effects, then return value *]
+tap apply fn let val let val fn call pop val end
+[* Ternary: cond true-val false-val -> selected *]
+select apply b let a let cond let cond if a else b end end
+[* Conditional transformation: when cond fn val -> val|fn(val) *]
+when apply fn let cond let val let cond if val fn call else val end end
+unless apply fn let cond let val let cond ! if val fn call else val end end
+[* Complement a predicate *]
+complement apply pred let val let val pred call not end
+
+[* Apply fn n times to initial val *]
+times apply
+    n let
+    fn let
+    val let
+    0 i let
+    i n < loop
+        val fn call val set
+        i 1 + i set
+        i n <
+    end
+    val
+end
+
+[* Generate a list of integers from start to end-1 *]
+range apply
+    stop let
+    start let
+    start i let
+    (
+        i stop < loop
+            i
+            i 1 + i set
+            i stop <
+        end
+    )
+end
+
+in apply 
+    tha-list let
+    fn let [* should return nothing *]
+    0 i let
+    tha-list len length let
+    i length < loop
+
+        tha-list i index fn call
+
+        i 1 + i set
+        i length < 
+    end
+end

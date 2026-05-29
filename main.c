@@ -7,6 +7,12 @@
 // TODO: finish std native and nonative libs
 // TODO: optimize the code
 // TODO: introduce protected call
+// TODO: introduce deftype keyword to add a new type 
+// example:
+// (
+// 0  [*age*]
+// "" [*name*]
+// ) Person deftype
 
 int main(int argc, char **argv) {
     for(int i = 0 ; i < argc ; ++i) {
