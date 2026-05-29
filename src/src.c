@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "../include/rdn_native.h"
+#include "stack.h"
 #include "../include/src.h"
 
 
@@ -127,13 +128,22 @@ static bool diagnostic_emitv(const char *kind, const char *pointer, const char *
     vsnprintf(message, sizeof(message), fmt, args);
     diagnostic_compute_location(pointer, &line, &column, &line_start, &line_end);
 
-    fprintf(stderr, "%s:%zu:%zu: %s: %s\n", path, line, column, kind, message);
-    if (line_start != NULL && line_end != NULL) {
-        fprintf(stderr, "%.*s\n", (int)(line_end - line_start), line_start);
-        for (size_t i = 1; i < column; i++) {
-            fputc(' ', stderr);
+    {
+        char *trace_copy = copy_string(message);
+        if (trace_copy != NULL) {
+            ray_append(&g_stack_trace_protected, trace_copy);
         }
-        fprintf(stderr, "^\n");
+    }
+
+    if (!g_diagnostics_suppressed) {
+        fprintf(stderr, "%s:%zu:%zu: %s: %s\n", path, line, column, kind, message);
+        if (line_start != NULL && line_end != NULL) {
+            fprintf(stderr, "%.*s\n", (int)(line_end - line_start), line_start);
+            for (size_t i = 1; i < column; i++) {
+                fputc(' ', stderr);
+            }
+            fprintf(stderr, "^\n");
+        }
     }
     return false;
 }
@@ -983,8 +993,7 @@ static bool apply_binary_operator(RDNState *stack, Vars *vars, const char *opera
 
     if (is_token(operator_token, "!")) {
         if (stack->count < 1) {
-            fprintf(stderr, "operator '%s' requires 1 operand, got %zu\n", operator_token, stack->count);
-            return false;
+            return diagnostic_error_current("operator '%s' requires 1 operand, got %zu", operator_token, stack->count);
         }
 
         right = resolve_value_if_var(vars, ray_pop(stack), operator_token);
@@ -992,7 +1001,7 @@ static bool apply_binary_operator(RDNState *stack, Vars *vars, const char *opera
             return false;
         }
         if (!value_to_boolean(right, &right_bool)) {
-            fprintf(stderr, "operator '%s' requires a boolean operand\n", operator_token);
+            diagnostic_error_current("operator '%s' requires a boolean operand", operator_token);
             ray_append(stack, right);
             return false;
         }
@@ -1010,8 +1019,7 @@ static bool apply_binary_operator(RDNState *stack, Vars *vars, const char *opera
     }
 
     if (stack->count < 2) {
-        fprintf(stderr, "operator '%s' requires 2 operands, got %zu\n", operator_token, stack->count);
-        return false;
+        return diagnostic_error_current("operator '%s' requires 2 operands, got %zu", operator_token, stack->count);
     }
 
     right = resolve_value_if_var(vars, ray_pop(stack), operator_token);
@@ -1029,7 +1037,7 @@ static bool apply_binary_operator(RDNState *stack, Vars *vars, const char *opera
     } else if (is_token(operator_token, "<") || is_token(operator_token, ">") ||
                is_token(operator_token, "<=") || is_token(operator_token, ">=")) {
         if (!values_compare(left, right, operator_token, &right_bool)) {
-            fprintf(stderr, "operator '%s' requires numeric operands\n", operator_token);
+            diagnostic_error_current("operator '%s' requires numeric operands", operator_token);
             ray_append(stack, left);
             ray_append(stack, right);
             return false;
@@ -1043,13 +1051,13 @@ static bool apply_binary_operator(RDNState *stack, Vars *vars, const char *opera
                 result = create_boolean_value(left_bool && right_bool);
             }
         } else if (left->type == VALUE_BOOLEAN || right->type == VALUE_BOOLEAN) {
-            fprintf(stderr, "operator '%s' requires both operands to be boolean or integer\n", operator_token);
+            diagnostic_error_current("operator '%s' requires both operands to be boolean or integer", operator_token);
             ray_append(stack, left);
             ray_append(stack, right);
             return false;
         } else {
             if (!value_to_long(left, &left_long) || !value_to_long(right, &right_long)) {
-                fprintf(stderr, "operator '%s' requires integer operands\n", operator_token);
+                diagnostic_error_current("operator '%s' requires integer operands", operator_token);
                 ray_append(stack, left);
                 ray_append(stack, right);
                 return false;
@@ -1064,14 +1072,14 @@ static bool apply_binary_operator(RDNState *stack, Vars *vars, const char *opera
     } else if (is_token(operator_token, "<<") || is_token(operator_token, ">>") ||
                is_token(operator_token, "^")) {
         if (!value_to_long(left, &left_long) || !value_to_long(right, &right_long)) {
-            fprintf(stderr, "operator '%s' requires integer operands\n", operator_token);
+            diagnostic_error_current("operator '%s' requires integer operands", operator_token);
             ray_append(stack, left);
             ray_append(stack, right);
             return false;
         }
 
         if ((is_token(operator_token, "<<") || is_token(operator_token, ">>")) && right_long < 0) {
-            fprintf(stderr, "shift operators require a non-negative count\n");
+            diagnostic_error_current("shift operators require a non-negative count");
             ray_append(stack, left);
             ray_append(stack, right);
             return false;
@@ -1086,14 +1094,14 @@ static bool apply_binary_operator(RDNState *stack, Vars *vars, const char *opera
         }
     } else {
         if (!value_to_double(left, &left_double) || !value_to_double(right, &right_double)) {
-            fprintf(stderr, "operator '%s' requires numeric operands\n", operator_token);
+            diagnostic_error_current("operator '%s' requires numeric operands", operator_token);
             ray_append(stack, left);
             ray_append(stack, right);
             return false;
         }
 
         if (is_token(operator_token, "/") && right_double == 0.0) {
-            fprintf(stderr, "division by zero\n");
+            diagnostic_error_current("division by zero");
             ray_append(stack, left);
             ray_append(stack, right);
             return false;
@@ -1140,8 +1148,7 @@ static bool apply_print(RDNState *stack, Vars *vars) {
     Value *value = NULL;
 
     if (stack->count < 1) {
-        fprintf(stderr, "print requires 1 operand\n");
-        return false;
+        return diagnostic_error_current("print requires 1 operand");
     }
 
     value = resolve_value_if_var(vars, ray_pop(stack), "print");
@@ -1156,8 +1163,7 @@ static bool apply_print(RDNState *stack, Vars *vars) {
 static bool apply_exit(RDNState *stack , Vars *vars, int* exit_status) {
 
     if (stack->count < 1) {
-        fprintf(stderr, "type requires 1 operand\n");
-        return false;
+        return diagnostic_error_current("type requires 1 operand");
     }
 
     Value *value = NULL;
@@ -1171,7 +1177,7 @@ static bool apply_exit(RDNState *stack , Vars *vars, int* exit_status) {
     free_value(value);
 
     if (ret){
-        fprintf(stderr, "%s\n" , ret);
+        diagnostic_error_current("%s", ret);
         return false;
     }
     return true;
@@ -1183,8 +1189,7 @@ static bool apply_type(RDNState *stack, Vars *vars, Funcs *funcs) {
     Vars_t *var_entry = NULL;
 
     if (stack->count < 1) {
-        fprintf(stderr, "type requires 1 operand\n");
-        return false;
+        return diagnostic_error_current("type requires 1 operand");
     }
 
     value = ray_pop(stack);
@@ -1234,8 +1239,7 @@ static bool apply_type(RDNState *stack, Vars *vars, Funcs *funcs) {
 
 static bool apply_swap(RDNState *stack) {
     if (stack->count < 2) {
-        fprintf(stderr, "swap type requires 2 operand in stack\n");
-        return false;
+        return diagnostic_error_current("swap requires 2 operands");
     }
     Value *value1 = NULL;
     Value *value2 = NULL;
@@ -1248,8 +1252,7 @@ static bool apply_swap(RDNState *stack) {
 
 static bool apply_pop(RDNState *stack) {
     if (stack->count < 1) {
-        fprintf(stderr, "pop type requires 1 operand in stack\n");
-        return false;
+        return diagnostic_error_current("pop requires 1 operand");
     }
 
     Value *value = NULL;
@@ -1260,8 +1263,7 @@ static bool apply_pop(RDNState *stack) {
 
 static bool apply_dup(RDNState *stack, Vars *vars) {
     if (stack->count < 1) {
-        fprintf(stderr, "dup type requires 1 operand in stack\n");
-        return false;
+        return diagnostic_error_current("dup requires 1 operand");
     }
 
     Value *value = NULL;
@@ -1303,7 +1305,7 @@ static bool apply_dup(RDNState *stack, Vars *vars) {
             dup2 = clone_value(value);
         }break;
         default: {
-            fprintf(stderr, "dup type requires 1 operand in stack\n");
+            diagnostic_error_current("dup requires 1 operand");
             free_value(value);
             return false;
         }
@@ -1318,8 +1320,7 @@ static bool apply_dup(RDNState *stack, Vars *vars) {
 // to_string builtin function convert value from the top stack to string without remove it
 static bool apply_to_string(RDNState *stack, Vars *vars) {
     if (stack->count < 1) {
-        fprintf(stderr, "to_string type requires 1 operand in stack\n");
-        return false;
+        return diagnostic_error_current("to_string requires 1 operand");
     }
 
     Value *value = NULL;
@@ -1376,7 +1377,7 @@ static bool apply_to_string(RDNState *stack, Vars *vars) {
             converted = create_string_value_owned(buffer);
         }break;
         default: {
-            fprintf(stderr, "to_string type requires 1 operand in stack\n");
+            diagnostic_error_current("to_string requires 1 operand");
             free_value(value);
             return false;
         }
@@ -1430,8 +1431,7 @@ static bool apply_append(RDNState *stack, Vars *vars) {
     Value *item_copy = NULL;
 
     if (stack->count < 2) {
-        fprintf(stderr, "append requires 2 operands\n");
-        return false;
+        return diagnostic_error_current("append requires 2 operands");
     }
 
     item = ray_pop(stack);
@@ -1466,7 +1466,7 @@ static bool apply_append(RDNState *stack, Vars *vars) {
             return true;
         }
 
-        fprintf(stderr, "append requires list or string target\n");
+        diagnostic_error_current("append requires list or string target");
         ray_append(stack, target);
         ray_append(stack, item);
         return false;
@@ -1506,7 +1506,7 @@ static bool apply_append(RDNState *stack, Vars *vars) {
         return true;
     }
 
-    fprintf(stderr, "append requires list or string target\n");
+    diagnostic_error_current("append requires list or string target");
     ray_append(stack, target);
     ray_append(stack, item);
     return false;
@@ -1520,8 +1520,7 @@ static bool apply_index(RDNState *stack, Vars *vars) {
     long index = 0;
 
     if (stack->count < 2) {
-        fprintf(stderr, "index requires 2 operands\n");
-        return false;
+        return diagnostic_error_current("index requires 2 operands");
     }
 
     index_value = resolve_value_if_var(vars, ray_pop(stack), "index");
@@ -1531,7 +1530,7 @@ static bool apply_index(RDNState *stack, Vars *vars) {
     target = ray_pop(stack);
 
     if (!value_to_long(index_value, &index)) {
-        fprintf(stderr, "index requires integer index\n");
+        diagnostic_error_current("index requires integer index");
         ray_append(stack, target);
         ray_append(stack, index_value);
         return false;
@@ -1552,7 +1551,7 @@ static bool apply_index(RDNState *stack, Vars *vars) {
         Value *result = NULL;
 
         if (index < 0 || (size_t)index >= resolved_target->as.list.count) {
-            fprintf(stderr, "index out of range\n");
+            diagnostic_error_current("index out of range");
             ray_append(stack, target);
             ray_append(stack, index_value);
             return false;
@@ -1563,8 +1562,7 @@ static bool apply_index(RDNState *stack, Vars *vars) {
         free_value(target);
 
         if (result == NULL) {
-            fprintf(stderr, "failed to clone indexed value\n");
-            return false;
+            return diagnostic_error_current("failed to clone indexed value");
         }
 
         ray_append(stack, result);
@@ -1576,7 +1574,7 @@ static bool apply_index(RDNState *stack, Vars *vars) {
         size_t length = strlen(resolved_target->as.string);
 
         if (index < 0 || (size_t)index >= length) {
-            fprintf(stderr, "index out of range\n");
+            diagnostic_error_current("index out of range");
             ray_append(stack, target);
             ray_append(stack, index_value);
             return false;
@@ -1587,24 +1585,14 @@ static bool apply_index(RDNState *stack, Vars *vars) {
         free_value(target);
 
         if (result == NULL) {
-            fprintf(stderr, "failed to create indexed string value\n");
-            return false;
+            return diagnostic_error_current("failed to create indexed string value");
         }
 
         ray_append(stack, result);
         return true;
     }
 
-    fprintf(stderr, "index requires list or string target\n");
-    if (resolved_target == target) {
-        if (resolved_target == target) {
-            ray_append(stack, target);
-        } else {
-            ray_append(stack, target);
-        }
-        ray_append(stack, index_value);
-    }
-    return false;
+    return diagnostic_error_current("index requires list or string target");
 }
 
 static bool apply_remove(RDNState *stack, Vars *vars) {
@@ -1616,8 +1604,7 @@ static bool apply_remove(RDNState *stack, Vars *vars) {
     size_t i = 0;
 
     if (stack->count < 2) {
-        fprintf(stderr, "remove requires 2 operands\n");
-        return false;
+        return diagnostic_error_current("remove requires 2 operands");
     }
 
     index_value = resolve_value_if_var(vars, ray_pop(stack), "remove");
@@ -1627,7 +1614,7 @@ static bool apply_remove(RDNState *stack, Vars *vars) {
     target = ray_pop(stack);
 
     if (!value_to_long(index_value, &index)) {
-        fprintf(stderr, "remove requires integer index\n");
+        diagnostic_error_current("remove requires integer index");
         ray_append(stack, target);
         ray_append(stack, index_value);
         return false;
@@ -1646,7 +1633,7 @@ static bool apply_remove(RDNState *stack, Vars *vars) {
 
     if (resolved_target->type == VALUE_LIST) {
         if (index < 0 || (size_t)index >= resolved_target->as.list.count) {
-            fprintf(stderr, "remove index out of range\n");
+            diagnostic_error_current("remove index out of range");
             ray_append(stack, target);
             ray_append(stack, index_value);
             return false;
@@ -1671,7 +1658,7 @@ static bool apply_remove(RDNState *stack, Vars *vars) {
         size_t length = strlen(resolved_target->as.string);
 
         if (index < 0 || (size_t)index >= length) {
-            fprintf(stderr, "remove index out of range\n");
+            diagnostic_error_current("remove index out of range");
             ray_append(stack, target);
             ray_append(stack, index_value);
             return false;
@@ -1690,7 +1677,7 @@ static bool apply_remove(RDNState *stack, Vars *vars) {
         return true;
     }
 
-    fprintf(stderr, "remove requires list or string target\n");
+    diagnostic_error_current("remove requires list or string target");
     ray_append(stack, target);
     ray_append(stack, index_value);
     return false;
@@ -1703,8 +1690,7 @@ static bool apply_len(RDNState *stack, Vars *vars) {
     Value *result = NULL;
 
     if (stack->count < 1) {
-        fprintf(stderr, "len requires 1 operand\n");
-        return false;
+        return diagnostic_error_current("len requires 1 operand");
     }
 
     target = ray_pop(stack);
@@ -1723,7 +1709,7 @@ static bool apply_len(RDNState *stack, Vars *vars) {
     } else if (resolved_target->type == VALUE_STRING) {
         result = create_integer_value((long)strlen(resolved_target->as.string));
     } else {
-        fprintf(stderr, "len requires list or string target\n");
+        diagnostic_error_current("len requires list or string target");
         ray_append(stack, target);
         return false;
     }
@@ -2246,6 +2232,120 @@ static bool execute_named_entry(RDNState *stack, Vars *vars, Funcs *funcs, Funcs
     return true;
 }
 
+static bool apply_pcall(RDNState *stack, Vars *vars, Funcs *funcs) {
+    Value *name = NULL;
+    Value *resolved_name = NULL;
+    Vars_t *var_entry = NULL;
+    Funcs_t *entry = NULL;
+    bool ok = false;
+    size_t saved_trace_count = 0;
+    size_t saved_stack_count = 0;
+    DiagnosticContext saved_context = {0};
+    bool was_suppressed = false;
+
+    if (stack->count < 1) {
+        return diagnostic_error_current("pcall requires function name");
+    }
+
+    name = ray_pop(stack);
+    if (name->type != VALUE_AS_VAR) {
+        diagnostic_error_current("pcall requires function name");
+        ray_append(stack, name);
+        return false;
+    }
+
+    var_entry = find_var_entry(vars, name->as.string);
+    if (var_entry != NULL) {
+        resolved_name = clone_value(var_entry->var_value);
+        if (resolved_name == NULL) {
+            diagnostic_error_current("failed to resolve function variable '%s'", name->as.string);
+            free_value(name);
+            return false;
+        }
+
+        if (resolved_name->type != VALUE_AS_VAR) {
+            diagnostic_error_current("pcall requires function name");
+            free_value(name);
+            ray_append(stack, resolved_name);
+            return false;
+        }
+
+        entry = find_func_entry(funcs, resolved_name->as.string);
+    } else {
+        entry = find_func_entry(funcs, name->as.string);
+    }
+
+    if (entry == NULL) {
+        diagnostic_error_current("unknown function: %s",
+                                 resolved_name != NULL ? resolved_name->as.string : name->as.string);
+        free_value(resolved_name);
+        ray_append(stack, name);
+        return false;
+    }
+
+    saved_trace_count = g_stack_trace_protected.count;
+    saved_stack_count = stack->count;
+    saved_context = g_diagnostic_context;
+    was_suppressed = g_diagnostics_suppressed;
+    g_diagnostics_suppressed = true;
+
+    ok = execute_named_entry(stack, vars, funcs, entry, "calling function", entry->func_name);
+
+    if (ok) {
+        g_diagnostics_suppressed = was_suppressed;
+        if (!push_value(stack, create_boolean_value(true))) {
+            free_value(resolved_name);
+            free_value(name);
+            return false;
+        }
+    } else {
+        char *error_text = NULL;
+        size_t error_length = 0;
+        size_t i = 0;
+
+        for (i = saved_trace_count; i < g_stack_trace_protected.count; i++) {
+            if (i > saved_trace_count) {
+                append_text(&error_text, &error_length, "\n");
+            }
+            append_text(&error_text, &error_length, g_stack_trace_protected.items[i]);
+            free(g_stack_trace_protected.items[i]);
+        }
+        g_stack_trace_protected.count = saved_trace_count;
+
+        g_diagnostic_context = saved_context;
+        g_diagnostics_suppressed = was_suppressed;
+
+        while (stack->count > saved_stack_count) {
+            free_value(ray_pop(stack));
+        }
+
+        if (error_text != NULL && error_length > 0) {
+            if (!push_value(stack, create_string_value_owned(error_text))) {
+                free(error_text);
+                free_value(resolved_name);
+                free_value(name);
+                return false;
+            }
+        } else {
+            if (!push_value(stack, create_string_value_copy("pcall caught an error"))) {
+                free_value(resolved_name);
+                free_value(name);
+                return false;
+            }
+        }
+
+        if (!push_value(stack, create_boolean_value(false))) {
+            free_value(resolved_name);
+            free_value(name);
+            return false;
+        }
+    }
+
+    free_value(resolved_name);
+    free_value(name);
+    return true;
+}
+
 static bool apply_call(RDNState *stack, Vars *vars, Funcs *funcs) {
     Value *name = NULL;
     Value *resolved_name = NULL;
@@ -2626,6 +2726,12 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
         } else if (is_token(token, "call")) {
             free(token);
             if (!apply_call(stack, vars, funcs)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "pcall")) {
+            free(token);
+            if (!apply_pcall(stack, vars, funcs)) {
                 return false;
             }
             continue;
@@ -3247,6 +3353,12 @@ static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **curs
         } else if (is_token(token, "call")) {
             free(token);
             if (!apply_call(stack, vars, funcs)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "pcall")) {
+            free(token);
+            if (!apply_pcall(stack, vars, funcs)) {
                 return false;
             }
             continue;

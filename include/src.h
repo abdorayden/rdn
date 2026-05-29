@@ -118,6 +118,8 @@ static DiagnosticContext g_diagnostic_context = {0};
 static LoadPathStack g_load_path_stack = {0};
 static SearchPathStack g_script_search_paths = {0};
 static SearchPathStack g_native_search_paths = {0};
+static RLList(char*) g_stack_trace_protected = {0};
+static bool g_diagnostics_suppressed = false;
 
 static bool is_token(const char *value, const char *expected);
 static bool is_operator_token(const char *value);
@@ -184,6 +186,7 @@ static bool apply_loadnative(RDNState *stack, Vars *vars, Funcs *funcs);
 static bool apply_defun(RDNState *stack, Funcs *funcs, char **cursor);
 static bool apply_apply(RDNState *stack, Funcs *funcs, char **cursor);
 static bool apply_call(RDNState *stack, Vars *vars, Funcs *funcs);
+static bool apply_pcall(RDNState *stack, Vars *vars, Funcs *funcs);
 static bool execute_named_entry(RDNState *stack, Vars *vars, Funcs *funcs, Funcs_t *entry, const char *context_kind, const char *context_name);
 static bool materialize_scope_references(RDNState *stack, Vars *vars, size_t start_index);
 
