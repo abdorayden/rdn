@@ -21,6 +21,11 @@ bool f(RDNApi *api){
      *
      * After this function returns, only the list should remain on the stack.
      */
+
+    const char* foo = api->to_string(api , -1);
+
+    printf("called from f : %s" , foo);
+
     if (!api->push_list(api)) {
         return false;
     }
@@ -60,8 +65,9 @@ int main(void)
     ray_append(&funcs, create_native_func_entry("foo", f, NULL));
     evaluate_source(&stack, &vars, &funcs, "1");
     hello(&stack);
-    evaluate_source(&stack, &vars, &funcs, "hey call");
-    evaluate_source(&stack, &vars, &funcs, "foo call print");
+    // evaluate_source(&stack, &vars, &funcs, "hey call");
+    // evaluate_source(&stack, &vars, &funcs, "foo call print");
+    evaluate_source(&stack, &vars, &funcs, "\"hey im rayden\" foo call print");
 
     return 0;
 }

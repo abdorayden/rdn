@@ -91,6 +91,14 @@ bool rdn_get_height(RDNApi* api) {
     return true;
 }
 
+bool rdn_set_target_fps(RDNApi* api) {
+    long fps;
+    api->to_integer(api,-1,&fps);
+    SetTargetFPS((int)fps);
+    api->pop(api , 1);
+    return true;
+}
+
 int main(void)
 {
     RDNState stack = {0};
@@ -126,6 +134,9 @@ int main(void)
 
     ray_append(&funcs, create_native_func_entry("get-screen-height", 
                 rdn_get_height, NULL));
+
+    ray_append(&funcs, create_native_func_entry("set-target-fps", 
+                rdn_set_target_fps, NULL));
 
     char* src = read_file("main.rdn");
     evaluate_source(&stack, &vars, &funcs, src);
