@@ -1,0 +1,9 @@
+42
+division by zero
+while calling function 'err_div'
+index requires list or string target
+while calling function 'err_index'
+division by zero
+while calling function 'err_div'
+while calling function 'middle'
+42

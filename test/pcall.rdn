@@ -1,0 +1,59 @@
+[* pcall success *]
+success_func defun
+    42
+end
+
+success_func pcall
+if
+    print "\n" print
+else
+    "FAIL: " print print "\n" print
+end
+
+[* pcall error (division by zero) *]
+err_div defun
+    1 0 /
+end
+
+err_div pcall
+if
+    "FAIL: " print print "\n" print
+else
+    print "\n" print
+end
+
+[* pcall error (null index) *]
+err_index defun
+    null 0 index
+end
+
+err_index pcall
+if
+    "FAIL: " print print "\n" print
+else
+    print "\n" print
+end
+
+[* pcall with indirect error through another function *]
+middle defun
+    err_div call
+end
+
+middle pcall
+if
+    "FAIL: " print print "\n" print
+else
+    print "\n" print
+end
+
+[* pcall nested inside another pcall *]
+outer defun
+    success_func call
+end
+
+outer pcall
+if
+    print "\n" print
+else
+    "FAIL: " print print "\n" print
+end
