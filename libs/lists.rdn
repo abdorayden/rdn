@@ -25,6 +25,8 @@ Exports:
 - all            : list callback -> boolean
 - shift          : list-var -> first item removed from the list, or null
 - popLast        : list-var -> last item removed from the list, or null
+- unpack         : list -> ..values, or null
+- insert         : list index value -> list
 
 Examples:
 "./libs/lists.rdn" load
@@ -271,5 +273,47 @@ popLast defun
         forRet
     else
         null
+    end
+end
+
+unpack apply
+    tha-list let
+    tha-list type "list" != if 
+        null
+    else
+        0 i let
+        tha-list len l let
+        i l < loop
+            tha-list i index
+            i 1 + i set
+            i l <
+        end
+    end
+end
+
+insert defun
+    tha-val let
+    tha-idx let
+    tha-list let
+    tha-idx tha-list len >= if
+        tha-list tha-val append
+        tha-list
+    else
+        0 tha-idx >= if 
+            tha-list reverse call tha-val append reverse call
+        else
+            0 i let
+            (
+                i tha-list len < loop
+                    i tha-idx = if 
+                        tha-val
+                    end
+
+                    tha-list i index
+                    i 1 + i set
+                    i tha-list len <
+                end
+            )
+        end
     end
 end
