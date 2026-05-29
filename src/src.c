@@ -1822,13 +1822,21 @@ static bool apply_load(RDNState *stack, Vars *vars, Funcs *funcs){
         return false;
     }
 
-    path_copy = copy_string(path);
+    if (strstr(path, ".rdn") == NULL){
+        char* buffer = malloc(256);
+        sprintf(buffer, "%s.rdn", path);
+        path_copy = copy_string(buffer);
+        free(buffer);
+    }else {
+        path_copy = copy_string(path);
+    }
+
     if (path_copy == NULL) {
         free_value(target);
         return diagnostic_error_current("failed to allocate load path");
     }
 
-    resolved_path = resolve_load_path_candidate(path, &g_script_search_paths);
+    resolved_path = resolve_load_path_candidate(path_copy, &g_script_search_paths);
     if (resolved_path == NULL) {
         free_value(target);
         ok = diagnostic_error_current("failed to resolve path '%s'", path_copy);
@@ -1908,13 +1916,22 @@ static bool apply_loadnative(RDNState *stack, Vars *vars, Funcs *funcs) {
         return false;
     }
 
-    path_copy = copy_string(path);
+    // TODO: handle the extension for other platforms (dll , ...)
+    if (strstr(path, ".so") == NULL){
+        char* buffer = malloc(256);
+        sprintf(buffer, "%s.so", path);
+        path_copy = copy_string(buffer);
+        free(buffer);
+    }else {
+        path_copy = copy_string(path);
+    }
+
     if (path_copy == NULL) {
         free_value(target);
         return diagnostic_error_current("failed to allocate native load path");
     }
 
-    resolved_path = resolve_load_path_candidate(path, &g_native_search_paths);
+    resolved_path = resolve_load_path_candidate(path_copy, &g_native_search_paths);
     if (resolved_path == NULL) {
         free_value(target);
         ok = diagnostic_error_current("failed to resolve path '%s'", path_copy);
@@ -4510,6 +4527,16 @@ static void apply_argv(Vars* vars , const char* path, int argc , char** argv) {
     ray_append(vars, argv_var);
 
 }
+
+///
+///     unpack apply
+///         tha-list let
+///         tha-list type "list" != if 
+///         end
+///
+///     end
+///
+///
 
 int rdn_main(int argc , char** argv) {
     const char *path = NULL;
