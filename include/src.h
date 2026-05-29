@@ -4,6 +4,8 @@
 #include "./rdn_native.h"
 #include "../src/stack.h"
 
+#define RADEN_VERSION "1.0.0"
+
 typedef enum ValueType ValueType;
 typedef enum BlockStop BlockStop;
 typedef enum FuncType FuncType;

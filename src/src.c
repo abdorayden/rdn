@@ -4525,6 +4525,7 @@ static int run_repl(void) {
     apply_host_environment(&vars);
 
     printf("raden repl\n");
+    printf("raden interpreter version %s , check or report any bug in 'https://github.com/abdorayden/rdn'\n" , RADEN_VERSION);
     printf("press Ctrl-D to exit\n");
 
     while (true) {
