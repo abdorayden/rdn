@@ -6,6 +6,10 @@
 
 #define RADEN_VERSION "1.0.0"
 
+#ifndef RDN_INSTALL_PREFIX
+#define RDN_INSTALL_PREFIX "/usr/local/share/rdn"
+#endif
+
 typedef enum ValueType ValueType;
 typedef enum BlockStop BlockStop;
 typedef enum FuncType FuncType;

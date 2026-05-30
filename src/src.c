@@ -4068,7 +4068,13 @@ static bool reset_search_paths(void) {
     if (!push_search_path(&g_script_search_paths, "libs")) {
         return false;
     }
+    if (!push_search_path(&g_script_search_paths, RDN_INSTALL_PREFIX "/libs")) {
+        return false;
+    }
     if (!push_search_path(&g_native_search_paths, "nativelibs")) {
+        return false;
+    }
+    if (!push_search_path(&g_native_search_paths, RDN_INSTALL_PREFIX "/nativelibs")) {
         return false;
     }
 

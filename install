@@ -1,0 +1,185 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+REPO_OWNER="abdorayden"
+REPO_NAME="rdn"
+DEFAULT_BRANCH="master"
+DEFAULT_PREFIX="/usr/local/share/rdn"
+DEFAULT_BINDIR="/usr/local/bin"
+DEFAULT_REPO_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}"
+DEFAULT_ARCHIVE_URL="https://codeload.github.com/${REPO_OWNER}/${REPO_NAME}/tar.gz/refs/heads/${DEFAULT_BRANCH}"
+
+PREFIX="${PREFIX:-$DEFAULT_PREFIX}"
+BINDIR="${BINDIR:-$DEFAULT_BINDIR}"
+BRANCH="${BRANCH:-$DEFAULT_BRANCH}"
+REPO_URL="${REPO_URL:-$DEFAULT_REPO_URL}"
+ARCHIVE_URL="${ARCHIVE_URL:-https://codeload.github.com/${REPO_OWNER}/${REPO_NAME}/tar.gz/refs/heads/${BRANCH}}"
+VERBOSE="${VERBOSE:-1}"
+FORCE_DOWNLOAD="${FORCE_DOWNLOAD:-0}"
+
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+    cat <<EOF
+usage: $(basename "$0") [options]
+
+Install Raden from a local checkout or download the latest source archive.
+
+options:
+  -h, --help       show this help text
+
+environment:
+  PREFIX          install prefix for libs and nativelibs
+  BINDIR          install directory for the rdn binary
+  BRANCH          Git branch to download when bootstrapping remotely
+  REPO_URL        repository URL shown in output
+  ARCHIVE_URL     source archive URL to download
+  FORCE_DOWNLOAD  set to 1 to ignore a local checkout
+  VERBOSE         set to 0 to hide command logging
+EOF
+    exit 0
+fi
+
+if [ -t 1 ] && [ "${NO_COLOR:-0}" != "1" ] && command -v tput >/dev/null 2>&1; then
+    RESET="$(tput sgr0)"
+    BOLD="$(tput bold)"
+    GREEN="$(tput setaf 2)"
+    BLUE="$(tput setaf 4)"
+    YELLOW="$(tput setaf 3)"
+    RED="$(tput setaf 1)"
+    CYAN="$(tput setaf 6)"
+else
+    RESET=""
+    BOLD=""
+    GREEN=""
+    BLUE=""
+    YELLOW=""
+    RED=""
+    CYAN=""
+fi
+
+msg() {
+    printf '%s\n' "$*" >&2
+}
+
+info() {
+    msg "${BLUE}==>${RESET} $*"
+}
+
+ok() {
+    msg "${GREEN}OK${RESET} $*"
+}
+
+warn() {
+    msg "${YELLOW}!${RESET} $*"
+}
+
+die() {
+    msg "${RED}ERROR${RESET} $*"
+    exit 1
+}
+
+run() {
+    if [ "$VERBOSE" != "0" ]; then
+        printf '%s+%s ' "$CYAN" "$RESET" >&2
+        printf '%q ' "$@"
+        printf '\n' >&2
+    fi
+    "$@"
+}
+
+have_command() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+can_write_parent() {
+    local parent_dir
+    parent_dir="$(dirname "$1")"
+    [ -w "$parent_dir" ]
+}
+
+can_install_directly() {
+    can_write_parent "$PREFIX" && can_write_parent "$BINDIR"
+}
+
+require_command() {
+    if ! have_command "$1"; then
+        die "missing required command: $1"
+    fi
+}
+
+run_build_install() {
+    local source_dir="$1"
+
+    if [ "$(id -u)" -eq 0 ] || can_install_directly; then
+        run env PREFIX="$PREFIX" BINDIR="$BINDIR" bash "$source_dir/build.sh" install
+    elif have_command sudo; then
+        warn "Using sudo for system install"
+        run sudo env PREFIX="$PREFIX" BINDIR="$BINDIR" bash "$source_dir/build.sh" install
+    else
+        die "root access is required to install into $PREFIX and $BINDIR"
+    fi
+}
+
+local_checkout_available() {
+    [ -f "./build.sh" ] && [ -d "./libs" ] && [ -d "./nativelibs" ]
+}
+
+install_from_checkout() {
+    info "Installing from local checkout"
+    run_build_install "."
+}
+
+download_source() {
+    local tmp_dir="$1"
+    local archive_path="$tmp_dir/rdn.tar.gz"
+    local source_dir="$tmp_dir/src"
+
+    mkdir -p "$source_dir"
+    info "Downloading ${REPO_URL} (${BRANCH})"
+    if [ "$VERBOSE" != "0" ]; then
+        run curl -fL# "$ARCHIVE_URL" -o "$archive_path"
+    else
+        run curl -fsSL "$ARCHIVE_URL" -o "$archive_path"
+    fi
+
+    info "Extracting source archive"
+    run tar -xzf "$archive_path" -C "$source_dir" --strip-components=1
+    printf '%s\n' "$source_dir"
+}
+
+install_from_archive() {
+    local tmp_dir
+    local source_dir
+
+    tmp_dir="$(mktemp -d)"
+    trap 'rm -rf "$tmp_dir"' EXIT INT TERM
+
+    source_dir="$(download_source "$tmp_dir")"
+    info "Installing from downloaded source"
+    run_build_install "$source_dir"
+}
+
+print_banner() {
+    msg "${BOLD}${GREEN}Raden Installer${RESET}"
+    msg "${CYAN}repo:${RESET} ${REPO_URL}"
+    msg "${CYAN}prefix:${RESET} ${PREFIX}"
+    msg "${CYAN}bindir:${RESET} ${BINDIR}"
+    msg "${CYAN}branch:${RESET} ${BRANCH}"
+}
+
+main() {
+    print_banner
+    require_command curl
+    require_command tar
+
+    if [ "$FORCE_DOWNLOAD" != "1" ] && local_checkout_available; then
+        install_from_checkout
+    else
+        install_from_archive
+    fi
+
+    ok "Raden installed successfully"
+    msg "Try: ${BOLD}rdn --version${RESET}"
+}
+
+main "$@"
