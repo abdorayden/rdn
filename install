@@ -1,6 +1,6 @@
-#!/usr/bin/env bash
+#!/bin/sh
 
-set -euo pipefail
+set -eu
 
 REPO_OWNER="abdorayden"
 REPO_NAME="rdn"
@@ -81,10 +81,32 @@ die() {
 run() {
     if [ "$VERBOSE" != "0" ]; then
         printf '%s+%s ' "$CYAN" "$RESET" >&2
-        printf '%q ' "$@"
-        printf '\n' >&2
+        log_argv "$@"
     fi
     "$@"
+}
+
+quote_arg() {
+    case $1 in
+        *[!A-Za-z0-9_./:-]*|'')
+            printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+            ;;
+        *)
+            printf '%s' "$1"
+            ;;
+    esac
+}
+
+log_argv() {
+    first=1
+    for arg in "$@"; do
+        if [ "$first" -eq 0 ]; then
+            printf ' ' >&2
+        fi
+        quote_arg "$arg" >&2
+        first=0
+    done
+    printf '\n' >&2
 }
 
 have_command() {
@@ -92,7 +114,6 @@ have_command() {
 }
 
 can_write_parent() {
-    local parent_dir
     parent_dir="$(dirname "$1")"
     [ -w "$parent_dir" ]
 }
@@ -108,7 +129,7 @@ require_command() {
 }
 
 run_build_install() {
-    local source_dir="$1"
+    source_dir="$1"
 
     if [ "$(id -u)" -eq 0 ] || can_install_directly; then
         run env PREFIX="$PREFIX" BINDIR="$BINDIR" bash "$source_dir/build.sh" install
@@ -130,9 +151,9 @@ install_from_checkout() {
 }
 
 download_source() {
-    local tmp_dir="$1"
-    local archive_path="$tmp_dir/rdn.tar.gz"
-    local source_dir="$tmp_dir/src"
+    tmp_dir="$1"
+    archive_path="$tmp_dir/rdn.tar.gz"
+    source_dir="$tmp_dir/src"
 
     mkdir -p "$source_dir"
     info "Downloading ${REPO_URL} (${BRANCH})"
@@ -148,11 +169,8 @@ download_source() {
 }
 
 install_from_archive() {
-    local tmp_dir
-    local source_dir
-
     tmp_dir="$(mktemp -d)"
-    trap 'rm -rf "$tmp_dir"' EXIT INT TERM
+    trap 'rm -rf "$tmp_dir"' 0 1 2 15
 
     source_dir="$(download_source "$tmp_dir")"
     info "Installing from downloaded source"
