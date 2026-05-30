@@ -17,6 +17,7 @@ REPO_URL="${REPO_URL:-$DEFAULT_REPO_URL}"
 ARCHIVE_URL="${ARCHIVE_URL:-https://codeload.github.com/${REPO_OWNER}/${REPO_NAME}/tar.gz/refs/heads/${BRANCH}}"
 VERBOSE="${VERBOSE:-1}"
 FORCE_DOWNLOAD="${FORCE_DOWNLOAD:-0}"
+TMP_DIR=""
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
     cat <<EOF
@@ -168,11 +169,17 @@ download_source() {
     printf '%s\n' "$source_dir"
 }
 
-install_from_archive() {
-    tmp_dir="$(mktemp -d)"
-    trap 'rm -rf "$tmp_dir"' 0 1 2 15
+cleanup() {
+    if [ -n "$TMP_DIR" ] && [ -d "$TMP_DIR" ]; then
+        rm -rf "$TMP_DIR"
+    fi
+}
 
-    source_dir="$(download_source "$tmp_dir")"
+install_from_archive() {
+    TMP_DIR="$(mktemp -d)"
+    trap cleanup 0 1 2 15
+
+    source_dir="$(download_source "$TMP_DIR")"
     info "Installing from downloaded source"
     run_build_install "$source_dir"
 }
