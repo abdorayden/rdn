@@ -240,12 +240,13 @@
 
 <nav class="sidebar" id="sidebar">
   <div class="sidebar-header">
-    <img src="../../assets/rdn.png" alt="Raden logo" style="width:160px;display:block;margin:0 auto 8px">
+    <img src="https://raw.githubusercontent.com/abdorayden/rdn/refs/heads/master/assets/rdn.png" alt="Raden logo" style="width:160px;display:block;margin:0 auto 8px">
     <h1><span>λ</span> Raden</h1>
     <div class="tagline">stack-based scripting language</div>
   </div>
   <div class="sidebar-search">
-    <input type="text" id="search" placeholder="Search docs..." oninput="searchDocs(this.value)">
+    <input type="text" id="search" placeholder="Search docs..." oninput="searchDocs(this.value)" autocomplete="off" autocorrect="off" spellcheck="false">
+    <div id="searchCount" style="font-size:.75em;color:var(--text2);margin-top:4px;min-height:1.2em"></div>
   </div>
   <div class="sidebar-nav" id="nav">
     <div class="nav-section">Getting Started</div>
@@ -315,7 +316,7 @@
 <!-- ============ INTRODUCTION ============ -->
 <section class="section" id="intro">
 <div class="intro-banner">
-  <img src="../../assets/rdn.png" alt="Raden logo" style="width:480px;display:block;margin:0 auto 16px;max-width:100%">
+  <img src="https://raw.githubusercontent.com/abdorayden/rdn/refs/heads/master/assets/rdn.png" alt="Raden logo" style="width:480px;display:block;margin:0 auto 16px;max-width:100%">
   <h2>Raden</h2>
   <p>A small stack-based scripting language with a C interpreter and native module API. Postfix syntax, first-class functions, and seamless C integration.</p>
   <pre style="margin-top:16px"><code><span style="color:var(--accent2)"># hello.rdn</span>
@@ -1307,46 +1308,126 @@ echo 0 > test/expected/my_test.status  <span style="color:var(--text2)"># expect
 </div>
 
 <script>
-function searchDocs(query) {
-  const sections = document.querySelectorAll('.section');
-  const empty = document.getElementById('searchEmpty');
-  const term = document.getElementById('searchTerm');
-  let found = false;
+let searchMatchCount = 0;
 
-  query = query.toLowerCase().trim();
-
-  sections.forEach(section => {
-    if (!query) {
-      section.classList.remove('hidden');
-      return;
+function highlightText(node, query) {
+  if (node.nodeType === 3) {
+    const idx = node.textContent.toLowerCase().indexOf(query);
+    if (idx === -1) return false;
+    const frag = document.createDocumentFragment();
+    const before = node.textContent.slice(0, idx);
+    const match = node.textContent.slice(idx, idx + query.length);
+    const after = node.textContent.slice(idx + query.length);
+    if (before) frag.appendChild(document.createTextNode(before));
+    const mark = document.createElement('mark');
+    mark.className = 'search-highlight';
+    mark.textContent = match;
+    frag.appendChild(mark);
+    if (after) frag.appendChild(document.createTextNode(after));
+    node.parentNode.replaceChild(frag, node);
+    return true;
+  }
+  if (node.nodeType === 1 && node.tagName !== 'SCRIPT' && node.tagName !== 'STYLE' && node.tagName !== 'MARK') {
+    let changed = false;
+    const children = Array.from(node.childNodes);
+    for (let i = 0; i < children.length; i++) {
+      if (highlightText(children[i], query)) changed = true;
     }
+    return changed;
+  }
+  return false;
+}
 
+function removeHighlights(root) {
+  root.querySelectorAll('mark.search-highlight').forEach(m => {
+    m.parentNode.replaceChild(document.createTextNode(m.textContent), m);
+  });
+}
+
+function searchDocs(query) {
+  const main = document.getElementById('main');
+  const sections = main.querySelectorAll(':scope > .section');
+  const navLinks = document.querySelectorAll('.sidebar-nav a');
+  const empty = document.getElementById('searchEmpty');
+  const counter = document.getElementById('searchCount');
+
+  removeHighlights(main);
+
+  query = query.trim().toLowerCase();
+  if (!query) {
+    sections.forEach(s => s.classList.remove('hidden'));
+    navLinks.forEach(a => a.style.display = '');
+    document.querySelectorAll('.nav-section').forEach(n => n.style.display = '');
+    empty.style.display = 'none';
+    if (counter) counter.textContent = '';
+    return;
+  }
+
+  let totalMatches = 0;
+  let firstMatch = null;
+
+  sections.forEach((section, idx) => {
     const text = section.textContent.toLowerCase();
     const match = text.includes(query);
-
     if (match) {
       section.classList.remove('hidden');
-      found = true;
+      highlightText(section, query);
+      totalMatches++;
+      if (!firstMatch) firstMatch = section;
     } else {
       section.classList.add('hidden');
     }
   });
 
-  if (query && !found) {
+  // Filter sidebar nav links
+  navLinks.forEach(a => {
+    const href = a.getAttribute('href');
+    if (!href || href.startsWith('http')) return;
+    const target = document.getElementById(href.slice(1));
+    if (target && !target.classList.contains('hidden')) {
+      a.style.display = '';
+    } else {
+      a.style.display = 'none';
+    }
+  });
+
+  // Show/hide nav-section headers based on visible children
+  document.querySelectorAll('.nav-section').forEach(ns => {
+    let sibling = ns.nextElementSibling;
+    while (sibling && sibling.tagName === 'A') {
+      if (sibling.style.display !== 'none') { ns.style.display = ''; return; }
+      sibling = sibling.nextElementSibling;
+    }
+    ns.style.display = 'none';
+  });
+
+  if (totalMatches === 0) {
     empty.style.display = 'block';
-    term.textContent = query;
+    document.getElementById('searchTerm').textContent = query;
   } else {
     empty.style.display = 'none';
+    if (firstMatch) firstMatch.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
+
+  if (counter) counter.textContent = totalMatches + ' section' + (totalMatches !== 1 ? 's' : '');
+  searchMatchCount = totalMatches;
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  const searchInput = document.getElementById('search');
   const links = document.querySelectorAll('.sidebar-nav a[href^="#"]');
   links.forEach(link => {
     link.addEventListener('click', () => {
-      document.getElementById('search').value = '';
+      searchInput.value = '';
       searchDocs('');
     });
+  });
+  searchInput.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      searchInput.value = '';
+      searchDocs('');
+      searchInput.blur();
+    }
   });
 });
 </script>

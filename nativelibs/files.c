@@ -9,6 +9,9 @@
  * Exports:
  * - readLines(path) -> list of strings
  * - readText(path) -> string
+ * - openfd(mode, path) -> file handle
+ * - readfd(file handle, byte count) -> string
+ * - writefd(file handle, text) -> true
  * - writeLines(path, lines) -> true
  * - appendLines(path, lines) -> true
  * - writeText(path, text) -> true
@@ -27,11 +30,185 @@
 
 #include "../include/rdn_native.h"
 
+#include <stdbool.h>
+#include <stdint.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+
+/*
+ *  "r" "file.txt" open call
+ * */
+static bool openfd(RDNApi* api) {
+    const char *filepath = NULL;
+    const char *mode = NULL;
+    FILE *fdrdn = NULL;
+
+    if (api->stack_size(api) < 2) {
+        api->push_null(api);
+        return api->raise_error(api, "openfd requires 2 params");
+    }
+
+    if (api->type(api, -2) != RDN_VALUE_STRING || api->type(api, -1) != RDN_VALUE_STRING) {
+        api->push_null(api);
+        return api->raise_error(api, "openfd requires string mode and string path");
+    }
+
+    mode = api->to_string(api, -2);
+    filepath = api->to_string(api, -1);
+    if (mode == NULL || filepath == NULL) {
+        api->push_null(api);
+        return api->raise_error(api, "openfd requires string mode and string path");
+    }
+
+    fdrdn = fopen(filepath, mode);
+    if (fdrdn == NULL) {
+        char message[512];
+        snprintf(message, sizeof(message), "openfd failed to open '%s': %s", filepath, strerror(errno));
+        api->push_null(api);
+        return api->raise_error(api, message);
+    }
+
+    if (!api->pop(api, 2)) {
+        fclose(fdrdn);
+        api->push_null(api);
+        return false;
+    }
+
+    return api->push_integer(api, (long)(intptr_t)fdrdn);
+}
+
+/*
+ *  fds 10 read call
+ * */
+static bool readfd(RDNApi* api) {
+    long byteread = 0;
+    long handle = 0;
+    FILE *fdrdn = NULL;
+    char *buffer = NULL;
+    size_t bytes_read = 0;
+    size_t request = 0;
+    bool ok = false;
+
+    if (api->stack_size(api) < 2) {
+        api->push_null(api);
+        return api->raise_error(api, "readfd requires 2 params");
+    }
+
+    if (!api->to_integer(api, -2, &handle)) {
+        api->push_null(api);
+        return api->raise_error(api, "readfd requires file handle and byte count");
+    }
+
+    if (!api->to_integer(api, -1, &byteread)) {
+        api->push_null(api);
+        return api->raise_error(api, "readfd requires file handle and byte count");
+    }
+
+    if (byteread < 0) {
+        api->push_null(api);
+        return api->raise_error(api, "readfd requires non-negative byte count");
+    }
+
+    fdrdn = (FILE *)(intptr_t)handle;
+    if (fdrdn == NULL) {
+        api->push_null(api);
+        return api->raise_error(api, "readfd requires valid file handle");
+    }
+
+    request = (size_t)byteread;
+    buffer = malloc(request + 1);
+    if (buffer == NULL) {
+        api->push_null(api);
+        return api->raise_error(api, "readfd failed to allocate buffer");
+    }
+
+    bytes_read = fread(buffer, 1, request, fdrdn);
+    if (ferror(fdrdn)) {
+        free(buffer);
+        api->push_null(api);
+        return api->raise_error(api, "readfd failed to read from file");
+    }
+    buffer[bytes_read] = '\0';
+
+    if (!api->pop(api, 2)) {
+        free(buffer);
+        return false;
+    }
+
+    ok = api->push_string(api, buffer);
+    free(buffer);
+    return ok;
+}
+
+static bool writefd(RDNApi* api) {
+    long handle = 0;
+    const char *content = NULL;
+    FILE *fdrdn = NULL;
+    size_t content_len = 0;
+
+    if (api->stack_size(api) < 2) {
+        return api->raise_error(api, "writefd requires 2 params");
+    }
+
+    if (!api->to_integer(api, -2, &handle)) {
+        return api->raise_error(api, "writefd requires file handle and string content");
+    }
+
+    if (api->type(api, -1) != RDN_VALUE_STRING) {
+        return api->raise_error(api, "writefd requires file handle and string content");
+    }
+
+    content = api->to_string(api, -1);
+    if (content == NULL) {
+        return api->raise_error(api, "writefd requires file handle and string content");
+    }
+
+    fdrdn = (FILE *)(intptr_t)handle;
+    if (fdrdn == NULL) {
+        return api->raise_error(api, "writefd requires valid file handle");
+    }
+
+    content_len = strlen(content);
+    if (content_len > 0 && fwrite(content, 1, content_len, fdrdn) != content_len) {
+        char message[512];
+        snprintf(message, sizeof(message), "writefd failed to write: %s", strerror(errno));
+        return api->raise_error(api, message);
+    }
+
+    if (!api->pop(api, 2)) {
+        return false;
+    }
+
+    return api->push_boolean(api, true);
+}
+
+static bool closefd(RDNApi* api) {
+    if(api->stack_size(api) < 1) {
+        return api->raise_error(api, "closeHandle requires 1 params");
+    }
+
+    long handle = 0;
+    FILE *fdrdn = NULL;
+
+    if (!api->to_integer(api, -2, &handle)) {
+        api->push_boolean(api , false);
+        return api->raise_error(api, "closeHandle requires file handle");
+    }
+
+    fdrdn = (FILE *)(intptr_t)handle;
+
+    fclose(fdrdn);
+
+    if (!api->pop(api, 2)) {
+        return false;
+    }
+
+    api->push_boolean(api , true);
+    return true;
+}
 
 static bool readLines(RDNApi *api) {
     const char *filepath = NULL;
@@ -308,6 +485,18 @@ static bool appendText(RDNApi *api) {
 }
 
 bool rdn_module_init(RDNModule *module) {
+    if (!module->register_function(module, "openFileHandle", openfd)) {
+        return false;
+    }
+    if (!module->register_function(module, "readFromFileHandle", readfd)) {
+        return false;
+    }
+    if (!module->register_function(module, "writeFromFileHandle", writefd)) {
+        return false;
+    }
+    if (!module->register_function(module, "closeHandle", closefd)) {
+        return false;
+    }
     if (!module->register_function(module, "readLines", readLines)) {
         return false;
     }
