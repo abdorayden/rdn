@@ -104,7 +104,7 @@ range apply
     )
 end
 
-in apply 
+for apply 
     tha-list let
     fn let [* should return nothing *]
     0 i let
