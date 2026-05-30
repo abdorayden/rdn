@@ -1,5 +1,9 @@
 # Raden
 
+<p align="center">
+  <img src="./assets/rdn.png" alt="Raden logo" width="400">
+</p>
+
 Raden is a small stack-based scripting language.
 
 It is built around a simple value stack, a small interpreter written in C, and a native module API for extending the language from shared libraries.
