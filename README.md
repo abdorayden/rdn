@@ -1,7 +1,7 @@
 # Raden
 
 <p align="center">
-  <img src="./assets/rdn.png" alt="Raden logo" width="400">
+  <img src="./assets/rdn.png" alt="Raden logo">
 </p>
 
 Raden is a small stack-based scripting language.
