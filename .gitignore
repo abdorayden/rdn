@@ -1,3 +1,14 @@
 main.o
 main
 nativelibs/*.so
+snips.rdn
+snips1.rdn
+snips2.rdn
+snips3.rdn
+snips4.rdn
+snips5.rdn
+snips6.rdn
+snips7.rdn
+snips8.rdn
+snips9.rdn
+.nvimlog
