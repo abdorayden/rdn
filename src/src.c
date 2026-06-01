@@ -3021,6 +3021,26 @@ static bool identifier_is_name_target(char *cursor) {
     return false;
 }
 
+static bool apply_error(RDNState *stack, Vars *vars) {
+    Value *name_or_val = NULL;
+    if (stack->count < 1) {
+        return diagnostic_error_current("error keyword requires 1 operands");
+    }
+    name_or_val = ray_pop(stack);
+    if (name_or_val == NULL) {
+        return diagnostic_error_current("error keyword NULL value detected");
+    }
+
+    if (name_or_val->type == VALUE_AS_VAR) {
+        Vars_t* var = find_current_scope_var_entry(vars, name_or_val->as.string);
+        return diagnostic_error_current(var->var_value->as.string);
+    }
+
+    if (name_or_val->type == VALUE_STRING) {
+        return diagnostic_error_current(name_or_val->as.string);
+    }
+    return diagnostic_error_current("error keyword  requires variable name of type string or string literal");
+}
 static bool apply_unlet(RDNState *stack, Vars *vars) {
     Value *name = NULL;
     if (stack->count < 1) {
@@ -3470,6 +3490,13 @@ static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **curs
             continue;
         } else if (is_token(token, "unlet")) {
             if (!apply_unlet(stack, vars)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else if (is_token(token, "error")) {
+            if (!apply_error(stack, vars)) {
                 free(token);
                 return false;
             }
