@@ -49,7 +49,12 @@
 
 #define ray_clear(da) free((da)->items)
 
+#define ray_remove_idx(da, i)               \
+    do {                                             \
+        size_t j = (i);                              \
+        assert(j < (da)->count);                 \
+        (da)->items[j] = (da)->items[--(da)->count]; \
+    } while(0)
 // TODO: add foreach 
-// TODO: add remove 
 
 #endif // !STACK

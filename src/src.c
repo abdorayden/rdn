@@ -3012,13 +3012,46 @@ static bool identifier_is_name_target(char *cursor) {
 
     if (!is_string &&
         (is_token(next, "let") || is_token(next, "set") || is_token(next, "const") ||
-         is_token(next, "defun") || is_token(next, "apply") || is_token(next, "call"))) {
+         is_token(next, "defun") || is_token(next, "apply") || is_token(next, "call") || is_token(next, "unlet"))) {
         free(next);
         return true;
     }
 
     free(next);
     return false;
+}
+
+static bool apply_unlet(RDNState *stack, Vars *vars) {
+    Value *name = NULL;
+    if (stack->count < 1) {
+        return diagnostic_error_current("unlet requires 1 operands");
+    }
+
+    name = ray_pop(stack);
+
+    if (name == NULL) {
+        return diagnostic_error_current("unlet NULL value detected");
+    }
+
+    if (name->type != VALUE_AS_VAR) {
+        return diagnostic_error_current("unlet requires variable name");
+    }
+
+    int idx_to_remove = -1;
+    for(size_t i = 0 ; i < vars->count ; ++i) {
+        if (strcmp(vars->items[i]->var_name, name->as.string) == 0) {
+            idx_to_remove = (int)i;
+            break;
+        }
+    }
+
+    if (idx_to_remove == -1) {
+        return diagnostic_error_current("unlet variable is not idenrified");
+    }
+
+    ray_remove_idx(vars, idx_to_remove);
+
+    return true;
 }
 
 static bool apply_let(RDNState *stack, Vars *vars) {
@@ -3430,6 +3463,13 @@ static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **curs
             continue;
         } else if (is_token(token, "let")) {
             if (!apply_let(stack, vars)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else if (is_token(token, "unlet")) {
+            if (!apply_unlet(stack, vars)) {
                 free(token);
                 return false;
             }
