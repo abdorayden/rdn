@@ -3041,6 +3041,16 @@ static bool apply_error(RDNState *stack, Vars *vars) {
     }
     return diagnostic_error_current("error keyword  requires variable name of type string or string literal");
 }
+
+static bool apply_line_col(RDNState *stack) {
+    size_t line;
+    size_t column;
+    diagnostic_compute_location(NULL, &line, &column, NULL, NULL);
+    ray_append(stack, create_integer_value((long)column));
+    ray_append(stack, create_integer_value((long)line));
+    return true;
+}
+
 static bool apply_unlet(RDNState *stack, Vars *vars) {
     Value *name = NULL;
     if (stack->count < 1) {
@@ -3490,6 +3500,13 @@ static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **curs
             continue;
         } else if (is_token(token, "unlet")) {
             if (!apply_unlet(stack, vars)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else if (is_token(token, "__line_col")) {
+            if (!apply_line_col(stack)) {
                 free(token);
                 return false;
             }

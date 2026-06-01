@@ -209,6 +209,7 @@ static bool is_identifier_token(const char *token);
 static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char **cursor);
 static Value *parse_list_literal(char **cursor, Vars *vars, Funcs *funcs);
 static bool identifier_is_name_target(char *cursor);
+static bool apply_line_col(RDNState *stack);
 static bool apply_let(RDNState *stack, Vars *vars);
 static bool apply_unlet(RDNState *stack, Vars *vars);
 static bool apply_error(RDNState *stack, Vars *vars);
