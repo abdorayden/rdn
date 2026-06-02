@@ -1,1444 +1,2494 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Raden — stack-based scripting language</title>
-<style>
-  :root {
-    --bg: #0d1117;
-    --bg2: #161b22;
-    --bg3: #21262d;
-    --border: #30363d;
-    --text: #e6edf3;
-    --text2: #8b949e;
-    --accent: #58a6ff;
-    --accent2: #3fb950;
-    --accent3: #d29922;
-    --accent4: #f78166;
-    --code-bg: #1c2128;
-    --font: -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
-    --mono: "SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  html { scroll-behavior: smooth; }
-  body {
-    font-family: var(--font);
-    background: var(--bg);
-    color: var(--text);
-    line-height: 1.7;
-    display: flex;
-    min-height: 100vh;
-  }
-  a { color: var(--accent); text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  pre, code { font-family: var(--mono); }
-  code {
-    background: var(--code-bg);
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-size: .875em;
-  }
-  pre {
-    background: var(--code-bg);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 16px;
-    overflow-x: auto;
-    font-size: .85em;
-    line-height: 1.5;
-    margin: 12px 0;
-  }
-  pre code { background: none; padding: 0; border-radius: 0; }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    margin: 12px 0;
-    font-size: .9em;
-  }
-  th, td {
-    border: 1px solid var(--border);
-    padding: 8px 12px;
-    text-align: left;
-  }
-  th { background: var(--bg2); font-weight: 600; }
-  tr:nth-child(even) td { background: rgba(255,255,255,.02); }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Raden — stack-based scripting language</title>
+    <style>
+        :root {
+            --bg: #0d1117;
+            --bg2: #161b22;
+            --bg3: #21262d;
+            --border: #30363d;
+            --text: #e6edf3;
+            --text2: #8b949e;
+            --accent: #58a6ff;
+            --accent2: #3fb950;
+            --accent3: #d29922;
+            --accent4: #f78166;
+            --code-bg: #1c2128;
+            --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+        }
 
-  /* Sidebar */
-  .sidebar {
-    position: fixed;
-    top: 0; left: 0;
-    width: 280px;
-    height: 100vh;
-    background: var(--bg2);
-    border-right: 1px solid var(--border);
-    overflow-y: auto;
-    z-index: 100;
-    padding: 0;
-  }
-  .sidebar-header {
-    padding: 20px 16px 12px;
-    border-bottom: 1px solid var(--border);
-  }
-  .sidebar-header h1 {
-    font-size: 1.25em;
-    color: var(--text);
-  }
-  .sidebar-header h1 span { color: var(--accent2); }
-  .sidebar-header .tagline {
-    font-size: .8em;
-    color: var(--text2);
-    margin-top: 2px;
-  }
-  .sidebar-search {
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--border);
-  }
-  .sidebar-search input {
-    width: 100%;
-    padding: 8px 12px;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    color: var(--text);
-    font-size: .85em;
-    outline: none;
-    transition: border-color .15s;
-  }
-  .sidebar-search input:focus {
-    border-color: var(--accent);
-  }
-  .sidebar-search input::placeholder { color: var(--text2); }
-  .sidebar-nav { padding: 8px 0; }
-  .sidebar-nav .nav-section {
-    padding: 6px 16px;
-    font-size: .75em;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: .05em;
-    color: var(--text2);
-    margin-top: 8px;
-  }
-  .sidebar-nav a {
-    display: block;
-    padding: 5px 16px 5px 24px;
-    font-size: .875em;
-    color: var(--text2);
-    transition: color .15s, background .15s;
-    border-left: 2px solid transparent;
-  }
-  .sidebar-nav a:hover {
-    color: var(--text);
-    background: rgba(255,255,255,.03);
-    text-decoration: none;
-  }
-  .sidebar-nav a.active {
-    color: var(--accent);
-    border-left-color: var(--accent);
-    background: rgba(88,166,255,.06);
-  }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
 
-  /* Main */
-  .main {
-    margin-left: 280px;
-    flex: 1;
-    max-width: 900px;
-    padding: 40px 48px 80px;
-  }
-  .main h2 {
-    font-size: 1.75em;
-    margin: 40px 0 12px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid var(--border);
-  }
-  .main h3 {
-    font-size: 1.25em;
-    margin: 28px 0 10px;
-    color: var(--accent);
-  }
-  .main h4 {
-    font-size: 1.05em;
-    margin: 20px 0 8px;
-    color: var(--text);
-  }
-  .main p { margin: 8px 0 12px; }
-  .main ul, .main ol { margin: 8px 0 12px 24px; }
-  .main li { margin: 4px 0; }
+        html {
+            scroll-behavior: smooth;
+        }
 
-  .intro-banner {
-    background: linear-gradient(135deg, var(--bg2) 0%, #0d1b2a 100%);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 32px;
-    margin-bottom: 32px;
-  }
-  .intro-banner h2 {
-    border: none;
-    margin: 0 0 8px;
-    padding: 0;
-    font-size: 2em;
-  }
-  .intro-banner p { color: var(--text2); font-size: 1.1em; }
+        body {
+            font-family: var(--font);
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.7;
+            display: flex;
+            min-height: 100vh;
+        }
 
-  .badge {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: .75em;
-    font-weight: 600;
-    font-family: var(--mono);
-    background: var(--bg3);
-  }
-  .badge-builtin { color: var(--accent); }
-  .badge-lib { color: var(--accent2); }
-  .badge-native { color: var(--accent3); }
-  .badge-keyword { color: var(--accent4); }
+        a {
+            color: var(--accent);
+            text-decoration: none;
+        }
 
-  .sig {
-    font-family: var(--mono);
-    background: var(--code-bg);
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-size: .85em;
-    color: var(--accent3);
-  }
+        a:hover {
+            text-decoration: underline;
+        }
 
-  .search-highlight {
-    background: rgba(210,153,34,.25);
-    padding: 1px 3px;
-    border-radius: 3px;
-  }
+        pre,
+        code {
+            font-family: var(--mono);
+        }
 
-  .search-empty {
-    text-align: center;
-    padding: 60px 20px;
-    color: var(--text2);
-    display: none;
-    font-size: 1.1em;
-  }
+        code {
+            background: var(--code-bg);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: .875em;
+        }
 
-  .section { transition: opacity .15s; }
-  .section.hidden { display: none; }
+        pre {
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 16px;
+            overflow-x: auto;
+            font-size: .85em;
+            line-height: 1.5;
+            margin: 12px 0;
+        }
 
-  @media (max-width: 768px) {
-    body { flex-direction: column; }
-    .sidebar {
-      position: relative;
-      width: 100%;
-      height: auto;
-      border-right: none;
-      border-bottom: 1px solid var(--border);
-    }
-    .main {
-      margin-left: 0;
-      padding: 24px 20px 60px;
-    }
-  }
-</style>
+        pre code {
+            background: none;
+            padding: 0;
+            border-radius: 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 12px 0;
+            font-size: .9em;
+        }
+
+        th,
+        td {
+            border: 1px solid var(--border);
+            padding: 8px 12px;
+            text-align: left;
+        }
+
+        th {
+            background: var(--bg2);
+            font-weight: 600;
+        }
+
+        tr:nth-child(even) td {
+            background: rgba(255, 255, 255, .02);
+        }
+
+        /* Sidebar */
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 280px;
+            height: 100vh;
+            background: var(--bg2);
+            border-right: 1px solid var(--border);
+            overflow-y: auto;
+            z-index: 100;
+            padding: 0;
+        }
+
+        .sidebar-header {
+            padding: 20px 16px 12px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .sidebar-header h1 {
+            font-size: 1.25em;
+            color: var(--text);
+        }
+
+        .sidebar-header h1 span {
+            color: var(--accent2);
+        }
+
+        .sidebar-header .tagline {
+            font-size: .8em;
+            color: var(--text2);
+            margin-top: 2px;
+        }
+
+        .sidebar-search {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .sidebar-search input {
+            width: 100%;
+            padding: 8px 12px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: .85em;
+            outline: none;
+            transition: border-color .15s;
+        }
+
+        .sidebar-search input:focus {
+            border-color: var(--accent);
+        }
+
+        .sidebar-search input::placeholder {
+            color: var(--text2);
+        }
+
+        .sidebar-nav {
+            padding: 8px 0;
+        }
+
+        .sidebar-nav .nav-section {
+            padding: 6px 16px;
+            font-size: .75em;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            color: var(--text2);
+            margin-top: 8px;
+        }
+
+        .sidebar-nav a {
+            display: block;
+            padding: 5px 16px 5px 24px;
+            font-size: .875em;
+            color: var(--text2);
+            transition: color .15s, background .15s;
+            border-left: 2px solid transparent;
+        }
+
+        .sidebar-nav a:hover {
+            color: var(--text);
+            background: rgba(255, 255, 255, .03);
+            text-decoration: none;
+        }
+
+        .sidebar-nav a.active {
+            color: var(--accent);
+            border-left-color: var(--accent);
+            background: rgba(88, 166, 255, .06);
+        }
+
+        /* Main */
+        .main {
+            margin-left: 280px;
+            flex: 1;
+            max-width: 900px;
+            padding: 40px 48px 80px;
+        }
+
+        .main h2 {
+            font-size: 1.75em;
+            margin: 40px 0 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .main h3 {
+            font-size: 1.25em;
+            margin: 28px 0 10px;
+            color: var(--accent);
+        }
+
+        .main h4 {
+            font-size: 1.05em;
+            margin: 20px 0 8px;
+            color: var(--text);
+        }
+
+        .main p {
+            margin: 8px 0 12px;
+        }
+
+        .main ul,
+        .main ol {
+            margin: 8px 0 12px 24px;
+        }
+
+        .main li {
+            margin: 4px 0;
+        }
+
+        .intro-banner {
+            background: linear-gradient(135deg, var(--bg2) 0%, #0d1b2a 100%);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 32px;
+            margin-bottom: 32px;
+        }
+
+        .intro-banner h2 {
+            border: none;
+            margin: 0 0 8px;
+            padding: 0;
+            font-size: 2em;
+        }
+
+        .intro-banner p {
+            color: var(--text2);
+            font-size: 1.1em;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: .75em;
+            font-weight: 600;
+            font-family: var(--mono);
+            background: var(--bg3);
+        }
+
+        .badge-builtin {
+            color: var(--accent);
+        }
+
+        .badge-lib {
+            color: var(--accent2);
+        }
+
+        .badge-native {
+            color: var(--accent3);
+        }
+
+        .badge-keyword {
+            color: var(--accent4);
+        }
+
+        .sig {
+            font-family: var(--mono);
+            background: var(--code-bg);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: .85em;
+            color: var(--accent3);
+        }
+
+        .search-highlight {
+            background: rgba(210, 153, 34, .25);
+            padding: 1px 3px;
+            border-radius: 3px;
+        }
+
+        .search-empty {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text2);
+            display: none;
+            font-size: 1.1em;
+        }
+
+        .section {
+            transition: opacity .15s;
+        }
+
+        .section.hidden {
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                flex-direction: column;
+            }
+
+            .sidebar {
+                position: relative;
+                width: 100%;
+                height: auto;
+                border-right: none;
+                border-bottom: 1px solid var(--border);
+            }
+
+            .main {
+                margin-left: 0;
+                padding: 24px 20px 60px;
+            }
+        }
+    </style>
 </head>
+
 <body>
 
-<nav class="sidebar" id="sidebar">
-  <div class="sidebar-header">
-    <img src="https://raw.githubusercontent.com/abdorayden/rdn/refs/heads/master/assets/rdn.png" alt="Raden logo" style="width:160px;display:block;margin:0 auto 8px">
-    <h1><span>λ</span> Raden</h1>
-    <div class="tagline">stack-based scripting language</div>
-  </div>
-  <div class="sidebar-search">
-    <input type="text" id="search" placeholder="Search docs..." oninput="searchDocs(this.value)" autocomplete="off" autocorrect="off" spellcheck="false">
-    <div id="searchCount" style="font-size:.75em;color:var(--text2);margin-top:4px;min-height:1.2em"></div>
-  </div>
-  <div class="sidebar-nav" id="nav">
-    <div class="nav-section">Getting Started</div>
-    <a href="#intro">Introduction</a>
-    <a href="#quickstart">Quick Start</a>
-
-    <div class="nav-section">Language Reference</div>
-    <a href="#values">Values &amp; Types</a>
-    <a href="#operators">Operators</a>
-    <a href="#variables">Variables</a>
-    <a href="#functions">Functions</a>
-    <a href="#controlflow">Control Flow</a>
-    <a href="#builtins">Builtins</a>
-    <a href="#containers">Lists &amp; Strings</a>
-    <a href="#errorhandling">Error Handling</a>
-    <a href="#loading">Loading Code</a>
-
-    <div class="nav-section">Standard Library</div>
-    <a href="#lib-core">core</a>
-    <a href="#lib-lists">lists</a>
-    <a href="#lib-strings">strings</a>
-    <a href="#lib-io">io</a>
-    <a href="#lib-files">files</a>
-    <a href="#lib-math">math</a>
-    <a href="#lib-os">os</a>
-    <a href="#lib-unix">unix</a>
-    <a href="#lib-path">path</a>
-    <a href="#lib-process">process</a>
-    <a href="#lib-net">net</a>
-    <a href="#lib-json">json</a>
-    <a href="#lib-strconv">strconv</a>
-    <a href="#lib-flag">flag</a>
-
-    <div class="nav-section">Native Modules</div>
-    <a href="#native-files">files</a>
-    <a href="#native-io">io</a>
-    <a href="#native-json">json</a>
-    <a href="#native-math">math</a>
-    <a href="#native-net">net</a>
-    <a href="#native-path">path</a>
-    <a href="#native-process">process</a>
-    <a href="#native-strconv">strconv</a>
-    <a href="#native-strings">strings</a>
-    <a href="#native-syscall">syscall</a>
-    <a href="#native-unix">unix</a>
-
-    <div class="nav-section">Extending</div>
-    <a href="#embedding">Embedding API</a>
-    <a href="#nativemodules">Native Modules</a>
-
-    <div class="nav-section">Tooling</div>
-    <a href="#editor">Editor Support</a>
-    <a href="#tests">Test Suite</a>
-
-    <div class="nav-section" style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px;">Project</div>
-    <a href="https://github.com/abdorayden/rdn" target="_blank">GitHub</a>
-    <a href="https://github.com/abdorayden/rdn/issues" target="_blank">Issues</a>
-  </div>
-</nav>
-
-<div class="main" id="main">
-
-<div class="search-empty" id="searchEmpty">
-  No results found for <strong id="searchTerm"></strong>
-</div>
-
-<!-- ============ INTRODUCTION ============ -->
-<section class="section" id="intro">
-<div class="intro-banner">
-  <img src="https://raw.githubusercontent.com/abdorayden/rdn/refs/heads/master/assets/rdn.png" alt="Raden logo" style="width:480px;display:block;margin:0 auto 16px;max-width:100%">
-  <h2>Raden</h2>
-  <p>A small stack-based scripting language with a C interpreter and native module API. Postfix syntax, first-class functions, and seamless C integration.</p>
-  <pre style="margin-top:16px"><code><span style="color:var(--accent2)"># hello.rdn</span>
-"hello, world!\n" print</code></pre>
-</div>
-
-<h3>Philosophy</h3>
-<p>Raden is built around a simple value stack. Everything is a value on the stack — integers, doubles, strings, booleans, nulls, lists, and functions. Operations consume values from the stack and push results back. This keeps the language small, predictable, and easy to embed.</p>
-
-<h3>Features</h3>
-<ul>
-  <li><strong>Stack-based</strong> — postfix evaluation, minimal syntax</li>
-  <li><strong>First-class functions</strong> — named with <code>defun</code>, anonymous with <code>apply</code></li>
-  <li><strong>Protected calls</strong> — <code>pcall</code> catches errors without crashing</li>
-  <li><strong>Rich builtins</strong> — lists, strings, operators, containers</li>
-  <li><strong>Native module API</strong> — extend Raden in C via shared libraries</li>
-  <li><strong>Embeddable</strong> — single <code>rdn_main</code> entry point</li>
-  <li><strong>REPL</strong> — interactive prompt for experimentation</li>
-  <li><strong>14 standard libraries</strong> — files, math, strings, JSON, networking, and more</li>
-</ul>
-</section>
-
-<!-- ============ QUICK START ============ -->
-<section class="section" id="quickstart">
-<h2>Quick Start</h2>
-
-<h3>Install</h3>
-<p>Use the installer script to fetch, build, and install Raden automatically:</p>
-<pre><code>curl -fsSL https://raw.githubusercontent.com/abdorayden/rdn/master/install | sh
-
-# or from a cloned checkout
-./install</code></pre>
-<p>By default, libraries install to <code>/usr/local/share/rdn/libs</code> and native modules install to <code>/usr/local/share/rdn/nativelibs</code>.</p>
-
-<h3>Build</h3>
-<pre><code>git clone https://github.com/abdorayden/rdn.git
-cd rdn
-make
-./main script.rdn</code></pre>
-
-<h3>REPL</h3>
-<p>Run <code>./main</code> without arguments to enter the REPL:</p>
-<pre><code>$ ./main
-raden repl
-press Ctrl-D to exit
-RDN >> 2 3 + print</code></pre>
-
-<h3>Run a script</h3>
-<pre><code>$ cat hello.rdn
-"hello, world!\n" print
-
-$ ./main hello.rdn
-hello, world!</code></pre>
-
-<h3>Test suite</h3>
-<pre><code>bash test/run.sh</code></pre>
-
-<h3>Command-line flags</h3>
-<pre><code>./main --version      # print version and exit
-./main -v             # same
-./main script.rdn     # run script
-./main                # start REPL</code></pre>
-</section>
-
-<!-- ============ VALUES ============ -->
-<section class="section" id="values">
-<h2>Values &amp; Types</h2>
-<p>Raden has six value types. Values are pushed onto the stack, then operations consume them.</p>
-
-<table>
-<tr><th>Type</th><th>Syntax</th><th>Example</th></tr>
-<tr><td>Integer</td><td><code>123</code></td><td><code>42</code></td></tr>
-<tr><td>Double</td><td><code>123.456</code></td><td><code>3.14</code></td></tr>
-<tr><td>String</td><td><code>"..."</code></td><td><code>"hello"</code></td></tr>
-<tr><td>Boolean</td><td><code>true</code> / <code>false</code></td><td><code>true</code></td></tr>
-<tr><td>Null</td><td><code>null</code></td><td><code>null</code></td></tr>
-<tr><td>List</td><td><code>(...)</code></td><td><code>(1 2 "three")</code></td></tr>
-</table>
-
-<pre><code><span style="color:var(--text2)"># values</span>
-42
-3.14
-"hello"
-true
-null
-(1 2 3)
-
-<span style="color:var(--text2)"># inspect type</span>
-42 type print      <span style="color:var(--text2)"># integer</span>
-3.14 type print    <span style="color:var(--text2)"># double</span>
-"hi" type print    <span style="color:var(--text2)"># string</span></code></pre>
-
-<h3>String escapes</h3>
-<table>
-<tr><th>Escape</th><th>Meaning</th></tr>
-<tr><td><code>\n</code></td><td>newline</td></tr>
-<tr><td><code>\t</code></td><td>tab</td></tr>
-<tr><td><code>\"</code></td><td>double quote</td></tr>
-<tr><td><code>\\</code></td><td>backslash</td></tr>
-<tr><td><code>\e</code></td><td>escape</td></tr>
-</table>
-
-<h3>Comments</h3>
-<pre><code>[* this is a comment *]
-42 [* inline comment *] print</code></pre>
-</section>
-
-<!-- ============ OPERATORS ============ -->
-<section class="section" id="operators">
-<h2>Operators</h2>
-<p>Operators consume values from the stack and push results. They are postfix — operands first, operator second.</p>
-
-<h3>Arithmetic</h3>
-<table>
-<tr><th>Operator</th><th>Description</th><th>Example</th></tr>
-<tr><td><code>+</code></td><td>addition</td><td><code>2 3 +</code></td></tr>
-<tr><td><code>-</code></td><td>subtraction</td><td><code>5 3 -</code></td></tr>
-<tr><td><code>*</code></td><td>multiplication</td><td><code>4 5 *</code></td></tr>
-<tr><td><code>/</code></td><td>division</td><td><code>10 2 /</code></td></tr>
-</table>
-
-<h3>Comparison</h3>
-<table>
-<tr><th>Operator</th><th>Description</th></tr>
-<tr><td><code>=</code></td><td>equal</td></tr>
-<tr><td><code>!=</code></td><td>not equal</td></tr>
-<tr><td><code>&lt;</code></td><td>less than</td></tr>
-<tr><td><code>&gt;</code></td><td>greater than</td></tr>
-<tr><td><code>&lt;=</code></td><td>less or equal</td></tr>
-<tr><td><code>&gt;=</code></td><td>greater or equal</td></tr>
-</table>
-
-<h3>Boolean</h3>
-<table>
-<tr><th>Operator</th><th>Description</th></tr>
-<tr><td><code>!</code></td><td>logical NOT</td></tr>
-<tr><td><code>&amp;</code></td><td>logical AND (boolean) / bitwise AND (integer)</td></tr>
-<tr><td><code>|</code></td><td>logical OR (boolean) / bitwise OR (integer)</td></tr>
-</table>
-
-<h3>Bitwise</h3>
-<table>
-<tr><th>Operator</th><th>Description</th></tr>
-<tr><td><code>&lt;&lt;</code></td><td>left shift</td></tr>
-<tr><td><code>&gt;&gt;</code></td><td>right shift</td></tr>
-<tr><td><code>^</code></td><td>bitwise XOR</td></tr>
-</table>
-
-<pre><code><span style="color:var(--text2)"># arithmetic</span>
-2 3 + print      <span style="color:var(--text2)"># 5</span>
-10 3 - print     <span style="color:var(--text2)"># 7</span>
-4 5 * print      <span style="color:var(--text2)"># 20</span>
-
-<span style="color:var(--text2)"># comparison</span>
-5 3 &gt; print      <span style="color:var(--text2)"># true</span>
-"hi" "hi" = print <span style="color:var(--text2)"># true</span>
-
-<span style="color:var(--text2)"># boolean</span>
-true ! print     <span style="color:var(--text2)"># false</span>
-true false &amp; print <span style="color:var(--text2)"># false</span></code></pre>
-</section>
-
-<!-- ============ VARIABLES ============ -->
-<section class="section" id="variables">
-<h2>Variables</h2>
-
-<h3>let — bind a value</h3>
-<pre><code>10 x let
-x print           <span style="color:var(--text2)"># 10</span></code></pre>
-
-<h3>set — update an existing variable</h3>
-<pre><code>x 1 + x set
-x print           <span style="color:var(--text2)"># 11</span></code></pre>
-
-<h3>const — immutable binding</h3>
-<pre><code>100 limit const
-limit print       <span style="color:var(--text2)"># 100</span>
-limit 5 + const   <span style="color:var(--text2)"># error: limit already exists</span></code></pre>
-
-<h3>enum — auto-incrementing constants</h3>
-<pre><code>enum ONE const    <span style="color:var(--text2)"># ONE == 0</span>
-enum TWO const    <span style="color:var(--text2)"># TWO == 1</span>
-enum THREE const  <span style="color:var(--text2)"># THREE == 2</span>
-reset             <span style="color:var(--text2)"># reset back to 0</span></code></pre>
-
-<h3>Built-in environment variables</h3>
-<table>
-<tr><th>Variable</th><th>Value</th></tr>
-<tr><td><code>__host_os</code></td><td><code>"linux"</code>, <code>"macos"</code>, <code>"windows"</code>, etc.</td></tr>
-<tr><td><code>__sharedlib_ext</code></td><td><code>".so"</code>, <code>".dylib"</code>, <code>".dll"</code></td></tr>
-<tr><td><code>__argv</code></td><td>list of command-line arguments (script path first)</td></tr>
-</table>
-</section>
-
-<!-- ============ FUNCTIONS ============ -->
-<section class="section" id="functions">
-<h2>Functions</h2>
-
-<h3>defun — named functions</h3>
-<pre><code>double defun
-    2 *
-end
-
-5 double call print   <span style="color:var(--text2)"># 10</span></code></pre>
-
-<h3>apply — it's like functions but used as keyword it called without call keyword</h3>
-<pre><code>triple apply
-    3 *
-end
-
-4 triple print   <span style="color:var(--text2)"># 12</span>
-
-<h3>pcall — protected calls</h3>
-<pre><code>risky defun
-    null 0 index
-end
-
-risky pcall
-if
-    "success: " print print "\n" print
-else
-    "error: " print print "\n" print     <span style="color:var(--text2)"># this runs</span>
-end</code></pre>
-<p><code>pcall</code> calls a function and catches any error. On success the stack gets <code>[result, true]</code>. On error it gets <code>[error_string, false]</code> with no stderr output.</p>
-
-<h3>call — invoke by name</h3>
-<pre><code>"double" call call        <span style="color:var(--text2)"># looks up function by string name</span></code></pre>
-
-<h3>Function scope</h3>
-<p>Functions create a new variable scope. Variables defined inside are local unless they already exist in an outer scope (in which case <code>set</code> updates the outer binding).</p>
-
-<pre><code>counter defun
-    0 i let               <span style="color:var(--text2)"># local i</span>
-    i 1 + i set           <span style="color:var(--text2)"># update local</span>
-    i
-end
-
-counter call print        <span style="color:var(--text2)"># 1</span>
-counter call print        <span style="color:var(--text2)"># 1 (each call gets its own scope)</span></code></pre>
-</section>
-
-<!-- ============ CONTROL FLOW ============ -->
-<section class="section" id="controlflow">
-<h2>Control Flow</h2>
-
-<h3>if / else / end</h3>
-<pre><code>true if
-    "yes" print
-else
-    "no" print
-end</code></pre>
-
-<h3>loop / end</h3>
-<p>The loop body must leave a boolean on the stack to continue or stop:</p>
-<pre><code>0 i let
-i 5 &lt; cond let
-
-cond loop
-    i print "\n" print
-    i 1 + i set
-    i 5 &lt; cond set
-    cond
-end</code></pre>
-
-<h3>break / continue</h3>
-<pre><code>0 i let
-true loop
-    i 10 &gt; if break end
-    i 5 = if i 1 + i set continue end
-    i print "\n" print
-    i 1 + i set
-    true
-end</code></pre>
-
-<h3>exit</h3>
-<pre><code>0 exit       <span style="color:var(--text2)"># exit with status 0</span>
-1 exit       <span style="color:var(--text2)"># exit with status 1</span></code></pre>
-</section>
-
-<!-- ============ BUILTINS ============ -->
-<section class="section" id="builtins">
-<h2>Builtins</h2>
-
-<h3>Stack</h3>
-<table>
-<tr><th>Builtin</th><th>Signature</th><th>Description</th></tr>
-<tr><td><code>print</code></td><td><span class="sig">value -></span></td><td>Print value to stdout</td></tr>
-<tr><td><code>pop</code></td><td><span class="sig">value -></span></td><td>Pop and discard top of stack</td></tr>
-<tr><td><code>dup</code></td><td><span class="sig">value -> value value</span></td><td>Duplicate top of stack</td></tr>
-<tr><td><code>swap</code></td><td><span class="sig">a b -> b a</span></td><td>Swap top two values</td></tr>
-<tr><td><code>type</code></td><td><span class="sig">value -> string</span></td><td>Return type name as string</td></tr>
-<tr><td><code>to_string</code></td><td><span class="sig">value -> string</span></td><td>Convert value to string representation</td></tr>
-</table>
-
-<h3>Variables</h3>
-<table>
-<tr><td><code>let</code></td><td><span class="sig">value name -></span></td><td>Bind value to name (mutable)</td></tr>
-<tr><td><code>set</code></td><td><span class="sig">value name -></span></td><td>Update existing variable</td></tr>
-<tr><td><code>const</code></td><td><span class="sig">value name -></span></td><td>Bind value to name (immutable)</td></tr>
-<tr><td><code>enum</code></td><td><span class="sig">name -></span></td><td>Push next enum integer</td></tr>
-<tr><td><code>reset</code></td><td><span class="sig">-></span></td><td>Reset enum counter</td></tr>
-</table>
-
-<h3>Containers</h3>
-<table>
-<tr><td><code>index</code></td><td><span class="sig">target index -> value</span></td><td>Index into list or string</td></tr>
-<tr><td><code>append</code></td><td><span class="sig">target value -> target</span></td><td>Append to list or string (mutates var targets)</td></tr>
-<tr><td><code>remove</code></td><td><span class="sig">target index -> target</span></td><td>Remove item at index (mutates var targets)</td></tr>
-<tr><td><code>len</code></td><td><span class="sig">target -> integer</span></td><td>Length of list or string</td></tr>
-</table>
-
-<h3>Loading</h3>
-<table>
-<tr><td><code>load</code></td><td><span class="sig">path -></span></td><td>Execute a .rdn file (source-relative)</td></tr>
-<tr><td><code>loadnative</code></td><td><span class="sig">path -></span></td><td>Load a native shared library</td></tr>
-<tr><td><code>add_load_path</code></td><td><span class="sig">path -></span></td><td>Add a search path for <code>load</code></td></tr>
-<tr><td><code>add_native_path</code></td><td><span class="sig">path -></span></td><td>Add a search path for <code>loadnative</code></td></tr>
-</table>
-
-<h3>Functions</h3>
-<table>
-<tr><td><code>defun</code></td><td><span class="sig">name ... end -></span></td><td>Define a named function</td></tr>
-<tr><td><code>apply</code></td><td><span class="sig">name ... end -></span></td><td>Define an anonymous function</td></tr>
-<tr><td><code>call</code></td><td><span class="sig">name args... -> results...</span></td><td>Call a function by name</td></tr>
-<tr><td><code>pcall</code></td><td><span class="sig">name args... -> result true|error false</span></td><td>Protected call — catches errors</td></tr>
-</table>
-
-<h3>Control flow</h3>
-<table>
-<tr><td><code>if</code></td><td><span class="sig">cond true-body else? false-body? end -></span></td><td>Conditional execution</td></tr>
-<tr><td><code>loop</code></td><td><span class="sig">body... bool end -></span></td><td>Loop while body leaves true</td></tr>
-<tr><td><code>break</code></td><td><span class="sig">-></span></td><td>Exit enclosing loop</td></tr>
-<tr><td><code>continue</code></td><td><span class="sig">-></span></td><td>Skip to next loop iteration</td></tr>
-<tr><td><code>exit</code></td><td><span class="sig">status -></span></td><td>Exit program with status code</td></tr>
-</table>
-</section>
-
-<!-- ============ CONTAINERS ============ -->
-<section class="section" id="containers">
-<h2>Lists &amp; Strings</h2>
-
-<h3>Lists</h3>
-<pre><code>(1 2 3) print            <span style="color:var(--text2)"># (1 2 3)</span>
-
-<span style="color:var(--text2)"># index</span>
-(10 20 30) 1 index print <span style="color:var(--text2)"># 20</span>
-
-<span style="color:var(--text2)"># append</span>
-(1 2) 3 append print     <span style="color:var(--text2)"># (1 2 3)</span>
-
-<span style="color:var(--text2)"># remove</span>
-(1 2 3) 1 remove print   <span style="color:var(--text2)"># (1 3)</span>
-
-<span style="color:var(--text2)"># length</span>
-(1 2 3) len print        <span style="color:var(--text2)"># 3</span></code></pre>
-
-<h3>Strings</h3>
-<p>All sequence builtins work on strings too:</p>
-<pre><code>"hello" 1 index print    <span style="color:var(--text2)"># "e"</span>
-"hello" 1 remove print   <span style="color:var(--text2)"># "hllo"</span>
-"hi" len print           <span style="color:var(--text2)"># 2</span>
-
-<span style="color:var(--text2)"># append to string variable (mutates)</span>
-"hi" text let
-text "!" append
-text print               <span style="color:var(--text2)"># "hi!"</span></code></pre>
-
-<h3>Nesting</h3>
-<pre><code>(1 (2 3) 4) 1 index 0 index print   <span style="color:var(--text2)"># 2</span></code></pre>
-</section>
-
-<!-- ============ ERROR HANDLING ============ -->
-<section class="section" id="errorhandling">
-<h2>Error Handling</h2>
-
-<h3>pcall — protected call</h3>
-<p><code>pcall</code> invokes a function and catches any error that occurs during execution. It is the primary error-handling mechanism.</p>
-
-<table>
-<tr><th>Situation</th><th>Stack after pcall</th></tr>
-<tr><td>Success</td><td><code>... function_result true</code></td></tr>
-<tr><td>Error caught</td><td><code>... "error message" false</code></td></tr>
-</table>
-
-<pre><code>div defun
-    /      <span style="color:var(--text2)"># expects divisor and dividend on stack</span>
-end
-
-<span style="color:var(--text2)"># protected division</span>
-"div" pcall pop
-if
-    "result: " swap print "\n" print
-else
-    "error: " print "\n" print
-end</code></pre>
-
-<h3>Error messages include call traces</h3>
-<p>When a function calls another function and the inner one fails, the error message includes the full call chain:</p>
-<pre><code>inner defun null 0 index end
-outer defun inner call end
-
-"outer" pcall pop
-if else print "\n" print end
-<span style="color:var(--text2)"># prints: index requires list or string target</span>
-<span style="color:var(--text2)">#         while calling function 'inner'</span>
-<span style="color:var(--text2)">#         while calling function 'outer'</span></code></pre>
-
-<h3>Setup errors are not caught</h3>
-<p>Errors that happen <em>before</em> the function executes (e.g. missing function name) propagate normally and are not caught by pcall.</p>
-</section>
-
-<!-- ============ LOADING ============ -->
-<section class="section" id="loading">
-<h2>Loading Code</h2>
-
-<h3>load — Raden scripts</h3>
-<pre><code><span style="color:var(--text2)"># libs/math.rdn</span>
-"./libs/math.rdn" load
-4 sqrt call print</code></pre>
-<p>Paths are resolved relative to the currently running source file.</p>
-
-<h3>loadnative — shared libraries</h3>
-<pre><code>"../nativelibs/files.so" loadnative
-"./Makefile" readLines call print</code></pre>
-<p>Use <code>__sharedlib_ext</code> for cross-platform paths:</p>
-<pre><code>"../nativelibs/math" __sharedlib_ext to_string swap pop append loadnative</code></pre>
-
-<h3>Search paths</h3>
-<pre><code>"./my-libs" add_load_path
-"./my-natives" add_native_path</code></pre>
-</section>
-
-<!-- ============ LIBRARIES ============ -->
-<section class="section" id="lib-core">
-<h2>Standard Library — core</h2>
-<p><span class="badge badge-lib">libs/core.rdn</span>  Small aliases for core builtins and general-purpose helpers.</p>
-
-<h3>Operator aliases</h3>
-<table>
-<tr><th>Function</th><th>Wraps</th><th>Example</th></tr>
-<tr><td>not</td><td>!</td><td><code>true not call</code></td></tr>
-<tr><td>add, sub, mul, div</td><td>+ - * /</td><td><code>2 3 add call</code></td></tr>
-<tr><td>eq, neq, lt, gt, le, ge</td><td>= != &lt; &gt; &lt;= &gt;=</td><td><code>5 3 gt call</code></td></tr>
-<tr><td>and, or, xor</td><td>&amp; | ^</td><td><code>true false and call</code></td></tr>
-<tr><td>shl, shr</td><td>&lt;&lt; &gt;&gt;</td><td><code>4 1 shl call</code></td></tr>
-</table>
-
-<h3>Type predicates</h3>
-<table>
-<tr><td>is_null</td><td><code>null is_null call</code></td></tr>
-<tr><td>is_int</td><td><code>42 is_int call</code></td></tr>
-<tr><td>is_float</td><td><code>3.14 is_float call</code></td></tr>
-<tr><td>is_bool</td><td><code>true is_bool call</code></td></tr>
-<tr><td>is_str</td><td><code>"hi" is_str call</code></td></tr>
-<tr><td>is_list</td><td><code>(1 2) is_list call</code></td></tr>
-</table>
-
-<h3>Numeric helpers</h3>
-<table>
-<tr><td>inc, dec</td><td><code>5 inc call</code> → 6</td></tr>
-<tr><td>neg, abs</td><td><code>-3 abs call</code> → 3</td></tr>
-<tr><td>even, odd</td><td><code>4 even call</code> → true</td></tr>
-<tr><td>min, max</td><td><code>3 7 min call</code> → 3</td></tr>
-<tr><td>between</td><td><code>5 1 10 between call</code> → true</td></tr>
-<tr><td>clamp</td><td><code>15 0 10 clamp call</code> → 10</td></tr>
-</table>
-
-<h3>Functional</h3>
-<table>
-<tr><td>pipe</td><td><code>3 inc pipe call</code> → 4</td></tr>
-<tr><td>tap</td><td>call fn for side effects, return value</td></tr>
-<tr><td>select</td><td><code>true "a" "b" select call</code> → "a"</td></tr>
-<tr><td>when, unless</td><td>conditional transformation</td></tr>
-<tr><td>times</td><td><code>3 inc times call 0</code> → 3</td></tr>
-<tr><td>range</td><td><code>0 5 range call</code> → (0 1 2 3 4)</td></tr>
-<tr><td>in</td><td>iterate over list with callback</td></tr>
-</table>
-</section>
-
-<section class="section" id="lib-lists">
-<h2>Standard Library — lists</h2>
-<p><span class="badge badge-lib">libs/lists.rdn</span>  List-oriented helpers.</p>
-
-<table>
-<tr><th>Function</th><th>Signature</th><th>Description</th></tr>
-<tr><td>each / foreach / map</td><td><span class="sig">list callback -></span></td><td>Iterate with side effects</td></tr>
-<tr><td>collect</td><td><span class="sig">list callback -> list</span></td><td>Map — collect callback results</td></tr>
-<tr><td>filter</td><td><span class="sig">list callback -> list</span></td><td>Keep items where callback returns true</td></tr>
-<tr><td>reduce</td><td><span class="sig">list initial callback -> value</span></td><td>Fold left</td></tr>
-<tr><td>copy</td><td><span class="sig">list -> list</span></td><td>Clone list</td></tr>
-<tr><td>reverse</td><td><span class="sig">list -> list</span></td><td>Reversed clone</td></tr>
-<tr><td>concat</td><td><span class="sig">a b -> list</span></td><td>Concatenate two lists</td></tr>
-<tr><td>first / head</td><td><span class="sig">list -> value|null</span></td><td>First item</td></tr>
-<tr><td>last</td><td><span class="sig">list -> value|null</span></td><td>Last item</td></tr>
-<tr><td>tail / rest</td><td><span class="sig">list -> list</span></td><td>List without first item</td></tr>
-<tr><td>count</td><td><span class="sig">list -> integer</span></td><td>Length</td></tr>
-<tr><td>isEmpty</td><td><span class="sig">list -> boolean</span></td><td>Is the list empty?</td></tr>
-<tr><td>includes</td><td><span class="sig">list value -> boolean</span></td><td>Does it contain the value?</td></tr>
-<tr><td>any</td><td><span class="sig">list callback -> boolean</span></td><td>Any item matches?</td></tr>
-<tr><td>all</td><td><span class="sig">list callback -> boolean</span></td><td>All items match?</td></tr>
-<tr><td>shift</td><td><span class="sig">var -> value|null</span></td><td>Remove and return first (mutates var)</td></tr>
-<tr><td>popLast</td><td><span class="sig">var -> value|null</span></td><td>Remove and return last (mutates var)</td></tr>
-<tr><td>unpack</td><td><span class="sig">list -> values...</span></td><td>Push all items to stack</td></tr>
-<tr><td>insert</td><td><span class="sig">list index value -> list</span></td><td>Insert value at index</td></tr>
-</table>
-
-<pre><code><span style="color:var(--text2)"># each / collect / filter</span>
-(1 2 3) dup collect call print     <span style="color:var(--text2)"># (1 2 3)</span>
-(1 2 3) 2 &gt; filter call print     <span style="color:var(--text2)"># (3)</span>
-(1 2 3) 0 add reduce call print   <span style="color:var(--text2)"># 6</span>
-
-doubler defun 2 * end
-(1 2 3) doubler collect call print <span style="color:var(--text2)"># (2 4 6)</span></code></pre>
-</section>
-
-<section class="section" id="lib-strings">
-<h2>Standard Library — strings</h2>
-<p><span class="badge badge-lib">libs/strings.rdn</span>  String helpers. Also loads the native <code>strings</code> module.</p>
-
-<table>
-<tr><th>Function</th><th>Signature</th><th>Description</th></tr>
-<tr><td>concat</td><td><span class="sig">a b -> string</span></td><td>Concatenate two values as strings</td></tr>
-<tr><td>concatBy</td><td><span class="sig">a b sep -> string</span></td><td>Join with separator</td></tr>
-<tr><td>contains</td><td><span class="sig">text part -> boolean</span></td><td>Substring check</td></tr>
-<tr><td>hasPrefix</td><td><span class="sig">text prefix -> boolean</span></td><td>Prefix check</td></tr>
-<tr><td>hasSuffix</td><td><span class="sig">text suffix -> boolean</span></td><td>Suffix check</td></tr>
-<tr><td>trimSpace</td><td><span class="sig">text -> string</span></td><td>Trim whitespace</td></tr>
-<tr><td>split</td><td><span class="sig">text sep -> list</span></td><td>Split by separator</td></tr>
-<tr><td>replaceAll</td><td><span class="sig">text old new -> string</span></td><td>Replace all occurrences</td></tr>
-</table>
-</section>
-
-<section class="section" id="lib-io">
-<h2>Standard Library — io</h2>
-<p><span class="badge badge-lib">libs/io.rdn</span>  Input/output helpers.</p>
-
-<table>
-<tr><th>Function</th><th>Signature</th><th>Description</th></tr>
-<tr><td>readLine / readln</td><td><span class="sig">-> string|null</span></td><td>Read one line from stdin</td></tr>
-<tr><td>readAll</td><td><span class="sig">-> string</span></td><td>Read remaining stdin</td></tr>
-<tr><td>prompt</td><td><span class="sig">text -> string|null</span></td><td>Print prompt, then read line</td></tr>
-<tr><td>nl</td><td><span class="sig">-></span></td><td>Print newline</td></tr>
-<tr><td>println / say</td><td><span class="sig">value -></span></td><td>Print value then newline</td></tr>
-<tr><td>printAll</td><td><span class="sig">list -></span></td><td>Print all items</td></tr>
-<tr><td>printLines</td><td><span class="sig">list -></span></td><td>Print each item on its own line</td></tr>
-<tr><td>printJoin</td><td><span class="sig">list sep -></span></td><td>Print items joined by separator</td></tr>
-</table>
-</section>
-
-<section class="section" id="lib-files">
-<h2>Standard Library — files</h2>
-<p><span class="badge badge-lib">libs/files.rdn</span>  Text file operations.</p>
-
-<table>
-<tr><th>Function</th><th>Signature</th><th>Description</th></tr>
-<tr><td>readLines</td><td><span class="sig">path -> list</span></td><td>Read file lines</td></tr>
-<tr><td>writeLines</td><td><span class="sig">path list -> true</span></td><td>Write lines to file</td></tr>
-<tr><td>appendLines</td><td><span class="sig">path list -> true</span></td><td>Append lines to file</td></tr>
-<tr><td>readText</td><td><span class="sig">path -> string</span></td><td>Read entire file</td></tr>
-<tr><td>writeText</td><td><span class="sig">path text -> true</span></td><td>Write text to file</td></tr>
-<tr><td>appendText</td><td><span class="sig">path text -> true</span></td><td>Append text to file</td></tr>
-<tr><td>slurp</td><td><span class="sig">path -> string</span></td><td>Alias for readText</td></tr>
-<tr><td>spit</td><td><span class="sig">path text -> true</span></td><td>Alias for writeText</td></tr>
-</table>
-
-<pre><code>"./libs/files.rdn" load
-"./data.txt" readLines call lines let
-lines each call print</code></pre>
-</section>
-
-<section class="section" id="lib-math">
-<h2>Standard Library — math</h2>
-<p><span class="badge badge-lib">libs/math.rdn</span>  Math constants and functions.</p>
-
-<table>
-<tr><th>Function</th><th>Signature</th><th>Description</th></tr>
-<tr><td>sqrt</td><td><span class="sig">number -> double</span></td><td>Square root</td></tr>
-<tr><td>powf</td><td><span class="sig">base exp -> double</span></td><td>Power</td></tr>
-<tr><td>pow</td><td><span class="sig">base exp -> double</span></td><td>Power (alias)</td></tr>
-</table>
-
-<p><strong>Constants:</strong> M_E, M_LOG2E, M_LOG10E, M_LN2, M_LN10, M_PI, M_PI_2, M_PI_4, M_1_PI, M_2_PI, M_2_SQRTPI, M_SQRT2, M_SQRT1_2</p>
-
-<pre><code>"./libs/math.rdn" load
-4 sqrt call print      <span style="color:var(--text2)"># 2.0</span>
-2 8 pow call print     <span style="color:var(--text2)"># 256.0</span>
-M_PI print             <span style="color:var(--text2)"># 3.14159...</span></code></pre>
-</section>
-
-<section class="section" id="lib-os">
-<h2>Standard Library — os</h2>
-<p><span class="badge badge-lib">libs/os.rdn</span>  Operating system runtime helpers.</p>
-
-<table>
-<tr><th>Function</th><th>Signature</th><th>Description</th></tr>
-<tr><td>pid</td><td><span class="sig">-> integer</span></td><td>Current process ID</td></tr>
-<tr><td>env</td><td><span class="sig">name -> string|null</span></td><td>Environment variable lookup</td></tr>
-<tr><td>sleep</td><td><span class="sig">ms -> true</span></td><td>Sleep for milliseconds</td></tr>
-<tr><td>now</td><td><span class="sig">-> integer</span></td><td>Unix epoch seconds</td></tr>
-</table>
-</section>
-
-<section class="section" id="lib-unix">
-<h2>Standard Library — unix</h2>
-<p><span class="badge badge-lib">libs/unix.rdn</span>  Filesystem and working-directory helpers.</p>
-
-<table>
-<tr><th>Function</th><th>Signature</th><th>Description</th></tr>
-<tr><td>pwd</td><td><span class="sig">-> string</span></td><td>Current working directory</td></tr>
-<tr><td>exists</td><td><span class="sig">path -> boolean</span></td><td>Does path exist?</td></tr>
-<tr><td>mkdir</td><td><span class="sig">path -> true</span></td><td>Create directory</td></tr>
-<tr><td>rmPath</td><td><span class="sig">path -> true</span></td><td>Remove file or empty directory</td></tr>
-<tr><td>ls</td><td><span class="sig">path -> list</span></td><td>List directory entries</td></tr>
-</table>
-</section>
-
-<section class="section" id="lib-path">
-<h2>Standard Library — path</h2>
-<p><span class="badge badge-lib">libs/path.rdn</span>  Cross-platform path manipulation.</p>
-
-<table>
-<tr><th>Function</th><th>Signature</th><th>Description</th></tr>
-<tr><td>join</td><td><span class="sig">left right -> string</span></td><td>Join path components</td></tr>
-<tr><td>basename</td><td><span class="sig">path -> string</span></td><td>Final path component</td></tr>
-<tr><td>dirname</td><td><span class="sig">path -> string</span></td><td>Parent directory</td></tr>
-<tr><td>extname</td><td><span class="sig">path -> string|null</span></td><td>File extension (no dot)</td></tr>
-<tr><td>absolute</td><td><span class="sig">path -> boolean</span></td><td>Is path absolute?</td></tr>
-</table>
-</section>
-
-<section class="section" id="lib-process">
-<h2>Standard Library — process</h2>
-<p><span class="badge badge-lib">libs/process.rdn</span>  External command execution.</p>
-
-<table>
-<tr><th>Function</th><th>Signature</th><th>Description</th></tr>
-<tr><td>status</td><td><span class="sig">command -> integer</span></td><td>Run command, return exit status</td></tr>
-<tr><td>output</td><td><span class="sig">command -> string</span></td><td>Run command, capture stdout</td></tr>
-</table>
-</section>
-
-<section class="section" id="lib-net">
-<h2>Standard Library — net</h2>
-<p><span class="badge badge-lib">libs/net.rdn</span>  Networking utilities.</p>
-
-<table>
-<tr><th>Function</th><th>Signature</th><th>Description</th></tr>
-<tr><td>host</td><td><span class="sig">-> string</span></td><td>Local hostname</td></tr>
-<tr><td>encodeUrl</td><td><span class="sig">text -> string</span></td><td>Percent-encode a URL</td></tr>
-<tr><td>decodeUrl</td><td><span class="sig">text -> string</span></td><td>Percent-decode a URL</td></tr>
-</table>
-</section>
-
-<section class="section" id="lib-json">
-<h2>Standard Library — json</h2>
-<p><span class="badge badge-lib">libs/json.rdn</span>  JSON parsing and serialization.</p>
-
-<table>
-<tr><th>Function</th><th>Signature</th><th>Description</th></tr>
-<tr><td>parse</td><td><span class="sig">text -> value</span></td><td>Parse JSON — arrays become lists, objects become list of (key value) pairs</td></tr>
-<tr><td>stringify</td><td><span class="sig">value -> text</span></td><td>Serialize value to JSON</td></tr>
-</table>
-
-<pre><code>"./libs/json.rdn" load
-"[1, 2, 3]" parse call print   <span style="color:var(--text2)"># (1 2 3)</span>
-(1 2 3) stringify call print   <span style="color:var(--text2)"># [1,2,3]</span></code></pre>
-</section>
-
-<section class="section" id="lib-strconv">
-<h2>Standard Library — strconv</h2>
-<p><span class="badge badge-lib">libs/strconv.rdn</span>  String conversion utilities (Go-inspired).</p>
-
-<table>
-<tr><th>Function</th><th>Signature</th><th>Description</th></tr>
-<tr><td>atoi</td><td><span class="sig">text -> integer</span></td><td>Parse string as integer</td></tr>
-<tr><td>atof</td><td><span class="sig">text -> double</span></td><td>Parse string as float</td></tr>
-<tr><td>parseBool</td><td><span class="sig">text -> boolean</span></td><td>Parse "true"/"false"/"1"/"0"</td></tr>
-<tr><td>itoa</td><td><span class="sig">integer -> string</span></td><td>Format integer as string</td></tr>
-<tr><td>formatBool</td><td><span class="sig">boolean -> string</span></td><td>Format boolean as "true"/"false"</td></tr>
-</table>
-</section>
-
-<section class="section" id="lib-flag">
-<h2>Standard Library — flag</h2>
-<p><span class="badge badge-lib">libs/flag.rdn</span>  Command-line flag parser.</p>
-
-<pre><code>"./libs/flag.rdn" load
-"o" "output" true "output file" defun
-    output let
-    "writing to: " print output print "\n" print
-end addFlag call
-
-"v" "verbose" false "verbose output" defun
-    "verbose mode\n" print
-end addFlag call
-
-execute call
-positionals call each call print</code></pre>
-
-<table>
-<tr><th>Function</th><th>Description</th></tr>
-<tr><td>resetFlags</td><td>Clear state, reinstall -h/--help</td></tr>
-<tr><td>addFlag</td><td>short long takesValue description callback → register flag</td></tr>
-<tr><td>execute / executeOn</td><td>Run the parser</td></tr>
-<tr><td>positionals</td><td>Get positional arguments</td></tr>
-<tr><td>programName</td><td>Get program name</td></tr>
-<tr><td>printHelp</td><td>Print usage and flags</td></tr>
-</table>
-</section>
-
-<!-- ============ NATIVE MODULES ============ -->
-<section class="section" id="native-files">
-<h2>Native Module — files</h2>
-<p><span class="badge badge-native">nativelibs/files.c</span>  Text file I/O.</p>
-<table>
-<tr><th>Function</th><th>Signature</th></tr>
-<tr><td>readLines</td><td><span class="sig">path -> list of strings</span></td></tr>
-<tr><td>readText</td><td><span class="sig">path -> string</span></td></tr>
-<tr><td>writeLines</td><td><span class="sig">path list -> true</span></td></tr>
-<tr><td>appendLines</td><td><span class="sig">path list -> true</span></td></tr>
-<tr><td>writeText</td><td><span class="sig">path text -> true</span></td></tr>
-<tr><td>appendText</td><td><span class="sig">path text -> true</span></td></tr>
-</table>
-</section>
-
-<section class="section" id="native-io">
-<h2>Native Module — io</h2>
-<p><span class="badge badge-native">nativelibs/io.c</span>  Stdin reading.</p>
-<table>
-<tr><th>Function</th><th>Signature</th></tr>
-<tr><td>readLine</td><td><span class="sig">-> string or null</span></td></tr>
-<tr><td>readAllInput</td><td><span class="sig">-> string</span></td></tr>
-</table>
-</section>
-
-<section class="section" id="native-json">
-<h2>Native Module — json</h2>
-<p><span class="badge badge-native">nativelibs/json.c</span>  JSON parse/serialize.</p>
-<table>
-<tr><th>Function</th><th>Signature</th></tr>
-<tr><td>parseJson</td><td><span class="sig">text -> value</span></td></tr>
-<tr><td>stringifyJson</td><td><span class="sig">value -> text</span></td></tr>
-</table>
-</section>
-
-<section class="section" id="native-math">
-<h2>Native Module — math</h2>
-<p><span class="badge badge-native">nativelibs/math.c</span>  Math functions.</p>
-<table>
-<tr><th>Function</th><th>Signature</th></tr>
-<tr><td>powerOf</td><td><span class="sig">base exponent -> double</span></td></tr>
-<tr><td>sqrtOf</td><td><span class="sig">number -> double</span></td></tr>
-</table>
-</section>
-
-<section class="section" id="native-net">
-<h2>Native Module — net</h2>
-<p><span class="badge badge-native">nativelibs/net.c</span>  Network utilities.</p>
-<table>
-<tr><th>Function</th><th>Signature</th></tr>
-<tr><td>hostName</td><td><span class="sig">-> string</span></td></tr>
-<tr><td>urlEncode</td><td><span class="sig">text -> string</span></td></tr>
-<tr><td>urlDecode</td><td><span class="sig">text -> string</span></td></tr>
-</table>
-</section>
-
-<section class="section" id="native-path">
-<h2>Native Module — path</h2>
-<p><span class="badge badge-native">nativelibs/path.c</span>  Path manipulation.</p>
-<table>
-<tr><th>Function</th><th>Signature</th></tr>
-<tr><td>joinPath</td><td><span class="sig">left right -> string</span></td></tr>
-<tr><td>baseName</td><td><span class="sig">path -> string</span></td></tr>
-<tr><td>dirName</td><td><span class="sig">path -> string</span></td></tr>
-<tr><td>extName</td><td><span class="sig">path -> string or null</span></td></tr>
-<tr><td>isAbsolutePath</td><td><span class="sig">path -> boolean</span></td></tr>
-</table>
-</section>
-
-<section class="section" id="native-process">
-<h2>Native Module — process</h2>
-<p><span class="badge badge-native">nativelibs/process.c</span>  Command execution.</p>
-<table>
-<tr><th>Function</th><th>Signature</th></tr>
-<tr><td>execStatus</td><td><span class="sig">command -> integer</span></td></tr>
-<tr><td>execOutput</td><td><span class="sig">command -> string</span></td></tr>
-</table>
-</section>
-
-<section class="section" id="native-strconv">
-<h2>Native Module — strconv</h2>
-<p><span class="badge badge-native">nativelibs/strconv.c</span>  String conversion.</p>
-<table>
-<tr><th>Function</th><th>Signature</th></tr>
-<tr><td>atoi</td><td><span class="sig">text -> integer</span></td></tr>
-<tr><td>atof</td><td><span class="sig">text -> double</span></td></tr>
-<tr><td>parseBool</td><td><span class="sig">text -> boolean</span></td></tr>
-<tr><td>itoa</td><td><span class="sig">integer -> string</span></td></tr>
-<tr><td>formatBool</td><td><span class="sig">boolean -> string</span></td></tr>
-</table>
-</section>
-
-<section class="section" id="native-strings">
-<h2>Native Module — strings</h2>
-<p><span class="badge badge-native">nativelibs/strings.c</span>  String operations.</p>
-<table>
-<tr><th>Function</th><th>Signature</th></tr>
-<tr><td>strContains</td><td><span class="sig">text part -> boolean</span></td></tr>
-<tr><td>strHasPrefix</td><td><span class="sig">text prefix -> boolean</span></td></tr>
-<tr><td>strHasSuffix</td><td><span class="sig">text suffix -> boolean</span></td></tr>
-<tr><td>strTrimSpace</td><td><span class="sig">text -> string</span></td></tr>
-<tr><td>strSplit</td><td><span class="sig">text sep -> list</span></td></tr>
-<tr><td>strReplaceAll</td><td><span class="sig">text old new -> string</span></td></tr>
-</table>
-</section>
-
-<section class="section" id="native-syscall">
-<h2>Native Module — syscall</h2>
-<p><span class="badge badge-native">nativelibs/syscall.c</span>  System-level helpers.</p>
-<table>
-<tr><th>Function</th><th>Signature</th></tr>
-<tr><td>pid</td><td><span class="sig">-> integer</span></td></tr>
-<tr><td>getEnv</td><td><span class="sig">name -> string or null</span></td></tr>
-<tr><td>sleepMs</td><td><span class="sig">ms -> true</span></td></tr>
-<tr><td>epochTime</td><td><span class="sig">-> integer</span></td></tr>
-</table>
-</section>
-
-<section class="section" id="native-unix">
-<h2>Native Module — unix</h2>
-<p><span class="badge badge-native">nativelibs/unix.c</span>  Filesystem operations.</p>
-<table>
-<tr><th>Function</th><th>Signature</th></tr>
-<tr><td>cwd</td><td><span class="sig">-> string</span></td></tr>
-<tr><td>pathExists</td><td><span class="sig">path -> boolean</span></td></tr>
-<tr><td>makeDir</td><td><span class="sig">path -> true</span></td></tr>
-<tr><td>removePath</td><td><span class="sig">path -> true</span></td></tr>
-<tr><td>listDir</td><td><span class="sig">path -> list</span></td></tr>
-</table>
-</section>
-
-<!-- ============ EMBEDDING ============ -->
-<section class="section" id="embedding">
-<h2>Embedding API</h2>
-<p>Raden exposes a single entry point for embedding:</p>
-
-<pre><code><span style="color:var(--text2)">// embed.c</span>
-#include "./include/src.h"
-
-int main(void) {
-    char *argv[] = {
-        "host",
-        "./script.rdn",
-    };
-    return rdn_main(2, argv);
-}</code></pre>
-
-<h3>rdn_main</h3>
-<table>
-<tr><td><code>int rdn_main(int argc, char **argv)</code></td></tr>
-</table>
-<p>The first argument is the program name, the second is the script path. Returns <code>0</code> on success, <code>EXIT_FAILURE</code> on error. If <code>argc &lt; 2</code>, it starts the REPL.</p>
-
-<p>Current embedding notes:</p>
-<ul>
-  <li>The public embedding surface is minimal — <code>rdn_main</code> executes a file path</li>
-  <li>Native modules are loaded with <code>loadnative</code> at script runtime</li>
-  <li>Source-relative <code>load</code> and <code>loadnative</code> path resolution works in the embedded context</li>
-</ul>
-</section>
-
-<!-- ============ NATIVE MODULE API ============ -->
-<section class="section" id="nativemodules">
-<h2>Writing Native Modules</h2>
-<p>Native modules are shared libraries that register C functions callable from Raden. The public header is <code>include/rdn_native.h</code>.</p>
-
-<h3>Module entry point</h3>
-<p>Every native module must export:</p>
-<pre><code>bool rdn_module_init(RDNModule *module);</code></pre>
-
-<h3>Register functions</h3>
-<pre><code>static bool myFunc(RDNApi *api) {
-    <span style="color:var(--text2)">// ...</span>
-}
-
-bool rdn_module_init(RDNModule *module) {
-    return module->register_function(module, "myFunc", myFunc);
-}</code></pre>
-
-<h3>Stack API</h3>
-<table>
-<tr><th>Function</th><th>Description</th></tr>
-<tr><td><code>api->stack_size(api)</code></td><td>Number of items on the stack</td></tr>
-<tr><td><code>api->type(api, index)</code></td><td>Type of value at index (-1 = top)</td></tr>
-<tr><td><code>api->to_integer(api, index, &amp;out)</code></td><td>Get integer at index</td></tr>
-<tr><td><code>api->to_number(api, index, &amp;out)</code></td><td>Get double at index</td></tr>
-<tr><td><code>api->to_boolean(api, index, &amp;out)</code></td><td>Get boolean at index</td></tr>
-<tr><td><code>api->to_string(api, index)</code></td><td>Get string at index (const char*)</td></tr>
-<tr><td><code>api->pop(api, count)</code></td><td>Pop N items</td></tr>
-<tr><td><code>api->push_integer(api, value)</code></td><td>Push an integer</td></tr>
-<tr><td><code>api->push_number(api, value)</code></td><td>Push a double</td></tr>
-<tr><td><code>api->push_boolean(api, value)</code></td><td>Push a boolean</td></tr>
-<tr><td><code>api->push_string(api, value)</code></td><td>Push a string (copied)</td></tr>
-<tr><td><code>api->raise_error(api, message)</code></td><td>Raise an error (return false)</td></tr>
-</table>
-
-<h3>List API</h3>
-<table>
-<tr><th>Function</th><th>Description</th></tr>
-<tr><td><code>api->push_list(api)</code></td><td>Push an empty list</td></tr>
-<tr><td><code>api->list_len(api, index, &amp;len)</code></td><td>Get list length</td></tr>
-<tr><td><code>api->list_append(api, list_idx, value_idx)</code></td><td>Append (cloned) value to list</td></tr>
-<tr><td><code>api->list_index(api, list_idx, item_idx)</code></td><td>Push cloned item from list</td></tr>
-<tr><td><code>api->list_remove(api, list_idx, item_idx)</code></td><td>Remove item from list</td></tr>
-</table>
-
-<h3>Full example</h3>
-<pre><code><span style="color:var(--text2)">// nativelibs/example.c</span>
-#include "../include/rdn_native.h"
-
-static bool native_add(RDNApi *api) {
-    long left = 0, right = 0;
-
-    if (api->stack_size(api) &lt; 2)
-        return api->raise_error(api, "add requires 2 operands");
-
-    if (!api->to_integer(api, -2, &amp;left) ||
-        !api->to_integer(api, -1, &amp;right))
-        return api->raise_error(api, "add requires integers");
-
-    api->pop(api, 2);
-    return api->push_integer(api, left + right);
-}
-
-bool rdn_module_init(RDNModule *module) {
-    return module->register_function(module, "add", native_add);
-}</code></pre>
-
-<h3>Build a native module</h3>
-<pre><code>gcc -Wall -Wextra -Werror -ggdb -std=c11 -fPIC -shared \
-    mymodule.c -I. -o mymodule.so</code></pre>
-
-<h3>Load a native module</h3>
-<pre><code>"./mymodule.so" loadnative
-
-<span style="color:var(--text2)"># now call registered functions by name</span>
-3 4 add call print   <span style="color:var(--text2)"># 7</span></code></pre>
-</section>
-
-<!-- ============ EDITOR SUPPORT ============ -->
-<section class="section" id="editor">
-<h2>Editor Support</h2>
-
-<h3>Neovim</h3>
-<p>The repo includes a Neovim runtime package:</p>
-<pre><code>cp -r ./nvim/* ~/.config/nvim/</code></pre>
-<p>This provides:</p>
-<ul>
-  <li>File detection (<code>.rdn</code>)</li>
-  <li>Syntax highlighting</li>
-  <li>ftplugin defaults</li>
-  <li>Basic indent rules</li>
-</ul>
-
-<p>For LazyVim / lazy.nvim:</p>
-<pre><code>return {
-  {
-    dir = "/path/to/rdn/nvim",
-    name = "raden.nvim",
-    ft = "raden",
-  },
-}</code></pre>
-
-<h3>Treesitter</h3>
-<p>A starter Treesitter grammar scaffold is at <code>treesitter/raden/</code>.</p>
-</section>
-
-<!-- ============ TESTS ============ -->
-<section class="section" id="tests">
-<h2>Test Suite</h2>
-<p>Raden includes 50+ regression tests:</p>
-<pre><code>bash test/run.sh</code></pre>
-<p>Each test is a <code>.rdn</code> file in <code>test/</code> with expected output in <code>test/expected/</code>. The test runner compares stdout+stderr against the expected output and verifies the exit code.</p>
-
-<p>To add a new test:</p>
-<pre><code>touch test/my_test.rdn              <span style="color:var(--text2)"># your test script</span>
-touch test/expected/my_test.out     <span style="color:var(--text2)"># expected output</span>
-echo 0 > test/expected/my_test.status  <span style="color:var(--text2)"># expected exit code (optional)</span></code></pre>
-</section>
-
-<!-- ============ FOOTER ============ -->
-<div style="margin-top:60px;padding-top:20px;border-top:1px solid var(--border);color:var(--text2);font-size:.85em;text-align:center;">
-  Raden &mdash; MIT License &mdash;
-  <a href="https://github.com/abdorayden/rdn">GitHub</a>
-</div>
-
-</div>
-
-<script>
-let searchMatchCount = 0;
-
-function highlightText(node, query) {
-  if (node.nodeType === 3) {
-    const idx = node.textContent.toLowerCase().indexOf(query);
-    if (idx === -1) return false;
-    const frag = document.createDocumentFragment();
-    const before = node.textContent.slice(0, idx);
-    const match = node.textContent.slice(idx, idx + query.length);
-    const after = node.textContent.slice(idx + query.length);
-    if (before) frag.appendChild(document.createTextNode(before));
-    const mark = document.createElement('mark');
-    mark.className = 'search-highlight';
-    mark.textContent = match;
-    frag.appendChild(mark);
-    if (after) frag.appendChild(document.createTextNode(after));
-    node.parentNode.replaceChild(frag, node);
-    return true;
-  }
-  if (node.nodeType === 1 && node.tagName !== 'SCRIPT' && node.tagName !== 'STYLE' && node.tagName !== 'MARK') {
-    let changed = false;
-    const children = Array.from(node.childNodes);
-    for (let i = 0; i < children.length; i++) {
-      if (highlightText(children[i], query)) changed = true;
-    }
-    return changed;
-  }
-  return false;
-}
-
-function removeHighlights(root) {
-  root.querySelectorAll('mark.search-highlight').forEach(m => {
-    m.parentNode.replaceChild(document.createTextNode(m.textContent), m);
-  });
-}
-
-function searchDocs(query) {
-  const main = document.getElementById('main');
-  const sections = main.querySelectorAll(':scope > .section');
-  const navLinks = document.querySelectorAll('.sidebar-nav a');
-  const empty = document.getElementById('searchEmpty');
-  const counter = document.getElementById('searchCount');
-
-  removeHighlights(main);
-
-  query = query.trim().toLowerCase();
-  if (!query) {
-    sections.forEach(s => s.classList.remove('hidden'));
-    navLinks.forEach(a => a.style.display = '');
-    document.querySelectorAll('.nav-section').forEach(n => n.style.display = '');
-    empty.style.display = 'none';
-    if (counter) counter.textContent = '';
-    return;
-  }
-
-  let totalMatches = 0;
-  let firstMatch = null;
-
-  sections.forEach((section, idx) => {
-    const text = section.textContent.toLowerCase();
-    const match = text.includes(query);
-    if (match) {
-      section.classList.remove('hidden');
-      highlightText(section, query);
-      totalMatches++;
-      if (!firstMatch) firstMatch = section;
-    } else {
-      section.classList.add('hidden');
-    }
-  });
-
-  // Filter sidebar nav links
-  navLinks.forEach(a => {
-    const href = a.getAttribute('href');
-    if (!href || href.startsWith('http')) return;
-    const target = document.getElementById(href.slice(1));
-    if (target && !target.classList.contains('hidden')) {
-      a.style.display = '';
-    } else {
-      a.style.display = 'none';
-    }
-  });
-
-  // Show/hide nav-section headers based on visible children
-  document.querySelectorAll('.nav-section').forEach(ns => {
-    let sibling = ns.nextElementSibling;
-    while (sibling && sibling.tagName === 'A') {
-      if (sibling.style.display !== 'none') { ns.style.display = ''; return; }
-      sibling = sibling.nextElementSibling;
-    }
-    ns.style.display = 'none';
-  });
-
-  if (totalMatches === 0) {
-    empty.style.display = 'block';
-    document.getElementById('searchTerm').textContent = query;
-  } else {
-    empty.style.display = 'none';
-    if (firstMatch) firstMatch.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-
-  if (counter) counter.textContent = totalMatches + ' section' + (totalMatches !== 1 ? 's' : '');
-  searchMatchCount = totalMatches;
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-  const searchInput = document.getElementById('search');
-  const links = document.querySelectorAll('.sidebar-nav a[href^="#"]');
-  links.forEach(link => {
-    link.addEventListener('click', () => {
-      searchInput.value = '';
-      searchDocs('');
-    });
-  });
-  searchInput.addEventListener('keydown', e => {
-    if (e.key === 'Escape') {
-      searchInput.value = '';
-      searchDocs('');
-      searchInput.blur();
-    }
-  });
-});
-</script>
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <img src="https://raw.githubusercontent.com/abdorayden/rdn/refs/heads/master/assets/rdn.png"
+                alt="Raden logo" style="width:160px;display:block;margin:0 auto 8px">
+            <h1><span>λ</span> Raden</h1>
+            <div class="tagline">stack-based scripting language</div>
+        </div>
+        <div class="sidebar-search">
+            <input type="text" id="search" placeholder="Search docs..." oninput="searchDocs(this.value)"
+                autocomplete="off" autocorrect="off" spellcheck="false">
+            <div id="searchCount" style="font-size:.75em;color:var(--text2);margin-top:4px;min-height:1.2em"></div>
+        </div>
+        <div class="sidebar-nav" id="nav">
+            <div class="nav-section">Getting Started</div>
+            <a href="#intro">Introduction</a>
+            <a href="#quickstart">Quick Start</a>
+
+            <div class="nav-section">Language Reference</div>
+            <a href="#values">Values &amp; Types</a>
+            <a href="#operators">Operators</a>
+            <a href="#variables">Variables</a>
+            <a href="#functions">Functions</a>
+            <a href="#controlflow">Control Flow</a>
+            <a href="#builtins">Builtins</a>
+            <a href="#containers">Lists &amp; Strings</a>
+            <a href="#errorhandling">Error Handling</a>
+            <a href="#loading">Loading Code</a>
+
+            <div class="nav-section">Standard Library</div>
+            <a href="#lib-core">core</a>
+            <a href="#lib-lists">lists</a>
+            <a href="#lib-strings">strings</a>
+            <a href="#lib-io">io</a>
+            <a href="#lib-files">files</a>
+            <a href="#lib-math">math</a>
+            <a href="#lib-os">os</a>
+            <a href="#lib-unix">unix</a>
+            <a href="#lib-path">path</a>
+            <a href="#lib-process">process</a>
+            <a href="#lib-net">net</a>
+            <a href="#lib-json">json</a>
+            <a href="#lib-strconv">strconv</a>
+            <a href="#lib-flag">flag</a>
+
+            <div class="nav-section">Native Modules</div>
+            <a href="#native-files">files</a>
+            <a href="#native-io">io</a>
+            <a href="#native-json">json</a>
+            <a href="#native-math">math</a>
+            <a href="#native-net">net</a>
+            <a href="#native-path">path</a>
+            <a href="#native-process">process</a>
+            <a href="#native-strconv">strconv</a>
+            <a href="#native-strings">strings</a>
+            <a href="#native-syscall">syscall</a>
+            <a href="#native-unix">unix</a>
+
+            <div class="nav-section">Extending</div>
+            <a href="#embedding">Embedding API</a>
+            <a href="#nativemodules">Native Modules</a>
+
+            <div class="nav-section">Tooling</div>
+            <a href="#editor">Editor Support</a>
+            <a href="#tests">Test Suite</a>
+
+            <div class="nav-section" style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px;">
+                Project</div>
+            <a href="https://github.com/abdorayden/rdn" target="_blank">GitHub</a>
+            <a href="https://github.com/abdorayden/rdn/issues" target="_blank">Issues</a>
+        </div>
+    </nav>
+
+    <div class="main" id="main">
+
+        <div class="search-empty" id="searchEmpty">
+            No results found for <strong id="searchTerm"></strong>
+        </div>
+
+        <!-- ============ INTRODUCTION ============ -->
+        <section class="section" id="intro">
+            <div class="intro-banner">
+                <img src="https://raw.githubusercontent.com/abdorayden/rdn/refs/heads/master/assets/rdn.png"
+                    alt="Raden logo" style="width:480px;display:block;margin:0 auto 16px;max-width:100%">
+                <h2>Raden</h2>
+                <p>A small stack-based scripting language with a C interpreter and native module API. Postfix syntax,
+                    first-class functions, and seamless C integration.</p>
+                <pre style="margin-top:16px"><code><span style="color:var(--accent2)"># hello.rdn</span>
+                        "hello, world!\n" print</code></pre>
+            </div>
+
+            <h3>Philosophy</h3>
+            <p>Raden is built around a simple value stack. Everything is a value on the stack — integers, doubles,
+                strings, booleans, nulls, lists, and functions. Operations consume values from the stack and push
+                results back. This keeps the language small, predictable, and easy to embed.</p>
+
+            <h3>Features</h3>
+            <ul>
+                <li><strong>Stack-based</strong> — postfix evaluation, minimal syntax</li>
+                <li><strong>First-class functions</strong> — named with <code>defun</code>, anonymous with
+                    <code>apply</code>
+                </li>
+                <li><strong>Protected calls</strong> — <code>pcall</code> catches errors without crashing</li>
+                <li><strong>Rich builtins</strong> — lists, strings, operators, containers</li>
+                <li><strong>Native module API</strong> — extend Raden in C via shared libraries</li>
+                <li><strong>Embeddable</strong> — single <code>rdn_main</code> entry point</li>
+                <li><strong>REPL</strong> — interactive prompt for experimentation</li>
+                <li><strong>14 standard libraries</strong> — files, math, strings, JSON, networking, and more</li>
+            </ul>
+        </section>
+
+        <!-- ============ QUICK START ============ -->
+        <section class="section" id="quickstart">
+            <h2>Quick Start</h2>
+
+            <h3>Install</h3>
+            <p>Use the installer script to fetch, build, and install Raden automatically:</p>
+            <pre><code>curl -fsSL https://raw.githubusercontent.com/abdorayden/rdn/master/install | sh
+
+                    # or from a cloned checkout
+                    ./install</code></pre>
+            <p>By default, libraries install to <code>/usr/local/share/rdn/libs</code> and native modules install to
+                <code>/usr/local/share/rdn/nativelibs</code>.
+            </p>
+
+            <h3>Build</h3>
+            <pre><code>git clone https://github.com/abdorayden/rdn.git
+                    cd rdn
+                    make
+                    ./main script.rdn</code></pre>
+
+            <h3>REPL</h3>
+            <p>Run <code>./main</code> without arguments to enter the REPL:</p>
+            <pre><code>$ ./main
+                    raden repl
+                    press Ctrl-D to exit
+                    RDN >> 2 3 + print</code></pre>
+
+            <h3>Run a script</h3>
+            <pre><code>$ cat hello.rdn
+                    "hello, world!\n" print
+
+                    $ ./main hello.rdn
+                    hello, world!</code></pre>
+
+            <h3>Test suite</h3>
+            <pre><code>bash test/run.sh</code></pre>
+
+            <h3>Command-line flags</h3>
+            <pre><code>./main --version # print version and exit
+                    ./main -v # same
+                    ./main script.rdn # run script
+                    ./main # start REPL</code></pre>
+        </section>
+
+        <!-- ============ VALUES ============ -->
+        <section class="section" id="values">
+            <h2>Values &amp; Types</h2>
+            <p>Raden has six value types. Values are pushed onto the stack, then operations consume them.</p>
+
+            <table>
+                <tr>
+                    <th>Type</th>
+                    <th>Syntax</th>
+                    <th>Example</th>
+                </tr>
+                <tr>
+                    <td>Integer</td>
+                    <td><code>123</code></td>
+                    <td><code>42</code></td>
+                </tr>
+                <tr>
+                    <td>Double</td>
+                    <td><code>123.456</code></td>
+                    <td><code>3.14</code></td>
+                </tr>
+                <tr>
+                    <td>String</td>
+                    <td><code>"..."</code></td>
+                    <td><code>"hello"</code></td>
+                </tr>
+                <tr>
+                    <td>Boolean</td>
+                    <td><code>true</code> / <code>false</code></td>
+                    <td><code>true</code></td>
+                </tr>
+                <tr>
+                    <td>Null</td>
+                    <td><code>null</code></td>
+                    <td><code>null</code></td>
+                </tr>
+                <tr>
+                    <td>List</td>
+                    <td><code>(...)</code></td>
+                    <td><code>(1 2 "three")</code></td>
+                </tr>
+            </table>
+
+            <pre><code><span style="color:var(--text2)">[*values*] </span>
+                    42
+                    3.14
+                    "hello"
+                    true
+                    null
+                    (1 2 3)
+
+                    <span style="color:var(--text2)">[*inspect type*] </span>
+                    42 type print <span style="color:var(--text2)">[*integer*] </span>
+                    3.14 type print <span style="color:var(--text2)">[*double*] </span>
+                    "hi" type print <span style="color:var(--text2)">[*string*] </span></code></pre>
+
+            <h3>String escapes</h3>
+            <table>
+                <tr>
+                    <th>Escape</th>
+                    <th>Meaning</th>
+                </tr>
+                <tr>
+                    <td><code>\n</code></td>
+                    <td>newline</td>
+                </tr>
+                <tr>
+                    <td><code>\t</code></td>
+                    <td>tab</td>
+                </tr>
+                <tr>
+                    <td><code>\"</code></td>
+                    <td>double quote</td>
+                </tr>
+                <tr>
+                    <td><code>\\</code></td>
+                    <td>backslash</td>
+                </tr>
+                <tr>
+                    <td><code>\e</code></td>
+                    <td>escape</td>
+                </tr>
+            </table>
+
+            <h3>Comments</h3>
+            <pre><code>[* this is a comment *]
+                    42 [* inline comment *] print</code></pre>
+        </section>
+
+        <!-- ============ OPERATORS ============ -->
+        <section class="section" id="operators">
+            <h2>Operators</h2>
+            <p>Operators consume values from the stack and push results. They are postfix — operands first, operator
+                second.</p>
+
+            <h3>Arithmetic</h3>
+            <table>
+                <tr>
+                    <th>Operator</th>
+                    <th>Description</th>
+                    <th>Example</th>
+                </tr>
+                <tr>
+                    <td><code>+</code></td>
+                    <td>addition</td>
+                    <td><code>2 3 +</code></td>
+                </tr>
+                <tr>
+                    <td><code>-</code></td>
+                    <td>subtraction</td>
+                    <td><code>5 3 -</code></td>
+                </tr>
+                <tr>
+                    <td><code>*</code></td>
+                    <td>multiplication</td>
+                    <td><code>4 5 *</code></td>
+                </tr>
+                <tr>
+                    <td><code>/</code></td>
+                    <td>division</td>
+                    <td><code>10 2 /</code></td>
+                </tr>
+            </table>
+
+            <h3>Comparison</h3>
+            <table>
+                <tr>
+                    <th>Operator</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><code>=</code></td>
+                    <td>equal</td>
+                </tr>
+                <tr>
+                    <td><code>!=</code></td>
+                    <td>not equal</td>
+                </tr>
+                <tr>
+                    <td><code>&lt;</code></td>
+                    <td>less than</td>
+                </tr>
+                <tr>
+                    <td><code>&gt;</code></td>
+                    <td>greater than</td>
+                </tr>
+                <tr>
+                    <td><code>&lt;=</code></td>
+                    <td>less or equal</td>
+                </tr>
+                <tr>
+                    <td><code>&gt;=</code></td>
+                    <td>greater or equal</td>
+                </tr>
+            </table>
+
+            <h3>Boolean</h3>
+            <table>
+                <tr>
+                    <th>Operator</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><code>!</code></td>
+                    <td>logical NOT</td>
+                </tr>
+                <tr>
+                    <td><code>&amp;</code></td>
+                    <td>logical AND (boolean) / bitwise AND (integer)</td>
+                </tr>
+                <tr>
+                    <td><code>|</code></td>
+                    <td>logical OR (boolean) / bitwise OR (integer)</td>
+                </tr>
+            </table>
+
+            <h3>Bitwise</h3>
+            <table>
+                <tr>
+                    <th>Operator</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><code>&lt;&lt;</code></td>
+                    <td>left shift</td>
+                </tr>
+                <tr>
+                    <td><code>&gt;&gt;</code></td>
+                    <td>right shift</td>
+                </tr>
+                <tr>
+                    <td><code>^</code></td>
+                    <td>bitwise XOR</td>
+                </tr>
+            </table>
+
+            <pre><code><span style="color:var(--text2)">[*arithmetic*] </span>
+                    2 3 + print <span style="color:var(--text2)">[*5*] </span>
+                    10 3 - print <span style="color:var(--text2)">[*7*] </span>
+                    4 5 * print <span style="color:var(--text2)">[*20*] </span>
+
+                    <span style="color:var(--text2)">[*comparison*] </span>
+                    5 3 &gt; print <span style="color:var(--text2)">[*true*] </span>
+                    "hi" "hi" = print <span style="color:var(--text2)">[*true*] </span>
+
+                    <span style="color:var(--text2)">[*boolean*] </span>
+                    true ! print <span style="color:var(--text2)">[*false*] </span>
+                    true false &amp; print <span style="color:var(--text2)">[*false*] </span></code></pre>
+        </section>
+
+        <!-- ============ VARIABLES ============ -->
+        <section class="section" id="variables">
+            <h2>Variables</h2>
+
+            <h3>let — bind a value</h3>
+            <pre><code>10 x let
+                    x print <span style="color:var(--text2)">[* 10*]</span></code></pre>
+
+            <h3>unlet — unbind a value it's like del in python</h3>
+            <pre><code>10 x let
+                    x unlet <span style="color:var(--text2)">[* stack is empty*]</span></code></pre>
+
+            <h3>set — update an existing variable</h3>
+            <pre><code>x 1 + x set
+                    x print <span style="color:var(--text2)">[* 11*]</span></code></pre>
+
+            <h3>const — immutable binding</h3>
+            <pre><code>100 limit const
+                    limit print <span style="color:var(--text2)">[* 100*]</span>
+                    limit 5 + const <span style="color:var(--text2)">[* error: limit already exists*]</span></code></pre>
+
+            <h3>enum — auto-incrementing constants</h3>
+            <pre><code>enum ONE const <span style="color:var(--text2)">[* ONE == 0*]</span>
+                    enum TWO const <span style="color:var(--text2)">[* TWO == 1*]</span>
+                    enum THREE const <span style="color:var(--text2)">[* THREE == 2*]</span>
+                    reset <span style="color:var(--text2)">[* reset back to 0*]</span></code></pre>
+
+            <h3>Built-in environment variables</h3>
+            <table>
+                <tr>
+                    <th>Variable</th>
+                    <th>Value</th>
+                </tr>
+                <tr>
+                    <td><code>__host_os</code></td>
+                    <td><code>"linux"</code>, <code>"macos"</code>, <code>"windows"</code>, etc.</td>
+                </tr>
+                <tr>
+                    <td><code>__sharedlib_ext</code></td>
+                    <td><code>".so"</code>, <code>".dylib"</code>, <code>".dll"</code></td>
+                </tr>
+                <tr>
+                    <td><code>__argv</code></td>
+                    <td>list of command-line arguments (script path first)</td>
+                </tr>
+                <tr>
+                    <td><code>__line_col</code></td>
+                    <td>push col and line of called variable into the stack</td>
+                </tr>
+            </table>
+        </section>
+
+        <!-- ============ FUNCTIONS ============ -->
+        <section class="section" id="functions">
+            <h2>Functions</h2>
+
+            <h3>defun — named functions</h3>
+            <pre><code>double defun
+                    2 *
+                    end
+
+                    5 double call print <span style="color:var(--text2)"> [*10*] </span></code></pre>
+
+            <h3>apply — it's like functions but used as keyword it called without call keyword</h3>
+            <pre><code>triple apply
+                    3 *
+                    end
+
+                    4 triple print <span style="color:var(--text2)"> [*12*] </span>
+
+             </code></pre>
+
+            <h3>pcall — protected calls</h3>
+            <pre><code>risky defun
+                    null 0 index
+                    end
+
+                    risky pcall
+                    if
+                    "success: " print print "\n" print
+                    else
+                    "error: " print print "\n" print <span style="color:var(--text2)">[*this runs*] </span>
+                    end</code></pre>
+            <p><code>pcall</code> calls a function and catches any error. On success the stack gets
+                <code>[result, true]</code>. On error it gets <code>[error_string, false]</code> with no stderr
+                output.
+            </p>
+
+            <h3>call — invoke by name</h3>
+            <pre><code>"double" call call <span style="color:var(--text2)">[*looks up function by string name*] </span></code></pre>
+
+            <h3>Function scope</h3>
+            <p>Functions create a new variable scope. Variables defined inside are local unless they already
+                exist in an outer scope (in which case <code>set</code> updates the outer binding).</p>
+
+            <pre><code>counter defun
+                    0 i let <span style="color:var(--text2)">[*local i*] </span>
+                    i 1 + i set <span style="color:var(--text2)">[*update local*] </span>
+                    i
+                    end
+
+                    counter call print <span style="color:var(--text2)">[*1*] </span>
+                    counter call print <span style="color:var(--text2)">[*1 (each call gets its own scope)*]</span></code></pre>
+        </section>
+
+        <!-- ============ CONTROL FLOW ============ -->
+        <section class="section" id="controlflow">
+            <h2>Control Flow</h2>
+
+            <h3>if / else / end</h3>
+            <pre><code>true if
+                    "yes" print
+                    else
+                    "no" print
+                    end</code></pre>
+
+            <h3>loop / end</h3>
+            <p>The loop body must leave a boolean on the stack to continue or stop:</p>
+            <pre><code>0 i let
+                    i 5 &lt; cond let
+
+                    cond loop
+                    i print "\n" print
+                    i 1 + i set
+                    i 5 &lt; cond set
+                    cond
+                    end</code></pre>
+
+            <h3>break / continue</h3>
+            <pre><code>0 i let
+                    true loop
+                    i 10 &gt; if break end
+                    i 5 = if i 1 + i set continue end
+                    i print "\n" print
+                    i 1 + i set
+                    true
+                    end</code></pre>
+
+            <h3>exit</h3>
+            <pre><code>0 exit <span style="color:var(--text2)">[* exit with status 0*]</span>
+                    1 exit <span style="color:var(--text2)">[* exit with status 1*]</span></code></pre>
+        </section>
+
+        <!-- ============ BUILTINS ============ -->
+        <section class="section" id="builtins">
+            <h2>Builtins</h2>
+
+            <h3>Stack</h3>
+            <table>
+                <tr>
+                    <th>Builtin</th>
+                    <th>Signature</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><code>print</code></td>
+                    <td><span class="sig">value -></span></td>
+                    <td>Print value to stdout</td>
+                </tr>
+                <tr>
+                    <td><code>pop</code></td>
+                    <td><span class="sig">value -></span></td>
+                    <td>Pop and discard top of stack</td>
+                </tr>
+                <tr>
+                    <td><code>dup</code></td>
+                    <td><span class="sig">value -> value value</span></td>
+                    <td>Duplicate top of stack</td>
+                </tr>
+                <tr>
+                    <td><code>swap</code></td>
+                    <td><span class="sig">a b -> b a</span></td>
+                    <td>Swap top two values</td>
+                </tr>
+                <tr>
+                    <td><code>type</code></td>
+                    <td><span class="sig">value -> string</span></td>
+                    <td>Return type name as string</td>
+                </tr>
+                <tr>
+                    <td><code>to_string</code></td>
+                    <td><span class="sig">value -> string</span></td>
+                    <td>Convert value to string representation</td>
+                </tr>
+            </table>
+
+            <h3>Variables</h3>
+            <table>
+                <tr>
+                    <td><code>let</code></td>
+                    <td><span class="sig">value name -></span></td>
+                    <td>Bind value to name (mutable)</td>
+                </tr>
+                <tr>
+                    <td><code>set</code></td>
+                    <td><span class="sig">value name -></span></td>
+                    <td>Update existing variable</td>
+                </tr>
+                <tr>
+                    <td><code>const</code></td>
+                    <td><span class="sig">value name -></span></td>
+                    <td>Bind value to name (immutable)</td>
+                </tr>
+                <tr>
+                    <td><code>enum</code></td>
+                    <td><span class="sig">name -></span></td>
+                    <td>Push next enum integer</td>
+                </tr>
+                <tr>
+                    <td><code>reset</code></td>
+                    <td><span class="sig">-></span></td>
+                    <td>Reset enum counter</td>
+                </tr>
+            </table>
+
+            <h3>Containers</h3>
+            <table>
+                <tr>
+                    <td><code>index</code></td>
+                    <td><span class="sig">target index -> value</span></td>
+                    <td>Index into list or string</td>
+                </tr>
+                <tr>
+                    <td><code>append</code></td>
+                    <td><span class="sig">target value -> target</span></td>
+                    <td>Append to list or string (mutates var targets)</td>
+                </tr>
+                <tr>
+                    <td><code>remove</code></td>
+                    <td><span class="sig">target index -> target</span></td>
+                    <td>Remove item at index (mutates var targets)</td>
+                </tr>
+                <tr>
+                    <td><code>len</code></td>
+                    <td><span class="sig">target -> integer</span></td>
+                    <td>Length of list or string</td>
+                </tr>
+            </table>
+
+            <h3>Loading</h3>
+            <table>
+                <tr>
+                    <td><code>load</code></td>
+                    <td><span class="sig">path -></span></td>
+                    <td>Execute a .rdn file (source-relative)</td>
+                </tr>
+                <tr>
+                    <td><code>loadnative</code></td>
+                    <td><span class="sig">path -></span></td>
+                    <td>Load a native shared library</td>
+                </tr>
+                <tr>
+                    <td><code>add_load_path</code></td>
+                    <td><span class="sig">path -></span></td>
+                    <td>Add a search path for <code>load</code></td>
+                </tr>
+                <tr>
+                    <td><code>add_native_path</code></td>
+                    <td><span class="sig">path -></span></td>
+                    <td>Add a search path for <code>loadnative</code></td>
+                </tr>
+            </table>
+
+            <h3>Functions</h3>
+            <table>
+                <tr>
+                    <td><code>defun</code></td>
+                    <td><span class="sig">name ... end -></span></td>
+                    <td>Define a named function</td>
+                </tr>
+                <tr>
+                    <td><code>apply</code></td>
+                    <td><span class="sig">name ... end -></span></td>
+                    <td>Define an anonymous function</td>
+                </tr>
+                <tr>
+                    <td><code>call</code></td>
+                    <td><span class="sig">name args... -> results...</span></td>
+                    <td>Call a function by name</td>
+                </tr>
+                <tr>
+                    <td><code>pcall</code></td>
+                    <td><span class="sig">name args... -> result true|error false</span></td>
+                    <td>Protected call — catches errors</td>
+                </tr>
+                <tr>
+                    <td><code>error</code></td>
+                    <td><span class="sig">str -> error</span></td>
+                    <td>declare an error by the interpreter</td>
+                </tr>
+            </table>
+
+            <h3>Control flow</h3>
+            <table>
+                <tr>
+                    <td><code>if</code></td>
+                    <td><span class="sig">cond true-body else? false-body? end -></span></td>
+                    <td>Conditional execution</td>
+                </tr>
+                <tr>
+                    <td><code>loop</code></td>
+                    <td><span class="sig">body... bool end -></span></td>
+                    <td>Loop while body leaves true</td>
+                </tr>
+                <tr>
+                    <td><code>break</code></td>
+                    <td><span class="sig">-></span></td>
+                    <td>Exit enclosing loop</td>
+                </tr>
+                <tr>
+                    <td><code>continue</code></td>
+                    <td><span class="sig">-></span></td>
+                    <td>Skip to next loop iteration</td>
+                </tr>
+                <tr>
+                    <td><code>exit</code></td>
+                    <td><span class="sig">status -></span></td>
+                    <td>Exit program with status code</td>
+                </tr>
+            </table>
+        </section>
+
+        <!-- ============ CONTAINERS ============ -->
+        <section class="section" id="containers">
+            <h2>Lists &amp; Strings</h2>
+
+            <h3>Lists</h3>
+            <pre><code>(1 2 3) print <span style="color:var(--text2)">[* (1 2 3)*]</span>
+
+                    <span style="color:var(--text2)">[* index*]</span>
+                    (10 20 30) 1 index print <span style="color:var(--text2)">[* 20*]</span>
+
+                    <span style="color:var(--text2)">[* append*]</span>
+                    (1 2) 3 append print <span style="color:var(--text2)">[* (1 2 3)*]</span>
+
+                    <span style="color:var(--text2)">[* remove*]</span>
+                    (1 2 3) 1 remove print <span style="color:var(--text2)">[* (1 3)*]</span>
+
+                    <span style="color:var(--text2)">[* length*]</span>
+                    (1 2 3) len print <span style="color:var(--text2)">[* 3*]</span></code></pre>
+
+            <h3>Strings</h3>
+            <p>All sequence builtins work on strings too:</p>
+            <pre><code>"hello" 1 index print <span style="color:var(--text2)">[* "e"*]</span>
+                    "hello" 1 remove print <span style="color:var(--text2)">[* "hllo"*]</span>
+                    "hi" len print <span style="color:var(--text2)">[* 2*]</span>
+
+                    <span style="color:var(--text2)">[* append to string variable (mutates)*]</span>
+                    "hi" text let
+                    text "!" append
+                    text print <span style="color:var(--text2)">[* "hi!"*]</span></code></pre>
+
+            <h3>Nesting</h3>
+            <pre><code>(1 (2 3) 4) 1 index 0 index print <span style="color:var(--text2)">[*2*]</span></code></pre>
+        </section>
+
+        <!-- ============ ERROR HANDLING ============ -->
+        <section class="section" id="errorhandling">
+            <h2>Error Handling</h2>
+
+            <h3>pcall — protected call</h3>
+            <p><code>pcall</code> invokes a function and catches any error that occurs during execution. It is the
+                primary error-handling mechanism.</p>
+
+            <table>
+                <tr>
+                    <th>Situation</th>
+                    <th>Stack after pcall</th>
+                </tr>
+                <tr>
+                    <td>Success</td>
+                    <td><code>... function_result true</code></td>
+                </tr>
+                <tr>
+                    <td>Error caught</td>
+                    <td><code>... "error message" false</code></td>
+                </tr>
+            </table>
+
+            <pre><code>div defun
+                    / <span style="color:var(--text2)">[* expects divisor and dividend on stack*]</span>
+                    end
+
+                    <span style="color:var(--text2)">[* protected division*]</span>
+                    "div" pcall pop
+                    if
+                    "result: " swap print "\n" print
+                    else
+                    "error: " print "\n" print
+                    end</code></pre>
+
+            <h3>Error messages include call traces</h3>
+            <p>When a function calls another function and the inner one fails, the error message includes the full call
+                chain:</p>
+            <pre><code>inner defun null 0 index end
+                    outer defun inner call end
+
+                    "outer" pcall pop
+                    if else print "\n" print end
+                    <span style="color:var(--text2)">[* prints: index requires list or string target*]</span>
+                    <span style="color:var(--text2)">[* while calling function 'inner'*]</span>
+                    <span style="color:var(--text2)">[* while calling function 'outer'*]</span></code></pre>
+
+            <h3>Setup errors are not caught</h3>
+            <p>Errors that happen <em>before</em> the function executes (e.g. missing function name) propagate normally
+                and are not caught by pcall.</p>
+        </section>
+
+        <!-- ============ LOADING ============ -->
+        <section class="section" id="loading">
+            <h2>Loading Code</h2>
+
+            <h3>load — Raden scripts</h3>
+            <pre><code><span style="color:var(--text2)">[*libs/math.rdn*]</span>
+                    "./libs/math.rdn" load
+                    4 sqrt call print</code></pre>
+            <p>Paths are resolved relative to the currently running source file.</p>
+
+            <h3>loadnative — shared libraries</h3>
+            <pre><code>"../nativelibs/files.so" loadnative
+                    "./Makefile" readLines call print</code></pre>
+            <p>Use <code>__sharedlib_ext</code> for cross-platform paths:</p>
+            <pre><code>"../nativelibs/math" __sharedlib_ext to_string swap pop append loadnative</code></pre>
+
+            <h3>Search paths</h3>
+            <pre><code>"./my-libs" add_load_path
+                    "./my-natives" add_native_path</code></pre>
+        </section>
+
+        <!-- ============ LIBRARIES ============ -->
+        <section class="section" id="lib-core">
+            <h2>Standard Library — core</h2>
+            <p><span class="badge badge-lib">libs/core.rdn</span> Small aliases for core builtins and general-purpose
+                helpers.</p>
+
+            <h3>Operator aliases</h3>
+            <table>
+                <tr>
+                    <th>Function</th>
+                    <th>Wraps</th>
+                    <th>Example</th>
+                </tr>
+                <tr>
+                    <td>not</td>
+                    <td>!</td>
+                    <td><code>true not call</code></td>
+                </tr>
+                <tr>
+                    <td>add, sub, mul, div</td>
+                    <td>+ - * /</td>
+                    <td><code>2 3 add call</code></td>
+                </tr>
+                <tr>
+                    <td>eq, neq, lt, gt, le, ge</td>
+                    <td>= != &lt; &gt; &lt;= &gt;=</td>
+                    <td><code>5 3 gt call</code></td>
+                </tr>
+                <tr>
+                    <td>and, or, xor</td>
+                    <td>&amp; | ^</td>
+                    <td><code>true false and call</code></td>
+                </tr>
+                <tr>
+                    <td>shl, shr</td>
+                    <td>&lt;&lt; &gt;&gt;</td>
+                    <td><code>4 1 shl call</code></td>
+                </tr>
+            </table>
+
+            <h3>Type predicates</h3>
+            <table>
+                <tr>
+                    <td>is_null</td>
+                    <td><code>null is_null call</code></td>
+                </tr>
+                <tr>
+                    <td>is_int</td>
+                    <td><code>42 is_int call</code></td>
+                </tr>
+                <tr>
+                    <td>is_float</td>
+                    <td><code>3.14 is_float call</code></td>
+                </tr>
+                <tr>
+                    <td>is_bool</td>
+                    <td><code>true is_bool call</code></td>
+                </tr>
+                <tr>
+                    <td>is_str</td>
+                    <td><code>"hi" is_str call</code></td>
+                </tr>
+                <tr>
+                    <td>is_list</td>
+                    <td><code>(1 2) is_list call</code></td>
+                </tr>
+            </table>
+
+            <h3>Numeric helpers</h3>
+            <table>
+                <tr>
+                    <td>inc, dec</td>
+                    <td><code>5 inc call</code> → 6</td>
+                </tr>
+                <tr>
+                    <td>neg, abs</td>
+                    <td><code>-3 abs call</code> → 3</td>
+                </tr>
+                <tr>
+                    <td>even, odd</td>
+                    <td><code>4 even call</code> → true</td>
+                </tr>
+                <tr>
+                    <td>min, max</td>
+                    <td><code>3 7 min call</code> → 3</td>
+                </tr>
+                <tr>
+                    <td>between</td>
+                    <td><code>5 1 10 between call</code> → true</td>
+                </tr>
+                <tr>
+                    <td>clamp</td>
+                    <td><code>15 0 10 clamp call</code> → 10</td>
+                </tr>
+            </table>
+
+            <h3>Functional</h3>
+            <table>
+                <tr>
+                    <td>pipe</td>
+                    <td><code>3 inc pipe call</code> → 4</td>
+                </tr>
+                <tr>
+                    <td>tap</td>
+                    <td>call fn for side effects, return value</td>
+                </tr>
+                <tr>
+                    <td>select</td>
+                    <td><code>true "a" "b" select call</code> → "a"</td>
+                </tr>
+                <tr>
+                    <td>when, unless</td>
+                    <td>conditional transformation</td>
+                </tr>
+                <tr>
+                    <td>times</td>
+                    <td><code>3 inc times call 0</code> → 3</td>
+                </tr>
+                <tr>
+                    <td>range</td>
+                    <td><code>0 5 range call</code> → (0 1 2 3 4)</td>
+                </tr>
+                <tr>
+                    <td>in</td>
+                    <td>iterate over list with callback</td>
+                </tr>
+            </table>
+        </section>
+
+        <section class="section" id="lib-lists">
+            <h2>Standard Library — lists</h2>
+            <p><span class="badge badge-lib">libs/lists.rdn</span> List-oriented helpers.</p>
+
+            <table>
+                <tr>
+                    <th>Function</th>
+                    <th>Signature</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td>each / foreach / map</td>
+                    <td><span class="sig">list callback -></span></td>
+                    <td>Iterate with side effects</td>
+                </tr>
+                <tr>
+                    <td>collect</td>
+                    <td><span class="sig">list callback -> list</span></td>
+                    <td>Map — collect callback results</td>
+                </tr>
+                <tr>
+                    <td>filter</td>
+                    <td><span class="sig">list callback -> list</span></td>
+                    <td>Keep items where callback returns true</td>
+                </tr>
+                <tr>
+                    <td>reduce</td>
+                    <td><span class="sig">list initial callback -> value</span></td>
+                    <td>Fold left</td>
+                </tr>
+                <tr>
+                    <td>copy</td>
+                    <td><span class="sig">list -> list</span></td>
+                    <td>Clone list</td>
+                </tr>
+                <tr>
+                    <td>reverse</td>
+                    <td><span class="sig">list -> list</span></td>
+                    <td>Reversed clone</td>
+                </tr>
+                <tr>
+                    <td>concat</td>
+                    <td><span class="sig">a b -> list</span></td>
+                    <td>Concatenate two lists</td>
+                </tr>
+                <tr>
+                    <td>first / head</td>
+                    <td><span class="sig">list -> value|null</span></td>
+                    <td>First item</td>
+                </tr>
+                <tr>
+                    <td>last</td>
+                    <td><span class="sig">list -> value|null</span></td>
+                    <td>Last item</td>
+                </tr>
+                <tr>
+                    <td>tail / rest</td>
+                    <td><span class="sig">list -> list</span></td>
+                    <td>List without first item</td>
+                </tr>
+                <tr>
+                    <td>count</td>
+                    <td><span class="sig">list -> integer</span></td>
+                    <td>Length</td>
+                </tr>
+                <tr>
+                    <td>isEmpty</td>
+                    <td><span class="sig">list -> boolean</span></td>
+                    <td>Is the list empty?</td>
+                </tr>
+                <tr>
+                    <td>includes</td>
+                    <td><span class="sig">list value -> boolean</span></td>
+                    <td>Does it contain the value?</td>
+                </tr>
+                <tr>
+                    <td>any</td>
+                    <td><span class="sig">list callback -> boolean</span></td>
+                    <td>Any item matches?</td>
+                </tr>
+                <tr>
+                    <td>all</td>
+                    <td><span class="sig">list callback -> boolean</span></td>
+                    <td>All items match?</td>
+                </tr>
+                <tr>
+                    <td>shift</td>
+                    <td><span class="sig">var -> value|null</span></td>
+                    <td>Remove and return first (mutates var)</td>
+                </tr>
+                <tr>
+                    <td>popLast</td>
+                    <td><span class="sig">var -> value|null</span></td>
+                    <td>Remove and return last (mutates var)</td>
+                </tr>
+                <tr>
+                    <td>unpack</td>
+                    <td><span class="sig">list -> values...</span></td>
+                    <td>Push all items to stack</td>
+                </tr>
+                <tr>
+                    <td>insert</td>
+                    <td><span class="sig">list index value -> list</span></td>
+                    <td>Insert value at index</td>
+                </tr>
+            </table>
+
+            <pre><code><span style="color:var(--text2)">[* each / collect / filter*]</span>
+                    (1 2 3) dup collect call print <span style="color:var(--text2)">[* (1 2 3)*]</span>
+                    (1 2 3) 2 &gt; filter call print <span style="color:var(--text2)">[* (3)*]</span>
+                    (1 2 3) 0 add reduce call print <span style="color:var(--text2)">[* 6*]</span>
+
+                    doubler defun 2 * end
+                    (1 2 3) doubler collect call print <span style="color:var(--text2)">[* (2 4 6)*]</span></code></pre>
+        </section>
+
+        <section class="section" id="lib-strings">
+            <h2>Standard Library — strings</h2>
+            <p><span class="badge badge-lib">libs/strings.rdn</span> String helpers. Also loads the native
+                <code>strings</code> module.
+            </p>
+
+            <table>
+                <tr>
+                    <th>Function</th>
+                    <th>Signature</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td>concat</td>
+                    <td><span class="sig">a b -> string</span></td>
+                    <td>Concatenate two values as strings</td>
+                </tr>
+                <tr>
+                    <td>concatBy</td>
+                    <td><span class="sig">a b sep -> string</span></td>
+                    <td>Join with separator</td>
+                </tr>
+                <tr>
+                    <td>contains</td>
+                    <td><span class="sig">text part -> boolean</span></td>
+                    <td>Substring check</td>
+                </tr>
+                <tr>
+                    <td>hasPrefix</td>
+                    <td><span class="sig">text prefix -> boolean</span></td>
+                    <td>Prefix check</td>
+                </tr>
+                <tr>
+                    <td>hasSuffix</td>
+                    <td><span class="sig">text suffix -> boolean</span></td>
+                    <td>Suffix check</td>
+                </tr>
+                <tr>
+                    <td>trimSpace</td>
+                    <td><span class="sig">text -> string</span></td>
+                    <td>Trim whitespace</td>
+                </tr>
+                <tr>
+                    <td>split</td>
+                    <td><span class="sig">text sep -> list</span></td>
+                    <td>Split by separator</td>
+                </tr>
+                <tr>
+                    <td>replaceAll</td>
+                    <td><span class="sig">text old new -> string</span></td>
+                    <td>Replace all occurrences</td>
+                </tr>
+            </table>
+        </section>
+
+        <section class="section" id="lib-io">
+            <h2>Standard Library — io</h2>
+            <p><span class="badge badge-lib">libs/io.rdn</span> Input/output helpers.</p>
+
+            <table>
+                <tr>
+                    <th>Function</th>
+                    <th>Signature</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td>readLine / readln</td>
+                    <td><span class="sig">-> string|null</span></td>
+                    <td>Read one line from stdin</td>
+                </tr>
+                <tr>
+                    <td>readAll</td>
+                    <td><span class="sig">-> string</span></td>
+                    <td>Read remaining stdin</td>
+                </tr>
+                <tr>
+                    <td>prompt</td>
+                    <td><span class="sig">text -> string|null</span></td>
+                    <td>Print prompt, then read line</td>
+                </tr>
+                <tr>
+                    <td>nl</td>
+                    <td><span class="sig">-></span></td>
+                    <td>Print newline</td>
+                </tr>
+                <tr>
+                    <td>println / say</td>
+                    <td><span class="sig">value -></span></td>
+                    <td>Print value then newline</td>
+                </tr>
+                <tr>
+                    <td>printAll</td>
+                    <td><span class="sig">list -></span></td>
+                    <td>Print all items</td>
+                </tr>
+                <tr>
+                    <td>printLines</td>
+                    <td><span class="sig">list -></span></td>
+                    <td>Print each item on its own line</td>
+                </tr>
+                <tr>
+                    <td>printJoin</td>
+                    <td><span class="sig">list sep -></span></td>
+                    <td>Print items joined by separator</td>
+                </tr>
+            </table>
+        </section>
+
+        <section class="section" id="lib-files">
+            <h2>Standard Library — files</h2>
+            <p><span class="badge badge-lib">libs/files.rdn</span> Text file operations.</p>
+
+            <table>
+                <tr>
+                    <th>Function</th>
+                    <th>Signature</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td>readLines</td>
+                    <td><span class="sig">path -> list</span></td>
+                    <td>Read file lines</td>
+                </tr>
+                <tr>
+                    <td>writeLines</td>
+                    <td><span class="sig">path list -> true</span></td>
+                    <td>Write lines to file</td>
+                </tr>
+                <tr>
+                    <td>appendLines</td>
+                    <td><span class="sig">path list -> true</span></td>
+                    <td>Append lines to file</td>
+                </tr>
+                <tr>
+                    <td>readText</td>
+                    <td><span class="sig">path -> string</span></td>
+                    <td>Read entire file</td>
+                </tr>
+                <tr>
+                    <td>writeText</td>
+                    <td><span class="sig">path text -> true</span></td>
+                    <td>Write text to file</td>
+                </tr>
+                <tr>
+                    <td>appendText</td>
+                    <td><span class="sig">path text -> true</span></td>
+                    <td>Append text to file</td>
+                </tr>
+                <tr>
+                    <td>slurp</td>
+                    <td><span class="sig">path -> string</span></td>
+                    <td>Alias for readText</td>
+                </tr>
+                <tr>
+                    <td>spit</td>
+                    <td><span class="sig">path text -> true</span></td>
+                    <td>Alias for writeText</td>
+                </tr>
+            </table>
+
+            <pre><code>"./libs/files.rdn" load
+                    "./data.txt" readLines call lines let
+                    lines each call print</code></pre>
+        </section>
+
+        <section class="section" id="lib-math">
+            <h2>Standard Library — math</h2>
+            <p><span class="badge badge-lib">libs/math.rdn</span> Math constants and functions.</p>
+
+            <table>
+                <tr>
+                    <th>Function</th>
+                    <th>Signature</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td>sqrt</td>
+                    <td><span class="sig">number -> double</span></td>
+                    <td>Square root</td>
+                </tr>
+                <tr>
+                    <td>powf</td>
+                    <td><span class="sig">base exp -> double</span></td>
+                    <td>Power</td>
+                </tr>
+                <tr>
+                    <td>pow</td>
+                    <td><span class="sig">base exp -> double</span></td>
+                    <td>Power (alias)</td>
+                </tr>
+            </table>
+
+            <p><strong>Constants:</strong> M_E, M_LOG2E, M_LOG10E, M_LN2, M_LN10, M_PI, M_PI_2, M_PI_4, M_1_PI, M_2_PI,
+                M_2_SQRTPI, M_SQRT2, M_SQRT1_2</p>
+
+            <pre><code>"./libs/math.rdn" load
+                    4 sqrt call print <span style="color:var(--text2)">[* 2.0*]</span>
+                    2 8 pow call print <span style="color:var(--text2)">[* 256.0*]</span>
+                    M_PI print <span style="color:var(--text2)">[* 3.14159...*]</span></code></pre>
+        </section>
+
+        <section class="section" id="lib-os">
+            <h2>Standard Library — os</h2>
+            <p><span class="badge badge-lib">libs/os.rdn</span> Operating system runtime helpers.</p>
+
+            <table>
+                <tr>
+                    <th>Function</th>
+                    <th>Signature</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td>pid</td>
+                    <td><span class="sig">-> integer</span></td>
+                    <td>Current process ID</td>
+                </tr>
+                <tr>
+                    <td>env</td>
+                    <td><span class="sig">name -> string|null</span></td>
+                    <td>Environment variable lookup</td>
+                </tr>
+                <tr>
+                    <td>sleep</td>
+                    <td><span class="sig">ms -> true</span></td>
+                    <td>Sleep for milliseconds</td>
+                </tr>
+                <tr>
+                    <td>now</td>
+                    <td><span class="sig">-> integer</span></td>
+                    <td>Unix epoch seconds</td>
+                </tr>
+            </table>
+        </section>
+
+        <section class="section" id="lib-unix">
+            <h2>Standard Library — unix</h2>
+            <p><span class="badge badge-lib">libs/unix.rdn</span> Filesystem and working-directory helpers.</p>
+
+            <table>
+                <tr>
+                    <th>Function</th>
+                    <th>Signature</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td>pwd</td>
+                    <td><span class="sig">-> string</span></td>
+                    <td>Current working directory</td>
+                </tr>
+                <tr>
+                    <td>exists</td>
+                    <td><span class="sig">path -> boolean</span></td>
+                    <td>Does path exist?</td>
+                </tr>
+                <tr>
+                    <td>mkdir</td>
+                    <td><span class="sig">path -> true</span></td>
+                    <td>Create directory</td>
+                </tr>
+                <tr>
+                    <td>rmPath</td>
+                    <td><span class="sig">path -> true</span></td>
+                    <td>Remove file or empty directory</td>
+                </tr>
+                <tr>
+                    <td>ls</td>
+                    <td><span class="sig">path -> list</span></td>
+                    <td>List directory entries</td>
+                </tr>
+            </table>
+        </section>
+
+        <section class="section" id="lib-path">
+            <h2>Standard Library — path</h2>
+            <p><span class="badge badge-lib">libs/path.rdn</span> Cross-platform path manipulation.</p>
+
+            <table>
+                <tr>
+                    <th>Function</th>
+                    <th>Signature</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td>join</td>
+                    <td><span class="sig">left right -> string</span></td>
+                    <td>Join path components</td>
+                </tr>
+                <tr>
+                    <td>basename</td>
+                    <td><span class="sig">path -> string</span></td>
+                    <td>Final path component</td>
+                </tr>
+                <tr>
+                    <td>dirname</td>
+                    <td><span class="sig">path -> string</span></td>
+                    <td>Parent directory</td>
+                </tr>
+                <tr>
+                    <td>extname</td>
+                    <td><span class="sig">path -> string|null</span></td>
+                    <td>File extension (no dot)</td>
+                </tr>
+                <tr>
+                    <td>absolute</td>
+                    <td><span class="sig">path -> boolean</span></td>
+                    <td>Is path absolute?</td>
+                </tr>
+            </table>
+        </section>
+
+        <section class="section" id="lib-process">
+            <h2>Standard Library — process</h2>
+            <p><span class="badge badge-lib">libs/process.rdn</span> External command execution.</p>
+
+            <table>
+                <tr>
+                    <th>Function</th>
+                    <th>Signature</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td>status</td>
+                    <td><span class="sig">command -> integer</span></td>
+                    <td>Run command, return exit status</td>
+                </tr>
+                <tr>
+                    <td>output</td>
+                    <td><span class="sig">command -> string</span></td>
+                    <td>Run command, capture stdout</td>
+                </tr>
+            </table>
+        </section>
+
+        <section class="section" id="lib-net">
+            <h2>Standard Library — net</h2>
+            <p><span class="badge badge-lib">libs/net.rdn</span> Networking utilities.</p>
+
+            <table>
+                <tr>
+                    <th>Function</th>
+                    <th>Signature</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td>host</td>
+                    <td><span class="sig">-> string</span></td>
+                    <td>Local hostname</td>
+                </tr>
+                <tr>
+                    <td>encodeUrl</td>
+                    <td><span class="sig">text -> string</span></td>
+                    <td>Percent-encode a URL</td>
+                </tr>
+                <tr>
+                    <td>decodeUrl</td>
+                    <td><span class="sig">text -> string</span></td>
+                    <td>Percent-decode a URL</td>
+                </tr>
+            </table>
+        </section>
+
+        <section class="section" id="lib-json">
+            <h2>Standard Library — json</h2>
+            <p><span class="badge badge-lib">libs/json.rdn</span> JSON parsing and serialization.</p>
+
+            <table>
+                <tr>
+                    <th>Function</th>
+                    <th>Signature</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td>parse</td>
+                    <td><span class="sig">text -> value</span></td>
+                    <td>Parse JSON — arrays become lists, objects become list of (key value) pairs</td>
+                </tr>
+                <tr>
+                    <td>stringify</td>
+                    <td><span class="sig">value -> text</span></td>
+                    <td>Serialize value to JSON</td>
+                </tr>
+            </table>
+
+            <pre><code>"./libs/json.rdn" load
+                    "[1, 2, 3]" parse call print <span style="color:var(--text2)">[* (1 2 3)*]</span>
+                    (1 2 3) stringify call print <span style="color:var(--text2)">[* [1,2,3]*]</span></code></pre>
+        </section>
+
+        <section class="section" id="lib-strconv">
+            <h2>Standard Library — strconv</h2>
+            <p><span class="badge badge-lib">libs/strconv.rdn</span> String conversion utilities (Go-inspired).</p>
+
+            <table>
+                <tr>
+                    <th>Function</th>
+                    <th>Signature</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td>atoi</td>
+                    <td><span class="sig">text -> integer</span></td>
+                    <td>Parse string as integer</td>
+                </tr>
+                <tr>
+                    <td>atof</td>
+                    <td><span class="sig">text -> double</span></td>
+                    <td>Parse string as float</td>
+                </tr>
+                <tr>
+                    <td>parseBool</td>
+                    <td><span class="sig">text -> boolean</span></td>
+                    <td>Parse "true"/"false"/"1"/"0"</td>
+                </tr>
+                <tr>
+                    <td>itoa</td>
+                    <td><span class="sig">integer -> string</span></td>
+                    <td>Format integer as string</td>
+                </tr>
+                <tr>
+                    <td>formatBool</td>
+                    <td><span class="sig">boolean -> string</span></td>
+                    <td>Format boolean as "true"/"false"</td>
+                </tr>
+            </table>
+        </section>
+
+        <section class="section" id="lib-flag">
+            <h2>Standard Library — flag</h2>
+            <p><span class="badge badge-lib">libs/flag.rdn</span> Command-line flag parser.</p>
+
+            <pre><code>"./libs/flag.rdn" load
+                    "o" "output" true "output file" defun
+                    output let
+                    "writing to: " print output print "\n" print
+                    end addFlag call
+
+                    "v" "verbose" false "verbose output" defun
+                    "verbose mode\n" print
+                    end addFlag call
+
+                    execute call
+                    positionals call each call print</code></pre>
+
+            <table>
+                <tr>
+                    <th>Function</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td>resetFlags</td>
+                    <td>Clear state, reinstall -h/--help</td>
+                </tr>
+                <tr>
+                    <td>addFlag</td>
+                    <td>short long takesValue description callback → register flag</td>
+                </tr>
+                <tr>
+                    <td>execute / executeOn</td>
+                    <td>Run the parser</td>
+                </tr>
+                <tr>
+                    <td>positionals</td>
+                    <td>Get positional arguments</td>
+                </tr>
+                <tr>
+                    <td>programName</td>
+                    <td>Get program name</td>
+                </tr>
+                <tr>
+                    <td>printHelp</td>
+                    <td>Print usage and flags</td>
+                </tr>
+            </table>
+        </section>
+
+        <!-- ============ NATIVE MODULES ============ -->
+        <section class="section" id="native-files">
+            <h2>Native Module — files</h2>
+            <p><span class="badge badge-native">nativelibs/files.c</span> Text file I/O.</p>
+            <table>
+                <tr>
+                    <th>Function</th>
+                    <th>Signature</th>
+                </tr>
+                <tr>
+                    <td>readLines</td>
+                    <td><span class="sig">path -> list of strings</span></td>
+                </tr>
+                <tr>
+                    <td>readText</td>
+                    <td><span class="sig">path -> string</span></td>
+                </tr>
+                <tr>
+                    <td>writeLines</td>
+                    <td><span class="sig">path list -> true</span></td>
+                </tr>
+                <tr>
+                    <td>appendLines</td>
+                    <td><span class="sig">path list -> true</span></td>
+                </tr>
+                <tr>
+                    <td>writeText</td>
+                    <td><span class="sig">path text -> true</span></td>
+                </tr>
+                <tr>
+                    <td>appendText</td>
+                    <td><span class="sig">path text -> true</span></td>
+                </tr>
+            </table>
+        </section>
+
+        <section class="section" id="native-io">
+            <h2>Native Module — io</h2>
+            <p><span class="badge badge-native">nativelibs/io.c</span> Stdin reading.</p>
+            <table>
+                <tr>
+                    <th>Function</th>
+                    <th>Signature</th>
+                </tr>
+                <tr>
+                    <td>readLine</td>
+                    <td><span class="sig">-> string or null</span></td>
+                </tr>
+                <tr>
+                    <td>readAllInput</td>
+                    <td><span class="sig">-> string</span></td>
+                </tr>
+            </table>
+        </section>
+
+        <section class="section" id="native-json">
+            <h2>Native Module — json</h2>
+            <p><span class="badge badge-native">nativelibs/json.c</span> JSON parse/serialize.</p>
+            <table>
+                <tr>
+                    <th>Function</th>
+                    <th>Signature</th>
+                </tr>
+                <tr>
+                    <td>parseJson</td>
+                    <td><span class="sig">text -> value</span></td>
+                </tr>
+                <tr>
+                    <td>stringifyJson</td>
+                    <td><span class="sig">value -> text</span></td>
+                </tr>
+            </table>
+        </section>
+
+        <section class="section" id="native-math">
+            <h2>Native Module — math</h2>
+            <p><span class="badge badge-native">nativelibs/math.c</span> Math functions.</p>
+            <table>
+                <tr>
+                    <th>Function</th>
+                    <th>Signature</th>
+                </tr>
+                <tr>
+                    <td>powerOf</td>
+                    <td><span class="sig">base exponent -> double</span></td>
+                </tr>
+                <tr>
+                    <td>sqrtOf</td>
+                    <td><span class="sig">number -> double</span></td>
+                </tr>
+            </table>
+        </section>
+
+        <section class="section" id="native-net">
+            <h2>Native Module — net</h2>
+            <p><span class="badge badge-native">nativelibs/net.c</span> Network utilities.</p>
+            <table>
+                <tr>
+                    <th>Function</th>
+                    <th>Signature</th>
+                </tr>
+                <tr>
+                    <td>hostName</td>
+                    <td><span class="sig">-> string</span></td>
+                </tr>
+                <tr>
+                    <td>urlEncode</td>
+                    <td><span class="sig">text -> string</span></td>
+                </tr>
+                <tr>
+                    <td>urlDecode</td>
+                    <td><span class="sig">text -> string</span></td>
+                </tr>
+            </table>
+        </section>
+
+        <section class="section" id="native-path">
+            <h2>Native Module — path</h2>
+            <p><span class="badge badge-native">nativelibs/path.c</span> Path manipulation.</p>
+            <table>
+                <tr>
+                    <th>Function</th>
+                    <th>Signature</th>
+                </tr>
+                <tr>
+                    <td>joinPath</td>
+                    <td><span class="sig">left right -> string</span></td>
+                </tr>
+                <tr>
+                    <td>baseName</td>
+                    <td><span class="sig">path -> string</span></td>
+                </tr>
+                <tr>
+                    <td>dirName</td>
+                    <td><span class="sig">path -> string</span></td>
+                </tr>
+                <tr>
+                    <td>extName</td>
+                    <td><span class="sig">path -> string or null</span></td>
+                </tr>
+                <tr>
+                    <td>isAbsolutePath</td>
+                    <td><span class="sig">path -> boolean</span></td>
+                </tr>
+            </table>
+        </section>
+
+        <section class="section" id="native-process">
+            <h2>Native Module — process</h2>
+            <p><span class="badge badge-native">nativelibs/process.c</span> Command execution.</p>
+            <table>
+                <tr>
+                    <th>Function</th>
+                    <th>Signature</th>
+                </tr>
+                <tr>
+                    <td>execStatus</td>
+                    <td><span class="sig">command -> integer</span></td>
+                </tr>
+                <tr>
+                    <td>execOutput</td>
+                    <td><span class="sig">command -> string</span></td>
+                </tr>
+            </table>
+        </section>
+
+        <section class="section" id="native-strconv">
+            <h2>Native Module — strconv</h2>
+            <p><span class="badge badge-native">nativelibs/strconv.c</span> String conversion.</p>
+            <table>
+                <tr>
+                    <th>Function</th>
+                    <th>Signature</th>
+                </tr>
+                <tr>
+                    <td>atoi</td>
+                    <td><span class="sig">text -> integer</span></td>
+                </tr>
+                <tr>
+                    <td>atof</td>
+                    <td><span class="sig">text -> double</span></td>
+                </tr>
+                <tr>
+                    <td>parseBool</td>
+                    <td><span class="sig">text -> boolean</span></td>
+                </tr>
+                <tr>
+                    <td>itoa</td>
+                    <td><span class="sig">integer -> string</span></td>
+                </tr>
+                <tr>
+                    <td>formatBool</td>
+                    <td><span class="sig">boolean -> string</span></td>
+                </tr>
+            </table>
+        </section>
+
+        <section class="section" id="native-strings">
+            <h2>Native Module — strings</h2>
+            <p><span class="badge badge-native">nativelibs/strings.c</span> String operations.</p>
+            <table>
+                <tr>
+                    <th>Function</th>
+                    <th>Signature</th>
+                </tr>
+                <tr>
+                    <td>strContains</td>
+                    <td><span class="sig">text part -> boolean</span></td>
+                </tr>
+                <tr>
+                    <td>strHasPrefix</td>
+                    <td><span class="sig">text prefix -> boolean</span></td>
+                </tr>
+                <tr>
+                    <td>strHasSuffix</td>
+                    <td><span class="sig">text suffix -> boolean</span></td>
+                </tr>
+                <tr>
+                    <td>strTrimSpace</td>
+                    <td><span class="sig">text -> string</span></td>
+                </tr>
+                <tr>
+                    <td>strSplit</td>
+                    <td><span class="sig">text sep -> list</span></td>
+                </tr>
+                <tr>
+                    <td>strReplaceAll</td>
+                    <td><span class="sig">text old new -> string</span></td>
+                </tr>
+            </table>
+        </section>
+
+        <section class="section" id="native-syscall">
+            <h2>Native Module — syscall</h2>
+            <p><span class="badge badge-native">nativelibs/syscall.c</span> System-level helpers.</p>
+            <table>
+                <tr>
+                    <th>Function</th>
+                    <th>Signature</th>
+                </tr>
+                <tr>
+                    <td>pid</td>
+                    <td><span class="sig">-> integer</span></td>
+                </tr>
+                <tr>
+                    <td>getEnv</td>
+                    <td><span class="sig">name -> string or null</span></td>
+                </tr>
+                <tr>
+                    <td>sleepMs</td>
+                    <td><span class="sig">ms -> true</span></td>
+                </tr>
+                <tr>
+                    <td>epochTime</td>
+                    <td><span class="sig">-> integer</span></td>
+                </tr>
+            </table>
+        </section>
+
+        <section class="section" id="native-unix">
+            <h2>Native Module — unix</h2>
+            <p><span class="badge badge-native">nativelibs/unix.c</span> Filesystem operations.</p>
+            <table>
+                <tr>
+                    <th>Function</th>
+                    <th>Signature</th>
+                </tr>
+                <tr>
+                    <td>cwd</td>
+                    <td><span class="sig">-> string</span></td>
+                </tr>
+                <tr>
+                    <td>pathExists</td>
+                    <td><span class="sig">path -> boolean</span></td>
+                </tr>
+                <tr>
+                    <td>makeDir</td>
+                    <td><span class="sig">path -> true</span></td>
+                </tr>
+                <tr>
+                    <td>removePath</td>
+                    <td><span class="sig">path -> true</span></td>
+                </tr>
+                <tr>
+                    <td>listDir</td>
+                    <td><span class="sig">path -> list</span></td>
+                </tr>
+            </table>
+        </section>
+
+        <!-- ============ EMBEDDING ============ -->
+        <section class="section" id="embedding">
+            <h2>Embedding API</h2>
+            <p>Raden exposes a single entry point for embedding:</p>
+
+            <pre><code><span style="color:var(--text2)">// embed.c</span>
+                    #include "./include/src.h"
+
+                    int main(void) {
+                    char *argv[] = {
+                    "host",
+                    "./script.rdn",
+                    };
+                    return rdn_main(2, argv);
+                    }</code></pre>
+
+            <h3>rdn_main</h3>
+            <table>
+                <tr>
+                    <td><code>int rdn_main(int argc, char **argv)</code></td>
+                </tr>
+            </table>
+            <p>The first argument is the program name, the second is the script path. Returns <code>0</code> on success,
+                <code>EXIT_FAILURE</code> on error. If <code>argc &lt; 2</code>, it starts the REPL.
+            </p>
+
+            <p>Current embedding notes:</p>
+            <ul>
+                <li>The public embedding surface is minimal — <code>rdn_main</code> executes a file path</li>
+                <li>Native modules are loaded with <code>loadnative</code> at script runtime</li>
+                <li>Source-relative <code>load</code> and <code>loadnative</code> path resolution works in the embedded
+                    context</li>
+            </ul>
+        </section>
+
+        <!-- ============ NATIVE MODULE API ============ -->
+        <section class="section" id="nativemodules">
+            <h2>Writing Native Modules</h2>
+            <p>Native modules are shared libraries that register C functions callable from Raden. The public header is
+                <code>include/rdn_native.h</code>.
+            </p>
+
+            <h3>Module entry point</h3>
+            <p>Every native module must export:</p>
+            <pre><code>bool rdn_module_init(RDNModule *module);</code></pre>
+
+            <h3>Register functions</h3>
+            <pre><code>static bool myFunc(RDNApi *api) {
+                    <span style="color:var(--text2)">// ...</span>
+                    }
+
+                    bool rdn_module_init(RDNModule *module) {
+                    return module->register_function(module, "myFunc", myFunc);
+                    }</code></pre>
+
+            <h3>Stack API</h3>
+            <table>
+                <tr>
+                    <th>Function</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><code>api->stack_size(api)</code></td>
+                    <td>Number of items on the stack</td>
+                </tr>
+                <tr>
+                    <td><code>api->type(api, index)</code></td>
+                    <td>Type of value at index (-1 = top)</td>
+                </tr>
+                <tr>
+                    <td><code>api->to_integer(api, index, &amp;out)</code></td>
+                    <td>Get integer at index</td>
+                </tr>
+                <tr>
+                    <td><code>api->to_number(api, index, &amp;out)</code></td>
+                    <td>Get double at index</td>
+                </tr>
+                <tr>
+                    <td><code>api->to_boolean(api, index, &amp;out)</code></td>
+                    <td>Get boolean at index</td>
+                </tr>
+                <tr>
+                    <td><code>api->to_string(api, index)</code></td>
+                    <td>Get string at index (const char*)</td>
+                </tr>
+                <tr>
+                    <td><code>api->pop(api, count)</code></td>
+                    <td>Pop N items</td>
+                </tr>
+                <tr>
+                    <td><code>api->push_integer(api, value)</code></td>
+                    <td>Push an integer</td>
+                </tr>
+                <tr>
+                    <td><code>api->push_number(api, value)</code></td>
+                    <td>Push a double</td>
+                </tr>
+                <tr>
+                    <td><code>api->push_boolean(api, value)</code></td>
+                    <td>Push a boolean</td>
+                </tr>
+                <tr>
+                    <td><code>api->push_string(api, value)</code></td>
+                    <td>Push a string (copied)</td>
+                </tr>
+                <tr>
+                    <td><code>api->raise_error(api, message)</code></td>
+                    <td>Raise an error (return false)</td>
+                </tr>
+            </table>
+
+            <h3>List API</h3>
+            <table>
+                <tr>
+                    <th>Function</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><code>api->push_list(api)</code></td>
+                    <td>Push an empty list</td>
+                </tr>
+                <tr>
+                    <td><code>api->list_len(api, index, &amp;len)</code></td>
+                    <td>Get list length</td>
+                </tr>
+                <tr>
+                    <td><code>api->list_append(api, list_idx, value_idx)</code></td>
+                    <td>Append (cloned) value to list</td>
+                </tr>
+                <tr>
+                    <td><code>api->list_index(api, list_idx, item_idx)</code></td>
+                    <td>Push cloned item from list</td>
+                </tr>
+                <tr>
+                    <td><code>api->list_remove(api, list_idx, item_idx)</code></td>
+                    <td>Remove item from list</td>
+                </tr>
+            </table>
+
+            <h3>Full example</h3>
+            <pre><code><span style="color:var(--text2)">// nativelibs/example.c</span>
+                    #include "../include/rdn_native.h"
+
+                    static bool native_add(RDNApi *api) {
+                    long left = 0, right = 0;
+
+                    if (api->stack_size(api) &lt; 2)
+                    return api->raise_error(api, "add requires 2 operands");
+
+                    if (!api->to_integer(api, -2, &amp;left) ||
+                    !api->to_integer(api, -1, &amp;right))
+                    return api->raise_error(api, "add requires integers");
+
+                    api->pop(api, 2);
+                    return api->push_integer(api, left + right);
+                    }
+
+                    bool rdn_module_init(RDNModule *module) {
+                    return module->register_function(module, "add", native_add);
+                    }</code></pre>
+
+            <h3>Build a native module</h3>
+            <pre><code>gcc -Wall -Wextra -Werror -ggdb -std=c11 -fPIC -shared \
+                    mymodule.c -I. -o mymodule.so</code></pre>
+
+            <h3>Load a native module</h3>
+            <pre><code>"./mymodule.so" loadnative
+
+                    <span style="color:var(--text2)">[* now call registered functions by name*]</span>
+                    3 4 add call print <span style="color:var(--text2)">[* 7*]</span></code></pre>
+        </section>
+
+        <!-- ============ EDITOR SUPPORT ============ -->
+        <section class="section" id="editor">
+            <h2>Editor Support</h2>
+
+            <h3>Neovim</h3>
+            <p>The repo includes a Neovim runtime package:</p>
+            <pre><code>cp -r ./nvim/* ~/.config/nvim/</code></pre>
+            <p>This provides:</p>
+            <ul>
+                <li>File detection (<code>.rdn</code>)</li>
+                <li>Syntax highlighting</li>
+                <li>ftplugin defaults</li>
+                <li>Basic indent rules</li>
+            </ul>
+
+            <p>For LazyVim / lazy.nvim:</p>
+            <pre><code>return {
+                    {
+                    dir = "/path/to/rdn/nvim",
+                    name = "raden.nvim",
+                    ft = "raden",
+                    },
+                    }</code></pre>
+
+            <h3>Treesitter</h3>
+            <p>A starter Treesitter grammar scaffold is at <code>treesitter/raden/</code>.</p>
+        </section>
+
+        <!-- ============ TESTS ============ -->
+        <section class="section" id="tests">
+            <h2>Test Suite</h2>
+            <p>Raden includes 50+ regression tests:</p>
+            <pre><code>bash test/run.sh</code></pre>
+            <p>Each test is a <code>.rdn</code> file in <code>test/</code> with expected output in
+                <code>test/expected/</code>. The test runner compares stdout+stderr against the expected output and
+                verifies the exit code.
+            </p>
+
+            <p>To add a new test:</p>
+            <pre><code>touch test/my_test.rdn <span style="color:var(--text2)">[* your test script*]</span>
+                    touch test/expected/my_test.out <span style="color:var(--text2)">[* expected output*]</span>
+                    echo 0 > test/expected/my_test.status <span style="color:var(--text2)">[* expected exit code (optional)*]</span></code></pre>
+        </section>
+
+        <!-- ============ FOOTER ============ -->
+        <div
+            style="margin-top:60px;padding-top:20px;border-top:1px solid var(--border);color:var(--text2);font-size:.85em;text-align:center;">
+            Raden &mdash; MIT License &mdash;
+            <a href="https://github.com/abdorayden/rdn">GitHub</a>
+        </div>
+
+    </div>
+
+    <script>
+        let searchMatchCount = 0;
+
+        function highlightText(node, query) {
+            if (node.nodeType === 3) {
+                const idx = node.textContent.toLowerCase().indexOf(query);
+                if (idx === -1) return false;
+                const frag = document.createDocumentFragment();
+                const before = node.textContent.slice(0, idx);
+                const match = node.textContent.slice(idx, idx + query.length);
+                const after = node.textContent.slice(idx + query.length);
+                if (before) frag.appendChild(document.createTextNode(before));
+                const mark = document.createElement('mark');
+                mark.className = 'search-highlight';
+                mark.textContent = match;
+                frag.appendChild(mark);
+                if (after) frag.appendChild(document.createTextNode(after));
+                node.parentNode.replaceChild(frag, node);
+                return true;
+            }
+            if (node.nodeType === 1 && node.tagName !== 'SCRIPT' && node.tagName !== 'STYLE' && node.tagName !== 'MARK') {
+                let changed = false;
+                const children = Array.from(node.childNodes);
+                for (let i = 0; i < children.length; i++) {
+                    if (highlightText(children[i], query)) changed = true;
+                }
+                return changed;
+            }
+            return false;
+        }
+
+        function removeHighlights(root) {
+            root.querySelectorAll('mark.search-highlight').forEach(m => {
+                m.parentNode.replaceChild(document.createTextNode(m.textContent), m);
+            });
+        }
+
+        function searchDocs(query) {
+            const main = document.getElementById('main');
+            const sections = main.querySelectorAll(':scope > .section');
+            const navLinks = document.querySelectorAll('.sidebar-nav a');
+            const empty = document.getElementById('searchEmpty');
+            const counter = document.getElementById('searchCount');
+
+            removeHighlights(main);
+
+            query = query.trim().toLowerCase();
+            if (!query) {
+                sections.forEach(s => s.classList.remove('hidden'));
+                navLinks.forEach(a => a.style.display = '');
+                document.querySelectorAll('.nav-section').forEach(n => n.style.display = '');
+                empty.style.display = 'none';
+                if (counter) counter.textContent = '';
+                return;
+            }
+
+            let totalMatches = 0;
+            let firstMatch = null;
+
+            sections.forEach((section, idx) => {
+                const text = section.textContent.toLowerCase();
+                const match = text.includes(query);
+                if (match) {
+                    section.classList.remove('hidden');
+                    highlightText(section, query);
+                    totalMatches++;
+                    if (!firstMatch) firstMatch = section;
+                } else {
+                    section.classList.add('hidden');
+                }
+            });
+
+            // Filter sidebar nav links
+            navLinks.forEach(a => {
+                const href = a.getAttribute('href');
+                if (!href || href.startsWith('http')) return;
+                const target = document.getElementById(href.slice(1));
+                if (target && !target.classList.contains('hidden')) {
+                    a.style.display = '';
+                } else {
+                    a.style.display = 'none';
+                }
+            });
+
+            // Show/hide nav-section headers based on visible children
+            document.querySelectorAll('.nav-section').forEach(ns => {
+                let sibling = ns.nextElementSibling;
+                while (sibling && sibling.tagName === 'A') {
+                    if (sibling.style.display !== 'none') {ns.style.display = ''; return;}
+                    sibling = sibling.nextElementSibling;
+                }
+                ns.style.display = 'none';
+            });
+
+            if (totalMatches === 0) {
+                empty.style.display = 'block';
+                document.getElementById('searchTerm').textContent = query;
+            } else {
+                empty.style.display = 'none';
+                if (firstMatch) firstMatch.scrollIntoView({behavior: 'smooth', block: 'start'});
+            }
+
+            if (counter) counter.textContent = totalMatches + ' section' + (totalMatches !== 1 ? 's' : '');
+            searchMatchCount = totalMatches;
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const searchInput = document.getElementById('search');
+            const links = document.querySelectorAll('.sidebar-nav a[href^="#"]');
+            links.forEach(link => {
+                link.addEventListener('click', () => {
+                    searchInput.value = '';
+                    searchDocs('');
+                });
+            });
+            searchInput.addEventListener('keydown', e => {
+                if (e.key === 'Escape') {
+                    searchInput.value = '';
+                    searchDocs('');
+                    searchInput.blur();
+                }
+            });
+        });
+    </script>
 
 </body>
+
 </html>

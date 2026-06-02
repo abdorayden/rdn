@@ -1,0 +1,2 @@
+print requires known variable 'i'
+while calling function 'print-safe'

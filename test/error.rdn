@@ -1,0 +1,5 @@
+test defun
+    "test" error
+end
+
+test pcall pop print

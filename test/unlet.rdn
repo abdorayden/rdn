@@ -1,0 +1,8 @@
+0 i let
+i unlet
+
+print-safe defun
+    i print
+end
+
+print-safe pcall pop print
