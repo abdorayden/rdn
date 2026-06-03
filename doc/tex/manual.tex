@@ -1,0 +1,767 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{geometry}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{listings}
+\usepackage{fancyhdr}
+
+\geometry{margin=1in}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  urlcolor=blue,
+  pdftitle={Raden Language Manual},
+  pdfauthor={Raden project}
+}
+
+\definecolor{codebg}{RGB}{248,248,248}
+\definecolor{codeframe}{RGB}{220,220,220}
+
+\lstdefinelanguage{Raden}{
+  morekeywords={
+    let,set,const,unlet,defun,apply,call,pcall,if,else,end,loop,break,
+    continue,load,loadnative,add_load_path,add_native_path,true,false,null,
+    print,type,to_string,exit,append,remove,index,len,enum,reset,error
+  },
+  sensitive=true,
+  morecomment=[s]{[*}{*]},
+  morestring=[b]"
+}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{codebg},
+  frame=single,
+  rulecolor=\color{codeframe},
+  columns=fullflexible,
+  keepspaces=true,
+  breaklines=true,
+  showstringspaces=false,
+  tabsize=2
+}
+
+\setlength{\headheight}{14pt}
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{Raden}
+\rhead{Language Manual}
+\cfoot{\thepage}
+
+\newcommand{\raden}{\texttt{raden}}
+\newcommand{\rdn}{\texttt{rdn}}
+\newcommand{\code}[1]{\texttt{#1}}
+
+\title{Raden Language Manual}
+\author{Raden project}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{center}
+Raden is a small stack-based scripting language with a C interpreter,
+standard libraries, and a native module API.
+\end{center}
+
+\tableofcontents
+\newpage
+
+\section{Introduction}
+
+Raden is built around a value stack. Values are pushed first, then
+operators and builtins consume values from the stack and push results
+back. This makes the language postfix:
+
+\begin{lstlisting}[language=Raden]
+2 3 + print
+\end{lstlisting}
+
+This program pushes \code{2}, pushes \code{3}, applies \code{+}, and
+prints the result. Operand order matters. The expression \code{i 10 <}
+means \code{i < 10}; the expression \code{10 i <} means \code{10 < i}.
+
+The interpreter is written in C. The public embedding entry point is:
+
+\begin{lstlisting}[language=C]
+int rdn_main(int argc, char **argv);
+\end{lstlisting}
+
+\section{Quick Start}
+
+\subsection{Install}
+
+\begin{lstlisting}[language=bash]
+curl -fsSL https://raw.githubusercontent.com/abdorayden/rdn/master/install | sh
+
+# or from a cloned checkout
+./install
+\end{lstlisting}
+
+By default, libraries install to \code{/usr/local/share/rdn/libs} and
+native modules install to \code{/usr/local/share/rdn/nativelibs}.
+
+\subsection{Build}
+
+\begin{lstlisting}[language=bash]
+git clone https://github.com/abdorayden/rdn.git
+cd rdn
+make
+./main script.rdn
+\end{lstlisting}
+
+\subsection{REPL}
+
+Run \code{./main} with no script path to start the REPL:
+
+\begin{lstlisting}[language=bash]
+$ ./main
+raden repl
+press Ctrl-D to exit
+RDN >> 2 3 + print
+\end{lstlisting}
+
+\subsection{Tests}
+
+\begin{lstlisting}[language=bash]
+bash test/run.sh
+\end{lstlisting}
+
+\section{Values and Syntax}
+
+\subsection{Value Types}
+
+\begin{longtable}{lll}
+\toprule
+Type & Syntax & Example \\
+\midrule
+Integer & \code{123} & \code{42} \\
+Double & \code{123.456} & \code{3.14} \\
+String & \code{"..."} & \code{"hello"} \\
+Boolean & \code{true}, \code{false} & \code{true} \\
+Null & \code{null} & \code{null} \\
+List & \code{(...)} & \code{(1 2 "three")} \\
+Identifier & bare word & \code{x}, \code{hello} \\
+\bottomrule
+\end{longtable}
+
+\subsection{Numbers}
+
+\begin{lstlisting}[language=Raden]
+10
+2.5
+\end{lstlisting}
+
+\subsection{Strings}
+
+Strings use double quotes. Common escapes include \code{\textbackslash n},
+\code{\textbackslash t}, \code{\textbackslash "}, \code{\textbackslash\textbackslash},
+and \code{\textbackslash e}.
+
+\begin{lstlisting}[language=Raden]
+"hello"
+"line1\nline2"
+"quote: \""
+\end{lstlisting}
+
+\subsection{Booleans and Null}
+
+\begin{lstlisting}[language=Raden]
+true
+false
+null
+\end{lstlisting}
+
+\subsection{Lists}
+
+Lists use parentheses:
+
+\begin{lstlisting}[language=Raden]
+(1 2 3)
+("hello" 4 true)
+\end{lstlisting}
+
+List literals execute their contents. Values left on the temporary list
+stack become list items. This means conditionals, loops, builtins, and
+function calls can run inside a list literal:
+
+\begin{lstlisting}[language=Raden]
+(2 3 1 true if 10 end)
+
+0 i let
+(i 10 < loop
+  i
+  i 1 + i set
+  i 10 <
+end) print
+\end{lstlisting}
+
+\subsection{Comments}
+
+\begin{lstlisting}[language=Raden]
+[* this is a comment *]
+42 [* inline comment *] print
+\end{lstlisting}
+
+\section{Operators}
+
+Operators consume operands from the stack.
+
+\begin{longtable}{ll}
+\toprule
+Operator & Meaning \\
+\midrule
+\code{+} & addition \\
+\code{-} & subtraction \\
+\code{*} & multiplication \\
+\code{/} & division \\
+\code{=} & equality \\
+\code{!=} & inequality \\
+\code{<} & less than \\
+\code{>} & greater than \\
+\code{<=} & less than or equal \\
+\code{>=} & greater than or equal \\
+\code{!} & boolean not \\
+\code{\&} & boolean and, or integer bitwise and \\
+\code{|} & boolean or, or integer bitwise or \\
+\code{\^{}} & integer bitwise xor \\
+\code{<<} & integer left shift \\
+\code{>>} & integer right shift \\
+\bottomrule
+\end{longtable}
+
+\begin{lstlisting}[language=Raden]
+2 3 + print
+10 3 - print
+5 3 > print
+true false & print
+4 1 << print
+\end{lstlisting}
+
+\section{Variables}
+
+\subsection{let}
+
+\code{let} binds a value to a mutable name:
+
+\begin{lstlisting}[language=Raden]
+10 x let
+x print
+\end{lstlisting}
+
+\subsection{set}
+
+\code{set} updates an existing binding:
+
+\begin{lstlisting}[language=Raden]
+x 1 + x set
+x print
+\end{lstlisting}
+
+\subsection{const}
+
+\code{const} creates an immutable binding. Reassigning a constant is an
+error:
+
+\begin{lstlisting}[language=Raden]
+100 limit const
+limit print
+\end{lstlisting}
+
+\subsection{unlet}
+
+\code{unlet} removes a binding:
+
+\begin{lstlisting}[language=Raden]
+10 x let
+x unlet
+\end{lstlisting}
+
+\subsection{enum and reset}
+
+\begin{lstlisting}[language=Raden]
+enum ONE const
+enum TWO const
+enum THREE const
+reset
+\end{lstlisting}
+
+\subsection{Built-in Environment Variables}
+
+\begin{longtable}{ll}
+\toprule
+Variable & Value \\
+\midrule
+\code{\_\_host\_os} & host OS name, such as \code{"linux"} \\
+\code{\_\_sharedlib\_ext} & native library extension, such as \code{".so"} \\
+\code{\_\_argv} & script path followed by extra CLI arguments \\
+\code{\_\_line\_col} & source location helper for the called variable \\
+\bottomrule
+\end{longtable}
+
+\subsection{Identifier Semantics}
+
+Identifiers are context-sensitive. Names used before \code{let},
+\code{set}, \code{const}, \code{defun}, or \code{call} are treated as name
+operands. Normal variable lookup may clone the underlying value, while
+list and string variables are often preserved as named targets for
+mutation-oriented builtins such as \code{append}, \code{remove},
+\code{index}, and \code{len}.
+
+When a script needs a copied list value before mutation, \code{dup} may be
+required:
+
+\begin{lstlisting}[language=Raden]
+next dup current set pop
+\end{lstlisting}
+
+\section{Functions}
+
+\subsection{defun}
+
+\begin{lstlisting}[language=Raden]
+double defun
+  2 *
+end
+
+5 double call print
+\end{lstlisting}
+
+\subsection{apply}
+
+\code{apply} defines a function-like word that is invoked directly,
+without \code{call}:
+
+\begin{lstlisting}[language=Raden]
+triple apply
+  3 *
+end
+
+4 triple print
+\end{lstlisting}
+
+\subsection{call}
+
+\code{call} invokes a function by name. A string can also name the
+function:
+
+\begin{lstlisting}[language=Raden]
+"double" call call
+\end{lstlisting}
+
+\subsection{pcall}
+
+\code{pcall} performs a protected call and catches runtime errors. On
+success the stack receives \code{result true}; on error it receives
+\code{"error message" false}.
+
+\begin{lstlisting}[language=Raden]
+risky defun
+  null 0 index
+end
+
+risky pcall
+if
+  "success: " print print "\n" print
+else
+  "error: " print print "\n" print
+end
+\end{lstlisting}
+
+\subsection{Scope}
+
+Functions create a new variable scope. Bindings created inside a function
+are local unless \code{set} updates an existing outer binding.
+
+\section{Control Flow}
+
+\subsection{if}
+
+\code{if} consumes one boolean. \code{else} is optional. Blocks terminate
+with \code{end}.
+
+\begin{lstlisting}[language=Raden]
+true if
+  "yes" print
+else
+  "no" print
+end
+\end{lstlisting}
+
+\subsection{loop}
+
+\code{loop} consumes a boolean condition at entry. Each iteration must
+leave the next boolean condition on the stack.
+
+\begin{lstlisting}[language=Raden]
+0 i let
+i 5 < cond let
+
+cond loop
+  i print "\n" print
+  i 1 + i set
+  i 5 < cond set
+  cond
+end
+\end{lstlisting}
+
+\subsection{break, continue, and exit}
+
+\begin{lstlisting}[language=Raden]
+0 i let
+true loop
+  i 10 > if break end
+  i 5 = if i 1 + i set continue end
+  i print "\n" print
+  i 1 + i set
+  true
+end
+
+0 exit
+\end{lstlisting}
+
+\section{Builtins}
+
+\begin{longtable}{lll}
+\toprule
+Builtin & Stack shape & Description \\
+\midrule
+\code{print} & \code{value ->} & Print to stdout \\
+\code{pop} & \code{value ->} & Discard top value \\
+\code{dup} & \code{value -> value value} & Duplicate top value \\
+\code{swap} & \code{a b -> b a} & Swap top two values \\
+\code{type} & \code{value -> string} & Return type name \\
+\code{to\_string} & \code{value -> string} & Convert to string \\
+\code{let} & \code{value name ->} & Create mutable binding \\
+\code{set} & \code{value name ->} & Update binding \\
+\code{const} & \code{value name ->} & Create constant binding \\
+\code{unlet} & \code{name ->} & Remove binding \\
+\code{enum} & \code{-> integer} & Push next enum integer \\
+\code{reset} & \code{->} & Reset enum counter \\
+\code{index} & \code{target index -> value} & Index list or string \\
+\code{append} & \code{target value -> target} & Append to list or string \\
+\code{remove} & \code{target index -> target} & Remove item or character \\
+\code{len} & \code{target -> integer} & Length of list or string \\
+\code{load} & \code{path ->} & Execute a Raden source file \\
+\code{loadnative} & \code{path ->} & Load a native shared library \\
+\code{add\_load\_path} & \code{path ->} & Add script search path \\
+\code{add\_native\_path} & \code{path ->} & Add native search path \\
+\code{defun} & \code{name ... end ->} & Define named function \\
+\code{apply} & \code{name ... end ->} & Define direct-call word \\
+\code{call} & \code{name args... -> results...} & Invoke a function \\
+\code{pcall} & \code{name args... -> result true | error false} & Protected call \\
+\code{error} & \code{string -> error} & Raise an interpreter error \\
+\code{if} & \code{cond ... end ->} & Conditional execution \\
+\code{loop} & \code{cond ... next-cond end ->} & Loop while true \\
+\code{break} & \code{->} & Exit loop \\
+\code{continue} & \code{->} & Continue loop \\
+\code{exit} & \code{status ->} & Exit process \\
+\bottomrule
+\end{longtable}
+
+\section{Lists and Strings}
+
+\begin{lstlisting}[language=Raden]
+(10 20 30) 1 index print
+(1 2) 3 append print
+(1 2 3) 1 remove print
+(1 2 3) len print
+\end{lstlisting}
+
+The same sequence builtins work on strings:
+
+\begin{lstlisting}[language=Raden]
+"hello" 1 index print
+"hello" 1 remove print
+"hi" len print
+
+"hi" text let
+text "!" append
+text print
+\end{lstlisting}
+
+\section{Error Handling}
+
+\code{pcall} is the primary error-handling mechanism. It invokes a
+function and catches errors raised during execution.
+
+\begin{longtable}{ll}
+\toprule
+Situation & Stack after \code{pcall} \\
+\midrule
+Success & \code{... function\_result true} \\
+Error caught & \code{... "error message" false} \\
+\bottomrule
+\end{longtable}
+
+Errors that happen before the function executes, such as a missing
+function name, propagate normally.
+
+\section{Loading Code}
+
+\subsection{Raden Scripts}
+
+\begin{lstlisting}[language=Raden]
+"./libs/math.rdn" load
+4 sqrt call print
+\end{lstlisting}
+
+Paths are resolved relative to the currently running source file and then
+through configured search paths.
+
+\subsection{Native Libraries}
+
+\begin{lstlisting}[language=Raden]
+"../nativelibs/files.so" loadnative
+"./Makefile" readLines call print
+\end{lstlisting}
+
+Use \code{\_\_sharedlib\_ext} for cross-platform native library paths.
+
+\begin{lstlisting}[language=Raden]
+"../nativelibs/math" __sharedlib_ext to_string swap pop append loadnative
+\end{lstlisting}
+
+\section{Standard Library}
+
+The standard library is stored in \code{libs/}. Functions are generally
+loaded with \code{load} and called with \code{call}.
+
+\subsection{core}
+
+\code{libs/core.rdn} provides aliases and general helpers:
+
+\begin{itemize}
+\item Operator aliases: \code{not}, \code{add}, \code{sub}, \code{mul}, \code{div}.
+\item Comparisons: \code{eq}, \code{neq}, \code{lt}, \code{gt}, \code{le}, \code{ge}.
+\item Boolean and bitwise helpers: \code{and}, \code{or}, \code{xor}, \code{shl}, \code{shr}.
+\item Type predicates: \code{is\_null}, \code{is\_int}, \code{is\_float}, \code{is\_bool}, \code{is\_str}, \code{is\_list}.
+\item Numeric helpers: \code{inc}, \code{dec}, \code{neg}, \code{abs}, \code{even}, \code{odd}, \code{min}, \code{max}, \code{between}, \code{clamp}.
+\item Functional helpers: \code{pipe}, \code{tap}, \code{select}, \code{when}, \code{unless}, \code{times}, \code{range}, \code{in}.
+\end{itemize}
+
+\subsection{lists}
+
+\code{libs/lists.rdn} provides list helpers:
+\code{each}, \code{foreach}, \code{map}, \code{collect}, \code{filter},
+\code{reduce}, \code{copy}, \code{reverse}, \code{concat}, \code{first},
+\code{head}, \code{last}, \code{tail}, \code{rest}, \code{count},
+\code{isEmpty}, \code{includes}, \code{any}, \code{all}, \code{shift},
+\code{popLast}, \code{unpack}, and \code{insert}.
+
+\begin{lstlisting}[language=Raden]
+(1 2 3) dup collect call print
+(1 2 3) 2 > filter call print
+(1 2 3) 0 add reduce call print
+\end{lstlisting}
+
+\subsection{strings}
+
+\code{libs/strings.rdn} loads the native strings module and provides
+\code{concat}, \code{concatBy}, \code{contains}, \code{hasPrefix},
+\code{hasSuffix}, \code{trimSpace}, \code{split}, and \code{replaceAll}.
+
+\subsection{io}
+
+\code{libs/io.rdn} provides \code{readLine}, \code{readln},
+\code{readAll}, \code{prompt}, \code{nl}, \code{println}, \code{say},
+\code{printAll}, \code{printLines}, and \code{printJoin}.
+
+\subsection{files}
+
+\code{libs/files.rdn} provides \code{readLines}, \code{writeLines},
+\code{appendLines}, \code{readText}, \code{writeText},
+\code{appendText}, \code{slurp}, and \code{spit}.
+
+\begin{lstlisting}[language=Raden]
+"./libs/files.rdn" load
+"./data.txt" readLines call lines let
+lines each call print
+\end{lstlisting}
+
+\subsection{math}
+
+\code{libs/math.rdn} provides \code{sqrt}, \code{powf}, and \code{pow}.
+It also exposes constants such as \code{M\_E}, \code{M\_PI},
+\code{M\_LN2}, \code{M\_SQRT2}, and related C math constants.
+
+\subsection{os, unix, path, process, net, json, strconv, flag}
+
+\begin{longtable}{ll}
+\toprule
+Library & Main functions \\
+\midrule
+\code{os} & \code{pid}, \code{env}, \code{sleep}, \code{now} \\
+\code{unix} & \code{pwd}, \code{exists}, \code{mkdir}, \code{rmPath}, \code{ls} \\
+\code{path} & \code{join}, \code{basename}, \code{dirname}, \code{extname}, \code{absolute} \\
+\code{process} & \code{status}, \code{output} \\
+\code{net} & \code{host}, \code{encodeUrl}, \code{decodeUrl} \\
+\code{json} & \code{parse}, \code{stringify} \\
+\code{strconv} & \code{atoi}, \code{atof}, \code{parseBool}, \code{itoa}, \code{formatBool} \\
+\code{flag} & \code{resetFlags}, \code{addFlag}, \code{execute}, \code{executeOn}, \code{positionals}, \code{programName}, \code{printHelp} \\
+\bottomrule
+\end{longtable}
+
+\section{Native Modules}
+
+Native modules are shared libraries written in C. They export:
+
+\begin{lstlisting}[language=C]
+bool rdn_module_init(RDNModule *module);
+\end{lstlisting}
+
+\subsection{Bundled Native Modules}
+
+\begin{longtable}{ll}
+\toprule
+Module & Registered functions \\
+\midrule
+\code{files} & \code{readLines}, \code{readText}, \code{writeLines}, \code{appendLines}, \code{writeText}, \code{appendText} \\
+\code{io} & \code{readLine}, \code{readAllInput} \\
+\code{json} & \code{parseJson}, \code{stringifyJson} \\
+\code{math} & \code{powerOf}, \code{sqrtOf} \\
+\code{net} & \code{hostName}, \code{urlEncode}, \code{urlDecode} \\
+\code{path} & \code{joinPath}, \code{baseName}, \code{dirName}, \code{extName}, \code{isAbsolutePath} \\
+\code{process} & \code{execStatus}, \code{execOutput} \\
+\code{strconv} & \code{atoi}, \code{atof}, \code{parseBool}, \code{itoa}, \code{formatBool} \\
+\code{strings} & \code{strContains}, \code{strHasPrefix}, \code{strHasSuffix}, \code{strTrimSpace}, \code{strSplit}, \code{strReplaceAll} \\
+\code{syscall} & \code{pid}, \code{getEnv}, \code{sleepMs}, \code{epochTime} \\
+\code{unix} & \code{cwd}, \code{pathExists}, \code{makeDir}, \code{removePath}, \code{listDir} \\
+\bottomrule
+\end{longtable}
+
+\subsection{Native Stack API}
+
+\begin{longtable}{ll}
+\toprule
+Function & Description \\
+\midrule
+\code{api->stack\_size(api)} & Number of items on the stack \\
+\code{api->type(api, index)} & Type of value at index; \code{-1} is top \\
+\code{api->to\_integer(api, index, \&out)} & Read integer \\
+\code{api->to\_number(api, index, \&out)} & Read double \\
+\code{api->to\_boolean(api, index, \&out)} & Read boolean \\
+\code{api->to\_string(api, index)} & Read string as \code{const char *} \\
+\code{api->pop(api, count)} & Pop values \\
+\code{api->push\_integer(api, value)} & Push integer \\
+\code{api->push\_number(api, value)} & Push double \\
+\code{api->push\_boolean(api, value)} & Push boolean \\
+\code{api->push\_string(api, value)} & Push copied string \\
+\code{api->raise\_error(api, message)} & Raise an error and return false \\
+\bottomrule
+\end{longtable}
+
+\subsection{Native List API}
+
+\begin{longtable}{ll}
+\toprule
+Function & Description \\
+\midrule
+\code{api->push\_list(api)} & Push an empty list \\
+\code{api->list\_len(api, index, \&len)} & Read list length \\
+\code{api->list\_append(api, list\_idx, value\_idx)} & Append cloned value \\
+\code{api->list\_index(api, list\_idx, item\_idx)} & Push cloned item \\
+\code{api->list\_remove(api, list\_idx, item\_idx)} & Remove item \\
+\bottomrule
+\end{longtable}
+
+\subsection{Native Module Example}
+
+\begin{lstlisting}[language=C]
+#include "../include/rdn_native.h"
+
+static bool native_add(RDNApi *api) {
+  long left = 0, right = 0;
+
+  if (api->stack_size(api) < 2)
+    return api->raise_error(api, "add requires 2 operands");
+
+  if (!api->to_integer(api, -2, &left) ||
+      !api->to_integer(api, -1, &right))
+    return api->raise_error(api, "add requires integers");
+
+  api->pop(api, 2);
+  return api->push_integer(api, left + right);
+}
+
+bool rdn_module_init(RDNModule *module) {
+  return module->register_function(module, "add", native_add);
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language=bash]
+gcc -Wall -Wextra -Werror -ggdb -std=c11 -fPIC -shared \
+  mymodule.c -I. -o mymodule.so
+\end{lstlisting}
+
+\begin{lstlisting}[language=Raden]
+"./mymodule.so" loadnative
+3 4 add call print
+\end{lstlisting}
+
+\section{Embedding}
+
+Raden exposes a minimal embedding API through \code{include/src.h}.
+
+\begin{lstlisting}[language=C]
+#include "./include/src.h"
+
+int main(void) {
+  char *argv[] = {
+    "host",
+    "./script.rdn",
+  };
+  return rdn_main(2, argv);
+}
+\end{lstlisting}
+
+The first argument is the program name and the second is the script path.
+If \code{argc < 2}, \code{rdn\_main} starts the REPL. Source-relative
+\code{load} and \code{loadnative} path resolution work in embedded usage.
+
+\section{Editor Support}
+
+The repository includes Neovim runtime files:
+
+\begin{lstlisting}[language=bash]
+cp -r ./nvim/* ~/.config/nvim/
+\end{lstlisting}
+
+This provides file detection for \code{.rdn}, syntax highlighting,
+ftplugin defaults, and basic indent rules. A starter Treesitter grammar
+is available in \code{treesitter/raden/}.
+
+\section{Test Suite}
+
+Raden includes regression tests in \code{test/}. Each test is a \code{.rdn}
+file with expected output in \code{test/expected/}. The runner compares
+stdout and stderr and verifies the exit code.
+
+\begin{lstlisting}[language=bash]
+bash test/run.sh
+\end{lstlisting}
+
+Useful tests include:
+\code{test/bugs.rdn}, \code{test/lists.rdn}, \code{test/loop.rdn},
+\code{test/functions.rdn}, \code{test/strings\_and\_type.rdn}, and
+\code{test/rule\_110.rdn}.
+
+\section{Implementation Notes}
+
+When editing the interpreter:
+
+\begin{enumerate}
+\item Remember that the language is postfix; many apparent bugs are
+operand-order mistakes.
+\item List literals execute code and collect resulting stack values.
+\item \code{type} recognizes function identifiers.
+\item Identifier handling is not completely uniform because some values
+are cloned while list and string names may be preserved for mutation.
+\item Validate changes with \code{make} and \code{bash test/run.sh}.
+\end{enumerate}
+
+\end{document}
