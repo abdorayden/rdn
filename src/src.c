@@ -3105,6 +3105,44 @@ static bool apply_line_col(RDNState *stack) {
     return true;
 }
 
+static bool apply_do_string(RDNState *stack, Vars *vars, Funcs *funcs){
+    if (stack->count < 1) {
+        return diagnostic_error_current("do_string requires 1 operands and must be string");
+    }
+    Value* str = ray_pop(stack);
+    if (str->type == VALUE_STRING) {
+        evaluate_source(stack, vars, funcs, str->as.string);
+        return true;
+    }else if(str->type == VALUE_AS_VAR) {
+        Vars_t* var = find_current_scope_var_entry(vars, str->as.string);
+        if (var->var_value->type != VALUE_STRING) {
+            return diagnostic_error_current("variable must be a string type");
+        }
+        evaluate_source(stack, vars, funcs, var->var_value->as.string);
+        return true;
+    }
+    return diagnostic_error_current("the value is not a string type or variable of string");
+}
+
+static bool apply_do_file(RDNState *stack, Vars *vars, Funcs *funcs){
+    if (stack->count < 1) {
+        return diagnostic_error_current("do_file requires 1 operands and must be string");
+    }
+    Value* path = ray_pop(stack);
+    if (path->type == VALUE_STRING) {
+        evaluate_file(stack, vars, funcs, path->as.string);
+        return true;
+    }else if (path->type == VALUE_AS_VAR) {
+        Vars_t* var = find_current_scope_var_entry(vars, path->as.string);
+        if (var->var_value->type != VALUE_STRING) {
+            return diagnostic_error_current("variable must be a string type");
+        }
+        evaluate_file(stack, vars, funcs, var->var_value->as.string);
+        return true;
+    }
+    return diagnostic_error_current("do_file requires 1 operands and must be string");
+}
+
 static bool apply_unlet(RDNState *stack, Vars *vars) {
     Value *name = NULL;
     if (stack->count < 1) {
@@ -3577,6 +3615,20 @@ static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **curs
             continue;
         } else if (is_token(token, "unlet")) {
             if (!apply_unlet(stack, vars)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else if (is_token(token, "do_string")) {
+            if (!apply_do_string(stack, vars , funcs)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else if (is_token(token, "do_file")) {
+            if (!apply_do_file(stack, vars , funcs)) {
                 free(token);
                 return false;
             }

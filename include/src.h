@@ -213,6 +213,8 @@ static bool apply_line_col(RDNState *stack);
 static bool apply_file_name(RDNState *stack);
 static bool apply_func_name(RDNState *stack, Funcs *funcs);
 static bool apply_stack_size(RDNState *stack);
+static bool apply_do_string(RDNState *stack, Vars *vars, Funcs *funcs);
+static bool apply_do_file(RDNState *stack, Vars *vars, Funcs *funcs);
 static bool apply_let(RDNState *stack, Vars *vars);
 static bool apply_unlet(RDNState *stack, Vars *vars);
 static bool apply_error(RDNState *stack, Vars *vars);
