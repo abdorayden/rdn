@@ -3203,6 +3203,15 @@ static bool apply_enum(RDNState *stack, Vars *vars , bool reset) {
         counter = 0;
         return true;
     }
+    if (stack->count > 0) {
+        Value* top = ray_pop(stack);
+        if (top->type == VALUE_INTEGER) {
+            counter = top->as.integer;
+            Value* enum_val = create_integer_value(counter++);
+            ray_append(stack, enum_val);
+            return true;
+        }
+    }
     Value* enum_val = create_integer_value(counter++);
     ray_append(stack, enum_val);
     return true;

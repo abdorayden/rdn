@@ -1,0 +1,13 @@
+3 enum foo const
+enum bar const
+
+foo print 
+"\n" print
+bar print 
+
+reset
+enum baz const
+
+"\n" print
+baz print 
+
