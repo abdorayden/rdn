@@ -1183,6 +1183,34 @@ static bool apply_exit(RDNState *stack , Vars *vars, int* exit_status) {
     return true;
 }
 
+static bool apply_func_name(RDNState *stack, Funcs *funcs){
+    Value *fn = NULL;
+    Value *result = NULL;
+    Funcs_t *entry = NULL;
+
+    if (stack->count < 1) {
+        return diagnostic_error_current("__func_name requires 1 function operand");
+    }
+
+    fn = ray_pop(stack);
+    if (fn->type != VALUE_AS_VAR) {
+        diagnostic_error_current("__func_name requires function name");
+        ray_append(stack, fn);
+        return false;
+    }
+
+    entry = find_func_entry(funcs, fn->as.string);
+    if (entry == NULL) {
+        diagnostic_error_current("unknown function: %s", fn->as.string);
+        ray_append(stack, fn);
+        return false;
+    }
+
+    result = create_string_value_copy(entry->func_name);
+    free_value(fn);
+    return push_value(stack, result);
+}
+
 static bool apply_type(RDNState *stack, Vars *vars, Funcs *funcs) {
     Value *value = NULL;
     Value *result = NULL;
@@ -2771,6 +2799,13 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
             }
             free(token);
             continue;
+        } else if (is_token(token, "__func_name")) {
+            if (!apply_func_name(stack, funcs)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
         } else if (is_token(token, "exit")) {
             int ret = 0;
 
@@ -3463,6 +3498,13 @@ static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **curs
             continue;
         } else if (is_token(token, "type")) {
             if (!apply_type(stack, vars, funcs)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else if (is_token(token, "__func_name")) {
+            if (!apply_func_name(stack, funcs)) {
                 free(token);
                 return false;
             }

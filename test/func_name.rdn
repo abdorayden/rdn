@@ -1,0 +1,5 @@
+foo defun
+    "hi" print
+end
+
+foo __func_name print
