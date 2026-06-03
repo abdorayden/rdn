@@ -1183,6 +1183,11 @@ static bool apply_exit(RDNState *stack , Vars *vars, int* exit_status) {
     return true;
 }
 
+static bool apply_stack_size(RDNState *stack){
+    Value* size = create_integer_value((long)stack->count);
+    return push_value(stack, size);
+}
+
 static bool apply_func_name(RDNState *stack, Funcs *funcs){
     Value *fn = NULL;
     Value *result = NULL;
@@ -2806,6 +2811,13 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
             }
             free(token);
             continue;
+        } else if (is_token(token, "__stack_size")) {
+            if (!apply_stack_size(stack)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
         } else if (is_token(token, "exit")) {
             int ret = 0;
 
@@ -3505,6 +3517,13 @@ static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **curs
             continue;
         } else if (is_token(token, "__func_name")) {
             if (!apply_func_name(stack, funcs)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else if (is_token(token, "__stack_size")) {
+            if (!apply_stack_size(stack)) {
                 free(token);
                 return false;
             }
