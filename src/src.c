@@ -3042,6 +3042,13 @@ static bool apply_error(RDNState *stack, Vars *vars) {
     return diagnostic_error_current("error keyword  requires variable name of type string or string literal");
 }
 
+static bool apply_file_name(RDNState *stack) {
+    const char *path = g_diagnostic_context.path != NULL ? g_diagnostic_context.path : "<repl>";
+    Value* rdn_file_path = create_string_value_copy(path);
+    ray_append(stack, rdn_file_path);
+    return true;
+}
+
 static bool apply_line_col(RDNState *stack) {
     size_t line;
     size_t column;
@@ -3507,6 +3514,13 @@ static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **curs
             continue;
         } else if (is_token(token, "__line_col")) {
             if (!apply_line_col(stack)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else if (is_token(token, "__file")) {
+            if (!apply_file_name(stack)) {
                 free(token);
                 return false;
             }

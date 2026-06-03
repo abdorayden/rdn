@@ -24,7 +24,7 @@ syntax keyword radenRepeat loop break continue
 syntax keyword radenKeyword let const enum reset defun apply call set pcall unlet
 
 syntax keyword radenBuiltin print type exit pop swap dup to_string load loadnative add_load_path add_native_path error
-syntax keyword radenBuiltin append remove index len __argv __host_os __sharedlib_ext __line_col
+syntax keyword radenBuiltin append remove index len __argv __host_os __sharedlib_ext __line_col __file
 
 syntax match radenOperator /\V+/
 syntax match radenOperator /-/
