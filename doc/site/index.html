@@ -371,6 +371,7 @@
             <a href="#lib-io">io</a>
             <a href="#lib-files">files</a>
             <a href="#lib-math">math</a>
+            <a href="#lib-typecheck">typecheck</a>
             <a href="#lib-os">os</a>
             <a href="#lib-unix">unix</a>
             <a href="#lib-path">path</a>
@@ -422,7 +423,7 @@
                 <h2>Raden</h2>
                 <p>A small stack-based scripting language with a C interpreter and native module API. Postfix syntax,
                     first-class functions, and seamless C integration.</p>
-                <pre style="margin-top:16px"><code><span style="color:var(--accent2)"># hello.rdn</span>
+                <pre style="margin-top:16px"><code><span style="color:var(--accent2)">[* hello.rdn *]</span>
                         "hello, world!\n" print</code></pre>
             </div>
 
@@ -452,10 +453,9 @@
 
             <h3>Install</h3>
             <p>Use the installer script to fetch, build, and install Raden automatically:</p>
-            <pre><code>curl -fsSL https://raw.githubusercontent.com/abdorayden/rdn/master/install | sh
-
-                    # or from a cloned checkout
-                    ./install</code></pre>
+            <pre><code>curl -fsSL https://raw.githubusercontent.com/abdorayden/rdn/master/install | sh</code></pre>
+            <p>Or from a cloned checkout:</p>
+            <pre><code>./install</code></pre>
             <p>By default, libraries install to <code>/usr/local/share/rdn/libs</code> and native modules install to
                 <code>/usr/local/share/rdn/nativelibs</code>.
             </p>
@@ -484,10 +484,10 @@
             <pre><code>bash test/run.sh</code></pre>
 
             <h3>Command-line flags</h3>
-            <pre><code>./main --version # print version and exit
-                    ./main -v # same
-                    ./main script.rdn # run script
-                    ./main # start REPL</code></pre>
+            <pre><code>./main --version
+                    ./main -v
+                    ./main script.rdn
+                    ./main</code></pre>
         </section>
 
         <!-- ============ VALUES ============ -->
@@ -772,6 +772,18 @@
 
              </code></pre>
 
+            <h3>demac — textual macro expansion</h3>
+            <p><code>demac</code> defines a word that expands its body into the active source stream whenever the word
+                is read. This is useful for aliases that must preserve surrounding syntax, such as loop keywords.</p>
+            <pre><code>for demac loop end
+
+                    0 i let
+                    true for
+                    i print "\n" print
+                    i 1 + i set
+                    i 3 &lt;
+                    end</code></pre>
+
             <h3>pcall — protected calls</h3>
             <pre><code>risky defun
                     null 0 index
@@ -884,6 +896,11 @@
                     <td><span class="sig">value -> string</span></td>
                     <td>Convert value to string representation</td>
                 </tr>
+                <tr>
+                    <td><code>assert</code></td>
+                    <td><span class="sig">condition message -></span></td>
+                    <td>Raise message if condition is false</td>
+                </tr>
             </table>
 
             <h3>Variables</h3>
@@ -974,6 +991,11 @@
                     <td><code>apply</code></td>
                     <td><span class="sig">name ... end -></span></td>
                     <td>Define an anonymous function</td>
+                </tr>
+                <tr>
+                    <td><code>demac</code></td>
+                    <td><span class="sig">name tokens... end -></span></td>
+                    <td>Define a macro expanded at read time</td>
                 </tr>
                 <tr>
                     <td><code>call</code></td>
@@ -1573,6 +1595,66 @@
                     4 sqrt call print <span style="color:var(--text2)">[* 2.0*]</span>
                     2 8 pow call print <span style="color:var(--text2)">[* 256.0*]</span>
                     M_PI print <span style="color:var(--text2)">[* 3.14159...*]</span></code></pre>
+        </section>
+
+        <section class="section" id="lib-typecheck">
+            <h2>Standard Library — typecheck</h2>
+            <p><span class="badge badge-lib">libs/typecheck.rdn</span> Optional runtime signature checks for signed
+                <code>defun</code>.</p>
+
+            <p>Load the library before defining signed functions. The signed form is postfix: function name, parameter
+                type list, return type list, then <code>defun</code>.</p>
+            <pre><code>"./libs/typecheck.rdn" load
+
+                    add_ints (Int Int) (Int) defun
+                    +
+                    end
+
+                    2 3 add_ints check print
+                    2 3 add_ints scall print</code></pre>
+
+            <p>Use <code>()</code> for no parameters or no return values.</p>
+            <pre><code>make_num () (Int) defun
+                    42
+                    end
+
+                    print_num (Int) () defun
+                    print
+                    end</code></pre>
+
+            <table>
+                <tr>
+                    <th>Name</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><code>Int Str Bool Real List Null</code></td>
+                    <td>Concrete type constants used in signatures</td>
+                </tr>
+                <tr>
+                    <td><code>Any</code></td>
+                    <td>Wildcard type; accepts any runtime value</td>
+                </tr>
+                <tr>
+                    <td><code>Func</code></td>
+                    <td>Function identifier type; matches values whose <code>type</code> is <code>"function"</code></td>
+                </tr>
+                <tr>
+                    <td><code>check</code></td>
+                    <td>Validate arguments for a signed function without calling it</td>
+                </tr>
+                <tr>
+                    <td><code>scall</code></td>
+                    <td>Validate arguments, call through <code>pcall</code>, then validate return count and types</td>
+                </tr>
+            </table>
+
+            <pre><code>identity_any (Any) (Any) defun
+                    end
+
+                    call_with_9 (Func) (Any) defun
+                    9 swap scall
+                    end</code></pre>
         </section>
 
         <section class="section" id="lib-os">

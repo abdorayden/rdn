@@ -24,9 +24,10 @@
 
 \lstdefinelanguage{Raden}{
   morekeywords={
-    let,set,const,unlet,defun,apply,call,pcall,if,else,end,loop,break,
+    let,set,const,unlet,defun,apply,demac,call,pcall,if,else,end,loop,break,
     continue,load,loadnative,add_load_path,add_native_path,true,false,null,
-    print,type,to_string,exit,append,remove,index,len,enum,reset,error
+    print,type,to_string,exit,append,remove,index,len,enum,reset,error,assert,
+    check,scall
   },
   sensitive=true,
   morecomment=[s]{[*}{*]},
@@ -97,8 +98,11 @@ int rdn_main(int argc, char **argv);
 
 \begin{lstlisting}[language=bash]
 curl -fsSL https://raw.githubusercontent.com/abdorayden/rdn/master/install | sh
+\end{lstlisting}
 
-# or from a cloned checkout
+Or from a cloned checkout:
+
+\begin{lstlisting}[language=bash]
 ./install
 \end{lstlisting}
 
@@ -344,6 +348,23 @@ end
 4 triple print
 \end{lstlisting}
 
+\subsection{demac}
+
+\code{demac} defines a textual macro. When the macro word is read, its
+body is expanded into the active source stream before parsing continues.
+This allows aliases for syntax words, not only value-producing code.
+
+\begin{lstlisting}[language=Raden]
+for demac loop end
+
+0 i let
+true for
+  i print "\n" print
+  i 1 + i set
+  i 3 <
+end
+\end{lstlisting}
+
 \subsection{call}
 
 \code{call} invokes a function by name. A string can also name the
@@ -436,6 +457,7 @@ Builtin & Stack shape & Description \\
 \code{swap} & \code{a b -> b a} & Swap top two values \\
 \code{type} & \code{value -> string} & Return type name \\
 \code{to\_string} & \code{value -> string} & Convert to string \\
+\code{assert} & \code{condition message ->} & Raise message if condition is false \\
 \code{let} & \code{value name ->} & Create mutable binding \\
 \code{set} & \code{value name ->} & Update binding \\
 \code{const} & \code{value name ->} & Create constant binding \\
@@ -452,6 +474,7 @@ Builtin & Stack shape & Description \\
 \code{add\_native\_path} & \code{path ->} & Add native search path \\
 \code{defun} & \code{name ... end ->} & Define named function \\
 \code{apply} & \code{name ... end ->} & Define direct-call word \\
+\code{demac} & \code{name tokens... end ->} & Define read-time macro \\
 \code{call} & \code{name args... -> results...} & Invoke a function \\
 \code{pcall} & \code{name args... -> result true | error false} & Protected call \\
 \code{error} & \code{string -> error} & Raise an interpreter error \\
@@ -588,6 +611,57 @@ lines each call print
 \code{libs/math.rdn} provides \code{sqrt}, \code{powf}, and \code{pow}.
 It also exposes constants such as \code{M\_E}, \code{M\_PI},
 \code{M\_LN2}, \code{M\_SQRT2}, and related C math constants.
+
+\subsection{typecheck}
+
+\code{libs/typecheck.rdn} provides optional runtime signature checks for
+signed \code{defun}. Load the library before defining signed functions.
+The signed form is postfix: function name, parameter type list, return
+type list, then \code{defun}.
+
+\begin{lstlisting}[language=Raden]
+"./libs/typecheck.rdn" load
+
+add_ints (Int Int) (Int) defun
+  +
+end
+
+2 3 add_ints check print
+2 3 add_ints scall print
+\end{lstlisting}
+
+Use \code{()} when a function accepts no parameters or returns no values:
+
+\begin{lstlisting}[language=Raden]
+make_num () (Int) defun
+  42
+end
+
+print_num (Int) () defun
+  print
+end
+\end{lstlisting}
+
+\begin{longtable}{ll}
+\toprule
+Name & Description \\
+\midrule
+\code{Int Str Bool Real List Null} & Concrete type constants for signatures \\
+\code{Any} & Wildcard type; accepts any runtime value \\
+\code{Func} & Function identifier type; matches values whose \code{type} is \code{"function"} \\
+\code{check} & Validate arguments for a signed function without calling it \\
+\code{scall} & Validate arguments, call through \code{pcall}, then validate returns \\
+\bottomrule
+\end{longtable}
+
+\begin{lstlisting}[language=Raden]
+identity_any (Any) (Any) defun
+end
+
+call_with_9 (Func) (Any) defun
+  9 swap scall
+end
+\end{lstlisting}
 
 \subsection{os, unix, path, process, net, json, strconv, flag}
 
