@@ -1,0 +1,11 @@
+for demac loop end
+
+0 i let
+true for
+    i print "\n" print
+    i 1 + i set
+    i 3 <
+end
+
+inc demac 1 + end
+41 inc print "\n" print

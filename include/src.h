@@ -25,6 +25,7 @@ typedef struct NativeModuleLoadState NativeModuleLoadState;
 typedef struct DiagnosticContext DiagnosticContext;
 typedef RLList(char *) LoadPathStack;
 typedef RLList(char *) SearchPathStack;
+typedef RLList(char *) MacroExpansionStack;
 
 typedef RLStack(Value *) RDNState;
 typedef RLList(Vars_t*) Vars;
@@ -66,6 +67,7 @@ struct Vars_t {
 enum FuncType {
     FUNC_SCRIPT,
     FUNC_APPLY,
+    FUNC_DEMAC,
     FUNC_NATIVE,
 };
 
@@ -126,6 +128,7 @@ static DiagnosticContext g_diagnostic_context = {0};
 static LoadPathStack g_load_path_stack = {0};
 static SearchPathStack g_script_search_paths = {0};
 static SearchPathStack g_native_search_paths = {0};
+static MacroExpansionStack g_macro_expansions = {0};
 static RLList(char*) g_stack_trace_protected = {0};
 static bool g_diagnostics_suppressed = false;
 
@@ -154,8 +157,10 @@ static void vars_pop_scope(Vars *vars);
 static Vars_t *find_var_entry(const Vars *vars, const char *name);
 static Vars_t *find_current_scope_var_entry(const Vars *vars, const char *name);
 static Funcs_t *find_func_entry(const Funcs *funcs, const char *name);
+static bool func_entry_has_body(const Funcs_t *entry);
 static bool funcs_define(Funcs *funcs, const char *name, char *body, const char *source_path, size_t source_line, size_t source_column);
 static bool funcs_define_apply(Funcs *funcs, const char *name, char *body, const char *source_path, size_t source_line, size_t source_column);
+static bool funcs_define_demac(Funcs *funcs, const char *name, char *body, const char *source_path, size_t source_line, size_t source_column);
 static bool funcs_define_native(Funcs *funcs, const char *name, RDNNativeFunction native_function, void *native_library_handle);
 static bool vars_let(Vars *vars, const char *name, const Value *value);
 static bool vars_set(Vars *vars, const char *name, const Value *value);
@@ -195,9 +200,13 @@ static bool typecheck_signature_types_valid(const Value *types);
 static bool append_typecheck_signature(Vars *vars, const char *name, const Value *params, const Value *returns);
 static bool apply_defun(RDNState *stack, Vars *vars, Funcs *funcs, char **cursor);
 static bool apply_apply(RDNState *stack, Funcs *funcs, char **cursor);
+static bool apply_demac(RDNState *stack, Funcs *funcs, char **cursor);
 static bool apply_call(RDNState *stack, Vars *vars, Funcs *funcs);
 static bool apply_pcall(RDNState *stack, Vars *vars, Funcs *funcs);
 static bool execute_named_entry(RDNState *stack, Vars *vars, Funcs *funcs, Funcs_t *entry, const char *context_kind, const char *context_name);
+static bool expand_demac(Funcs_t *entry, char **cursor);
+static void free_macro_expansion_stack(MacroExpansionStack *expansions);
+static void free_macro_expansions(void);
 static bool materialize_scope_references(RDNState *stack, Vars *vars, size_t start_index);
 
 // to_string builtin function convert value from the top stack to string without remove it
@@ -233,6 +242,7 @@ static bool apply_loop(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor)
 static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor, BlockStop *stop_reason, bool allow_else);
 static bool skip_if(char **cursor);
 static bool skip_loop(char **cursor);
+static bool skip_demac(char **cursor);
 static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else);
 static bool evaluate_source(RDNState *stack, Vars* vars, Funcs *funcs, char *source);
 static bool evaluate_file(RDNState *stack, Vars *vars, Funcs *funcs, const char *path);
@@ -289,7 +299,7 @@ static void diagnostic_set_last_token(const char *start, const char *end);
 static bool diagnostic_error_at(const char *pointer, const char *fmt, ...);
 static bool diagnostic_error_current(const char *fmt, ...);
 static bool diagnostic_note_current(const char *fmt, ...);
-static bool source_has_complete_blocks(const char *source, bool *out_complete);
+static bool source_has_complete_blocks(const char *source, const Funcs *funcs, bool *out_complete);
 static int run_repl(void);
 static const char *host_os_name(void);
 static const char *host_shared_library_extension(void);

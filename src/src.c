@@ -423,7 +423,7 @@ static void free_func_entry(Funcs_t *entry) {
     }
 
     free(entry->func_name);
-    if (entry->type == FUNC_SCRIPT || entry->type == FUNC_APPLY) {
+    if (func_entry_has_body(entry)) {
         free(entry->as.func_body);
     }
     free(entry->source_path);
@@ -527,11 +527,15 @@ static Funcs_t *find_func_entry(const Funcs *funcs, const char *name) {
     return NULL;
 }
 
+static bool func_entry_has_body(const Funcs_t *entry) {
+    return entry->type == FUNC_SCRIPT || entry->type == FUNC_APPLY || entry->type == FUNC_DEMAC;
+}
+
 static bool funcs_define(Funcs *funcs, const char *name, char *body, const char *source_path, size_t source_line, size_t source_column) {
     Funcs_t *entry = find_func_entry(funcs, name);
 
     if (entry != NULL) {
-        if (entry->type == FUNC_SCRIPT || entry->type == FUNC_APPLY) {
+        if (func_entry_has_body(entry)) {
             free(entry->as.func_body);
         }
         entry->type = FUNC_SCRIPT;
@@ -561,7 +565,7 @@ static bool funcs_define_apply(Funcs *funcs, const char *name, char *body, const
     Funcs_t *entry = find_func_entry(funcs, name);
 
     if (entry != NULL) {
-        if (entry->type == FUNC_SCRIPT || entry->type == FUNC_APPLY) {
+        if (func_entry_has_body(entry)) {
             free(entry->as.func_body);
         }
         entry->type = FUNC_APPLY;
@@ -588,11 +592,42 @@ static bool funcs_define_apply(Funcs *funcs, const char *name, char *body, const
     return true;
 }
 
+static bool funcs_define_demac(Funcs *funcs, const char *name, char *body, const char *source_path, size_t source_line, size_t source_column) {
+    Funcs_t *entry = find_func_entry(funcs, name);
+
+    if (entry != NULL) {
+        if (func_entry_has_body(entry)) {
+            free(entry->as.func_body);
+        }
+        entry->type = FUNC_DEMAC;
+        entry->as.func_body = body;
+        free(entry->source_path);
+        entry->source_path = copy_string(source_path == NULL ? "<repl>" : source_path);
+        if (entry->source_path == NULL) {
+            free(body);
+            return diagnostic_error_current("failed to allocate macro source path");
+        }
+        entry->source_line = source_line;
+        entry->source_column = source_column;
+        entry->native_library_handle = NULL;
+        return true;
+    }
+
+    entry = create_func_entry(name, body, source_path, source_line, source_column);
+    if (entry == NULL) {
+        return diagnostic_error_current("failed to allocate macro entry");
+    }
+
+    entry->type = FUNC_DEMAC;
+    ray_append(funcs, entry);
+    return true;
+}
+
 static bool funcs_define_native(Funcs *funcs, const char *name, RDNNativeFunction native_function, void *native_library_handle) {
     Funcs_t *entry = find_func_entry(funcs, name);
 
     if (entry != NULL) {
-        if (entry->type == FUNC_SCRIPT || entry->type == FUNC_APPLY) {
+        if (func_entry_has_body(entry)) {
             free(entry->as.func_body);
         }
         entry->type = FUNC_NATIVE;
@@ -2152,8 +2187,16 @@ static bool apply_defun(RDNState *stack, Vars *vars, Funcs *funcs, char **cursor
             return false;
         }
 
-        if (!is_string && (is_token(token, "if") || is_token(token, "loop") || is_token(token, "defun") ||
-                           is_token(token, "apply"))) {
+        if (!is_string && is_token(token, "demac")) {
+            if (!skip_demac(&scan)) {
+                free(token);
+                free_value(name);
+                free_value(params);
+                free_value(returns);
+                return false;
+            }
+        } else if (!is_string && (is_token(token, "if") || is_token(token, "loop") || is_token(token, "defun") ||
+                                  is_token(token, "apply"))) {
             depth++;
         } else if (!is_string && is_token(token, "end")) {
             depth--;
@@ -2239,8 +2282,14 @@ static bool apply_apply(RDNState *stack, Funcs *funcs, char **cursor) {
             return false;
         }
 
-        if (!is_string && (is_token(token, "if") || is_token(token, "loop") || is_token(token, "defun") ||
-                           is_token(token, "apply"))) {
+        if (!is_string && is_token(token, "demac")) {
+            if (!skip_demac(&scan)) {
+                free(token);
+                free_value(name);
+                return false;
+            }
+        } else if (!is_string && (is_token(token, "if") || is_token(token, "loop") || is_token(token, "defun") ||
+                                  is_token(token, "apply"))) {
             depth++;
         } else if (!is_string && is_token(token, "end")) {
             depth--;
@@ -2272,6 +2321,102 @@ static bool apply_apply(RDNState *stack, Funcs *funcs, char **cursor) {
 
         free(token);
     }
+}
+
+static bool apply_demac(RDNState *stack, Funcs *funcs, char **cursor) {
+    Value *name = NULL;
+    char *body = NULL;
+    char *body_start = *cursor;
+    char *scan = *cursor;
+    char *token = NULL;
+    bool is_string = false;
+    size_t source_line = 1;
+    size_t source_column = 1;
+
+    if (stack->count < 1) {
+        return diagnostic_error_current("demac requires macro name");
+    }
+
+    name = ray_pop(stack);
+    if (name->type != VALUE_AS_VAR) {
+        diagnostic_error_current("demac requires macro name");
+        ray_append(stack, name);
+        return false;
+    }
+
+    diagnostic_compute_location(body_start, &source_line, &source_column, NULL, NULL);
+
+    while (true) {
+        char *token_start = scan;
+
+        if (!next_token(&scan, &token, &is_string)) {
+            free_value(name);
+            return false;
+        }
+
+        if (token == NULL) {
+            diagnostic_error_at(scan, "demac missing end");
+            free_value(name);
+            return false;
+        }
+
+        if (!is_string && is_token(token, "end")) {
+            size_t body_length = (size_t)(token_start - body_start);
+            body = malloc(body_length + 1);
+            if (body == NULL) {
+                diagnostic_error_at(token_start, "failed to allocate macro body");
+                free(token);
+                free_value(name);
+                return false;
+            }
+
+            memcpy(body, body_start, body_length);
+            body[body_length] = '\0';
+
+            if (!funcs_define_demac(funcs, name->as.string, body, g_current_source_path, source_line, source_column)) {
+                free(token);
+                free_value(name);
+                return false;
+            }
+
+            free(token);
+            free_value(name);
+            *cursor = scan;
+            return true;
+        }
+
+        free(token);
+    }
+}
+
+static bool expand_demac(Funcs_t *entry, char **cursor) {
+    size_t body_length = strlen(entry->as.func_body);
+    size_t rest_length = strlen(*cursor);
+    char *expanded = malloc(body_length + rest_length + 1);
+
+    if (expanded == NULL) {
+        return diagnostic_error_current("failed to allocate macro expansion");
+    }
+
+    memcpy(expanded, entry->as.func_body, body_length);
+    memcpy(expanded + body_length, *cursor, rest_length + 1);
+
+    ray_append(&g_macro_expansions, expanded);
+    *cursor = expanded;
+    return true;
+}
+
+static void free_macro_expansion_stack(MacroExpansionStack *expansions) {
+    while (expansions->count > 0) {
+        free(ray_pop(expansions));
+    }
+
+    ray_clear(expansions);
+}
+
+static void free_macro_expansions(void) {
+    free_macro_expansion_stack(&g_macro_expansions);
+    g_macro_expansions = (MacroExpansionStack){0};
 }
 
 static bool execute_named_entry(RDNState *stack, Vars *vars, Funcs *funcs, Funcs_t *entry, const char *context_kind, const char *context_name) {
@@ -2851,6 +2996,12 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
                 return false;
             }
             continue;
+        } else if (is_token(token, "demac")) {
+            free(token);
+            if (!apply_demac(stack, funcs, cursor)) {
+                return false;
+            }
+            continue;
         } else if (is_token(token, "call")) {
             free(token);
             if (!apply_call(stack, vars, funcs)) {
@@ -3054,7 +3205,14 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
                 resolved = create_var_name_value(token);
             } else if ((var_entry = find_var_entry(vars, token)) != NULL) {
                 resolved = clone_value(var_entry->var_value);
-            } else if ((func_entry = find_func_entry(funcs, token)) != NULL && func_entry->type == FUNC_APPLY) {
+            } else if ((func_entry = find_func_entry(funcs, token)) != NULL && func_entry->type == FUNC_DEMAC) {
+                if (!expand_demac(func_entry, cursor)) {
+                    free(token);
+                    return false;
+                }
+                free(token);
+                continue;
+            } else if (func_entry != NULL && func_entry->type == FUNC_APPLY) {
                 bool ok = execute_named_entry(stack, vars, funcs, func_entry, "applying body", func_entry->func_name);
                 free(token);
                 if (!ok) {
@@ -3641,6 +3799,12 @@ static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **curs
                 return false;
             }
             continue;
+        } else if (is_token(token, "demac")) {
+            free(token);
+            if (!apply_demac(stack, funcs, cursor)) {
+                return false;
+            }
+            continue;
         } else if (is_token(token, "call")) {
             free(token);
             if (!apply_call(stack, vars, funcs)) {
@@ -3892,7 +4056,14 @@ static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **curs
                 resolved = create_var_name_value(token);
             } else if ((var_entry = find_var_entry(vars, token)) != NULL) {
                 resolved = clone_value(var_entry->var_value);
-            } else if ((func_entry = find_func_entry(funcs, token)) != NULL && func_entry->type == FUNC_APPLY) {
+            } else if ((func_entry = find_func_entry(funcs, token)) != NULL && func_entry->type == FUNC_DEMAC) {
+                if (!expand_demac(func_entry, cursor)) {
+                    free(token);
+                    return false;
+                }
+                free(token);
+                continue;
+            } else if (func_entry != NULL && func_entry->type == FUNC_APPLY) {
                 bool ok = execute_named_entry(stack, vars, funcs, func_entry, "applying body", func_entry->func_name);
                 free(token);
                 if (!ok) {
@@ -3956,6 +4127,28 @@ static bool skip_loop(char **cursor) {
     return true;
 }
 
+static bool skip_demac(char **cursor) {
+    char *token = NULL;
+    bool is_string = false;
+
+    while (true) {
+        if (!next_token(cursor, &token, &is_string)) {
+            return false;
+        }
+
+        if (token == NULL) {
+            return diagnostic_error_current("demac missing end");
+        }
+
+        if (!is_string && is_token(token, "end")) {
+            free(token);
+            return true;
+        }
+
+        free(token);
+    }
+}
+
 static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else) {
     char *token = NULL;
     bool is_string = false;
@@ -3988,6 +4181,14 @@ static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else) {
         if (is_token(token, "if")) {
             free(token);
             if (!skip_if(cursor)) {
+                return false;
+            }
+            continue;
+        }
+
+        if (is_token(token, "demac")) {
+            free(token);
+            if (!skip_demac(cursor)) {
                 return false;
             }
             continue;
@@ -4827,27 +5028,52 @@ static bool append_text(char **buffer, size_t *length, const char *text) {
     return true;
 }
 
-static bool source_has_complete_blocks(const char *source, bool *out_complete) {
+static bool source_has_complete_blocks(const char *source, const Funcs *funcs, bool *out_complete) {
     char *cursor = (char *)source;
     char *token = NULL;
     bool is_string = false;
     int depth = 0;
+    MacroExpansionStack expansions = {0};
     DiagnosticContext previous_context = g_diagnostic_context;
 
     diagnostic_set_source(NULL, source, 1, 1);
 
     while (true) {
         if (!next_token(&cursor, &token, &is_string)) {
+            free_macro_expansion_stack(&expansions);
             return false;
         }
 
         if (token == NULL) {
             *out_complete = (depth == 0);
             g_diagnostic_context = previous_context;
+            free_macro_expansion_stack(&expansions);
             return true;
         }
 
-        if (!is_string && (is_token(token, "if") || is_token(token, "loop") || is_token(token, "defun") || is_token(token, "apply"))) {
+        if (!is_string && is_token(token, "demac")) {
+            free(token);
+            while (true) {
+                if (!next_token(&cursor, &token, &is_string)) {
+                    free_macro_expansion_stack(&expansions);
+                    return false;
+                }
+
+                if (token == NULL) {
+                    *out_complete = false;
+                    g_diagnostic_context = previous_context;
+                    free_macro_expansion_stack(&expansions);
+                    return true;
+                }
+
+                if (!is_string && is_token(token, "end")) {
+                    break;
+                }
+
+                free(token);
+            }
+        } else if (!is_string && (is_token(token, "if") || is_token(token, "loop") || is_token(token, "defun") ||
+                                  is_token(token, "apply"))) {
             depth++;
         } else if (!is_string && is_token(token, "end")) {
             depth--;
@@ -4855,13 +5081,35 @@ static bool source_has_complete_blocks(const char *source, bool *out_complete) {
                 diagnostic_error_current("unexpected end");
                 free(token);
                 g_diagnostic_context = previous_context;
+                free_macro_expansion_stack(&expansions);
                 return false;
             }
         } else if (!is_string && is_token(token, "else") && depth == 0) {
             diagnostic_error_current("unexpected else");
             free(token);
             g_diagnostic_context = previous_context;
+            free_macro_expansion_stack(&expansions);
             return false;
+        } else if (!is_string && is_identifier_token(token)) {
+            Funcs_t *entry = find_func_entry(funcs, token);
+
+            if (entry != NULL && entry->type == FUNC_DEMAC) {
+                size_t body_length = strlen(entry->as.func_body);
+                size_t rest_length = strlen(cursor);
+                char *expanded = malloc(body_length + rest_length + 1);
+
+                if (expanded == NULL) {
+                    free(token);
+                    g_diagnostic_context = previous_context;
+                    free_macro_expansion_stack(&expansions);
+                    return false;
+                }
+
+                memcpy(expanded, entry->as.func_body, body_length);
+                memcpy(expanded + body_length, cursor, rest_length + 1);
+                ray_append(&expansions, expanded);
+                cursor = expanded;
+            }
         }
 
         free(token);
@@ -4904,16 +5152,18 @@ static int run_repl(void) {
         if (!append_text(&source, &source_length, line)) {
             fprintf(stderr, "failed to allocate repl buffer\n");
             free(source);
+            free_macro_expansions();
             free_stack_values(&stack);
             free_vars(&vars);
             free_funcs(&funcs);
             return EXIT_FAILURE;
         }
 
-        if (!source_has_complete_blocks(source, &complete)) {
+        if (!source_has_complete_blocks(source, &funcs, &complete)) {
             free(source);
             source = NULL;
             source_length = 0;
+            free_macro_expansions();
             free_stack_values(&stack);
             stack = (RDNState){0};
             continue;
@@ -4927,6 +5177,7 @@ static int run_repl(void) {
             free_stack_values(&stack);
             stack = (RDNState){0};
         }
+        free_macro_expansions();
 
         free(source);
         source = NULL;
@@ -4934,6 +5185,7 @@ static int run_repl(void) {
     }
 
     free(source);
+    free_macro_expansions();
     free_stack_values(&stack);
     free_vars(&vars);
     free_funcs(&funcs);
@@ -5031,6 +5283,7 @@ int rdn_main(int argc , char** argv) {
     apply_argv(&vars, path, argc ,  argv);
 
     if (!evaluate_file(&stack, &vars, &funcs, path)) {
+        free_macro_expansions();
         free_stack_values(&stack);
         free_vars(&vars);
         free_funcs(&funcs);
@@ -5039,12 +5292,14 @@ int rdn_main(int argc , char** argv) {
 
     if (stack.count != 0) {
         fprintf(stderr, "unexpected values left on stack: %zu\n", stack.count);
+        free_macro_expansions();
         free_stack_values(&stack);
         free_vars(&vars);
         free_funcs(&funcs);
         return exit_code;
     }
 
+    free_macro_expansions();
     free_stack_values(&stack);
     free_vars(&vars);
     free_funcs(&funcs);
