@@ -5,6 +5,8 @@
 #include "../src/stack.h"
 
 #define RADEN_VERSION "1.0.0"
+#define RDN_TYPECHECK_FUNC_CODE 6
+#define RDN_TYPECHECK_ANY_CODE 7
 
 #ifndef RDN_INSTALL_PREFIX
 #define RDN_INSTALL_PREFIX "/usr/local/share/rdn"

@@ -1,9 +1,5 @@
-
 [*
-*   TODO: add Any type
-*   TODO: add Optional type   foo (Int (Any Optional)) (Null) defun ... end
 *   TODO: add sig function to get signature foo sig call -> (foo (Int Int) (Int))
-*   TODO: add Func type for example foo (( (Bool Bool) (Bool) Func) List) (Bool) defun ... end
 * *]
      
 reset
@@ -14,12 +10,8 @@ enum Real const
 enum List const
 enum Null const
 
-[*
-*   TODO: implement those two words
-* *]
 enum Func const
 enum Any const
-enum Optional const
 reset
 
 [*
@@ -110,7 +102,9 @@ __tc_type_code defun
                         t "null" = if
                             Null
                         else
-                            Ret
+                            t "function" = if
+                                Func
+                            end
                         end
                     end
                 end
@@ -122,7 +116,7 @@ end
 __tc_valid_type_code defun
     code let
 
-    code Int = code Str = | code Bool = | code Real = | code List = | code Null = |
+    code Int = code Str = | code Bool = | code Real = | code List = | code Null = | code Func = | code Any = |
 end
 
 __tc_validate_types defun
@@ -186,11 +180,15 @@ __tc_check_stack_types defun
             top-value let
 
             top-value __tc_type_code call actual let
-            top-value dup
-            popped swap append
-            pop
+            actual Func = if
+                popped top-value append
+            else
+                top-value dup
+                popped swap append
+                pop
+            end
 
-            actual expected != if
+            expected Any != actual expected != & if
                 false ok set
             end
 

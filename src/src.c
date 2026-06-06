@@ -2047,7 +2047,7 @@ static bool typecheck_signature_types_valid(const Value *types) {
     for (index = 0; index < types->as.list.count; index++) {
         const Value *item = types->as.list.items[index];
 
-        if (item->type != VALUE_INTEGER || item->as.integer < 0 || item->as.integer > 5) {
+        if (item->type != VALUE_INTEGER || item->as.integer < 0 || item->as.integer > RDN_TYPECHECK_ANY_CODE) {
             return false;
         }
     }
