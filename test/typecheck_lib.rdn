@@ -1,0 +1,27 @@
+"../libs/typecheck.rdn" load
+
+add_ints (Int Int) (Int) defun
+    +
+end
+
+stringify (Int) (Str) defun
+    to_string swap pop
+end
+
+bad_return () (Int) defun
+    "bad"
+end
+
+2 3 add_ints check print "\n" print
+pop
+pop
+2 3 add_ints scall print "\n" print
+8 stringify scall print "\n" print
+
+mismatch_args defun
+    "x" 1 add_ints scall
+end
+
+"x" 1 add_ints check print "\n" print
+pop
+pop

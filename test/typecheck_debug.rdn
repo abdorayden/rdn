@@ -1,0 +1,12 @@
+"../libs/typecheck.rdn" load
+
+add_ints (Int Int) (Int) defun
+    +
+end
+
+State print "\n" print
+add_ints __func_name print "\n" print
+"add_ints" __tc_find_sig call print "\n" print
+2 3 add_ints check print "\n" print
+pop
+pop

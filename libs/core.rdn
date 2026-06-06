@@ -1,7 +1,7 @@
 [* 
 core.rdn
 Copyright (c) 2023-2026 Ray Den
-SPDX-License-Identifier: MIT
+check the license file in the repo
 
 Purpose:
 Small aliases for core builtins so code can use function-call style names.

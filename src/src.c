@@ -23,7 +23,7 @@ static bool is_operator_token(const char *value) {
            is_token(value, "|") || is_token(value, "&") || is_token(value, "^") ||
            is_token(value, "<") || is_token(value, ">") || is_token(value, "<=") ||
            is_token(value, ">=") || is_token(value, "!=") || is_token(value, "=") ||
-           is_token(value, "!");
+           is_token(value, "!") || is_token(value, "%");
 }
 
 static char *copy_string(const char *text) {
@@ -1114,6 +1114,8 @@ static bool apply_binary_operator(RDNState *stack, Vars *vars, const char *opera
                 result = create_integer_value(left->as.integer - right->as.integer);
             } else if (is_token(operator_token, "*")) {
                 result = create_integer_value(left->as.integer * right->as.integer);
+            }else if (is_token(operator_token, "%")) {
+                result = create_integer_value(left->as.integer % right->as.integer);
             }
         } else if (left->type == VALUE_INTEGER && right->type == VALUE_INTEGER && is_token(operator_token, "/") &&
                    left->as.integer % right->as.integer == 0) {
@@ -2035,14 +2037,66 @@ static bool apply_loadnative(RDNState *stack, Vars *vars, Funcs *funcs) {
     return true;
 }
 
-static bool apply_defun(RDNState *stack, Funcs *funcs, char **cursor) {
+static bool typecheck_signature_types_valid(const Value *types) {
+    size_t index = 0;
+
+    if (types->type != VALUE_LIST) {
+        return false;
+    }
+
+    for (index = 0; index < types->as.list.count; index++) {
+        const Value *item = types->as.list.items[index];
+
+        if (item->type != VALUE_INTEGER || item->as.integer < 0 || item->as.integer > 5) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool append_typecheck_signature(Vars *vars, const char *name, const Value *params, const Value *returns) {
+    Vars_t *state_entry = find_var_entry(vars, "State");
+    Value *signature = NULL;
+    Value *name_value = NULL;
+    Value *params_copy = NULL;
+    Value *returns_copy = NULL;
+
+    if (state_entry == NULL || state_entry->var_value->type != VALUE_LIST) {
+        return diagnostic_error_current("signed defun requires typecheck State list; load libs/typecheck.rdn first");
+    }
+
+    signature = create_list_value();
+    name_value = create_string_value_copy(name);
+    params_copy = clone_value(params);
+    returns_copy = clone_value(returns);
+
+    if (signature == NULL || name_value == NULL || params_copy == NULL || returns_copy == NULL) {
+        free_value(signature);
+        free_value(name_value);
+        free_value(params_copy);
+        free_value(returns_copy);
+        return diagnostic_error_current("failed to allocate typecheck signature");
+    }
+
+    ray_append(&signature->as.list, name_value);
+    ray_append(&signature->as.list, params_copy);
+    ray_append(&signature->as.list, returns_copy);
+    ray_append(&state_entry->var_value->as.list, signature);
+    return true;
+}
+
+static bool apply_defun(RDNState *stack, Vars *vars, Funcs *funcs, char **cursor) {
     Value *name = NULL;
+    Value *params = NULL;
+    Value *returns = NULL;
     char *body = NULL;
     char *body_start = *cursor;
     char *scan = *cursor;
     char *token = NULL;
     bool is_string = false;
     int depth = 1;
+    bool signed_defun = false;
     size_t source_line = 1;
     size_t source_column = 1;
 
@@ -2050,10 +2104,31 @@ static bool apply_defun(RDNState *stack, Funcs *funcs, char **cursor) {
         return diagnostic_error_current("defun requires function name");
     }
 
+    if (stack->count >= 3 &&
+        stack->items[stack->count - 1]->type == VALUE_LIST &&
+        stack->items[stack->count - 2]->type == VALUE_LIST &&
+        stack->items[stack->count - 3]->type == VALUE_AS_VAR) {
+        signed_defun = true;
+        returns = ray_pop(stack);
+        params = ray_pop(stack);
+    }
+
     name = ray_pop(stack);
     if (name->type != VALUE_AS_VAR) {
         diagnostic_error_current("defun requires function name");
         ray_append(stack, name);
+        if (signed_defun) {
+            ray_append(stack, params);
+            ray_append(stack, returns);
+        }
+        return false;
+    }
+
+    if (signed_defun && (!typecheck_signature_types_valid(params) || !typecheck_signature_types_valid(returns))) {
+        diagnostic_error_current("defun signature contains an unknown type");
+        ray_append(stack, name);
+        ray_append(stack, params);
+        ray_append(stack, returns);
         return false;
     }
 
@@ -2064,16 +2139,21 @@ static bool apply_defun(RDNState *stack, Funcs *funcs, char **cursor) {
 
         if (!next_token(&scan, &token, &is_string)) {
             free_value(name);
+            free_value(params);
+            free_value(returns);
             return false;
         }
 
         if (token == NULL) {
             diagnostic_error_at(scan, "defun missing end");
             free_value(name);
+            free_value(params);
+            free_value(returns);
             return false;
         }
 
-        if (!is_string && (is_token(token, "if") || is_token(token, "loop") || is_token(token, "defun") || is_token(token, "apply"))) {
+        if (!is_string && (is_token(token, "if") || is_token(token, "loop") || is_token(token, "defun") ||
+                           is_token(token, "apply"))) {
             depth++;
         } else if (!is_string && is_token(token, "end")) {
             depth--;
@@ -2084,6 +2164,8 @@ static bool apply_defun(RDNState *stack, Funcs *funcs, char **cursor) {
                     diagnostic_error_at(token_start, "failed to allocate function body");
                     free(token);
                     free_value(name);
+                    free_value(params);
+                    free_value(returns);
                     return false;
                 }
 
@@ -2093,11 +2175,23 @@ static bool apply_defun(RDNState *stack, Funcs *funcs, char **cursor) {
                 if (!funcs_define(funcs, name->as.string, body, g_current_source_path, source_line, source_column)) {
                     free(token);
                     free_value(name);
+                    free_value(params);
+                    free_value(returns);
+                    return false;
+                }
+
+                if (signed_defun && !append_typecheck_signature(vars, name->as.string, params, returns)) {
+                    free(token);
+                    free_value(name);
+                    free_value(params);
+                    free_value(returns);
                     return false;
                 }
 
                 free(token);
                 free_value(name);
+                free_value(params);
+                free_value(returns);
                 *cursor = scan;
                 return true;
             }
@@ -2145,7 +2239,8 @@ static bool apply_apply(RDNState *stack, Funcs *funcs, char **cursor) {
             return false;
         }
 
-        if (!is_string && (is_token(token, "if") || is_token(token, "loop") || is_token(token, "defun") || is_token(token, "apply"))) {
+        if (!is_string && (is_token(token, "if") || is_token(token, "loop") || is_token(token, "defun") ||
+                           is_token(token, "apply"))) {
             depth++;
         } else if (!is_string && is_token(token, "end")) {
             depth--;
@@ -2746,7 +2841,7 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
             continue;
         } else if (is_token(token, "defun")) {
             free(token);
-            if (!apply_defun(stack, funcs, cursor)) {
+            if (!apply_defun(stack, vars, funcs, cursor)) {
                 return false;
             }
             continue;
@@ -3176,6 +3271,38 @@ static bool apply_unlet(RDNState *stack, Vars *vars) {
     return true;
 }
 
+static bool apply_assert(RDNState *stack, Vars *vars)
+{
+    (void)vars;
+    Value *condition = NULL;
+    Value *msg = NULL;
+
+    // false "test assert" assert
+    if (stack->count < 2) {
+        return diagnostic_error_current("assert requires 2 operands boolean and message");
+    }
+
+    msg = ray_pop(stack);
+    condition = ray_pop(stack);
+
+    if (condition->type == VALUE_BOOLEAN) {
+        if (msg->type == VALUE_STRING) {
+            if (!condition->as.boolean) {
+                size_t line;
+                size_t column;
+                diagnostic_compute_location(NULL, &line, &column, NULL, NULL);
+                fprintf(stderr, "Assertion error at %zu:%zu : %s",line , column , msg->as.string);
+                return false;
+            }
+        }else {
+            return diagnostic_error_current("assert message string type at top of the stack");
+        }
+    }else {
+        return diagnostic_error_current("assert condition boolean type before top of the stack");
+    }
+    return true;
+}
+
 static bool apply_let(RDNState *stack, Vars *vars) {
     Value *name = NULL;
     Value *value = NULL;
@@ -3504,7 +3631,7 @@ static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **curs
             continue;
         } else if (is_token(token, "defun")) {
             free(token);
-            if (!apply_defun(stack, funcs, cursor)) {
+            if (!apply_defun(stack, vars, funcs, cursor)) {
                 return false;
             }
             continue;
@@ -3608,6 +3735,13 @@ static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **curs
             continue;
         } else if (is_token(token, "let")) {
             if (!apply_let(stack, vars)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        }else if (is_token(token, "assert")) {
+            if (!apply_assert(stack, vars)) {
                 free(token);
                 return false;
             }

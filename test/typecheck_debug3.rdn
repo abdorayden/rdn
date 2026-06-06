@@ -1,0 +1,15 @@
+"../libs/typecheck.rdn" load
+
+add_ints (Int Int) (Int) defun
+    +
+end
+
+2 3 add_ints func let
+func __func_name fname let
+fname print "\n" print
+fname to_string swap pop __tc_find_sig call sig let
+sig print "\n" print
+sig 1 index print "\n" print
+sig 1 index __tc_check_stack_types call print "\n" print
+print "\n" print
+print "\n" print

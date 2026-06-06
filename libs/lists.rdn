@@ -1,3 +1,5 @@
+"Typecheck" load
+
 [* 
 lists.rdn
 Copyright (c) 2023-2026 Ray Den
@@ -68,7 +70,7 @@ end
 each map let
 each foreach let
 
-copy defun
+copy (List) (List) defun
     tha-list let
     0 i let
     tha-list len list-length let
@@ -128,7 +130,7 @@ reduce defun
     accumulator
 end
 
-reverse defun
+reverse (List) (List) defun
     tha-list let
     tha-list len i let
     (
@@ -140,7 +142,7 @@ reverse defun
     )
 end
 
-concat defun
+concat (List List) (List) defun
     right let
     left let
     0 i let
@@ -161,7 +163,7 @@ concat defun
     )
 end
 
-first defun
+first (List) (Any) defun
     tha-list let
     tha-list len 0 > if
         tha-list 0 index
@@ -172,7 +174,7 @@ end
 
 first head let
 
-last defun
+last (List) (Any) defun
     tha-list let
     tha-list len list-length let
     list-length 0 > if
@@ -182,7 +184,7 @@ last defun
     end
 end
 
-tail defun
+tail (List) (List) defun
     tha-list let
     1 i let
     tha-list len list-length let
@@ -197,15 +199,15 @@ end
 
 tail rest let
 
-count defun
+count (List) (Int) defun
     len
 end
 
-isEmpty defun
+isEmpty (List) (Bool) defun
     len 0 =
 end
 
-includes defun
+includes (List Any) (Bool) defun
     needle let
     tha-list let
     0 i let
@@ -253,7 +255,7 @@ all defun
     ok
 end
 
-shift defun
+shift (List) (Any) defun
     tha-list let
     tha-list len 0 > if 
         tha-list 0 index forRet let
@@ -264,7 +266,7 @@ shift defun
     end
 end
 
-popLast defun
+popLast (List) (Any) defun
     tha-list let
     tha-list len list-length let
     list-length 0 > if
@@ -291,7 +293,7 @@ unpack apply
     end
 end
 
-insert defun
+insert (List Int Any) (List) defun
     tha-val let
     tha-idx let
     tha-list let

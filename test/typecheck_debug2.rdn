@@ -1,0 +1,5 @@
+"../libs/typecheck.rdn" load
+
+2 3 (Int Int) __tc_check_stack_types call print "\n" print
+print "\n" print
+print "\n" print
