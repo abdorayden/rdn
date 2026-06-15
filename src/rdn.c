@@ -2424,7 +2424,6 @@ static void free_macro_expansions(void) {
 static bool execute_named_entry(RDNState *stack, Vars *vars, Funcs *funcs, Funcs_t *entry, const char *context_kind, const char *context_name) {
     BlockStop stop_reason = BLOCK_STOP_EOF;
     char *cursor = NULL;
-    size_t stack_start = stack->count;
 
     if (entry->type == FUNC_NATIVE) {
         RDNApi api = {0};
@@ -2485,7 +2484,7 @@ static bool execute_named_entry(RDNState *stack, Vars *vars, Funcs *funcs, Funcs
         g_diagnostic_context = previous_context;
     }
 
-    if (!materialize_scope_references(stack, vars, stack_start)) {
+    if (!materialize_scope_references(stack, vars)) {
         vars_pop_scope(vars);
         return false;
     }
@@ -2674,10 +2673,10 @@ static bool apply_call(RDNState *stack, Vars *vars, Funcs *funcs) {
     return ok;
 }
 
-static bool materialize_scope_references(RDNState *stack, Vars *vars, size_t start_index) {
+static bool materialize_scope_references(RDNState *stack, Vars *vars) {
     size_t index = 0;
 
-    for (index = start_index; index < stack->count; index++) {
+    for (index = 0; index < stack->count; index++) {
         Value *value = stack->items[index];
         Vars_t *entry = NULL;
         Value *resolved = NULL;
@@ -3607,7 +3606,6 @@ static bool apply_if(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor, B
     free_value(condition);
 
     if (condition_value) {
-        size_t stack_start = stack->count;
         if (!vars_push_scope(vars)) {
             return false;
         }
@@ -3621,7 +3619,7 @@ static bool apply_if(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor, B
             return diagnostic_error_current("if missing end");
         }
 
-        if (!materialize_scope_references(stack, vars, stack_start)) {
+        if (!materialize_scope_references(stack, vars)) {
             vars_pop_scope(vars);
             return false;
         }
@@ -3656,7 +3654,6 @@ static bool apply_if(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor, B
     }
 
     if (branch_stop == BLOCK_STOP_ELSE) {
-        size_t stack_start = stack->count;
         if (!vars_push_scope(vars)) {
             return false;
         }
@@ -3666,7 +3663,7 @@ static bool apply_if(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor, B
         }
 
         if (branch_stop == BLOCK_STOP_BREAK || branch_stop == BLOCK_STOP_CONTINUE || branch_stop == BLOCK_STOP_RETURN) {
-            if (!materialize_scope_references(stack, vars, stack_start)) {
+            if (!materialize_scope_references(stack, vars)) {
                 vars_pop_scope(vars);
                 return false;
             }
@@ -3680,7 +3677,7 @@ static bool apply_if(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor, B
             return diagnostic_error_current("else missing end");
         }
 
-        if (!materialize_scope_references(stack, vars, stack_start)) {
+        if (!materialize_scope_references(stack, vars)) {
             vars_pop_scope(vars);
             return false;
         }

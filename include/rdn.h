@@ -208,7 +208,7 @@ static bool execute_named_entry(RDNState *stack, Vars *vars, Funcs *funcs, Funcs
 static bool expand_demac(Funcs_t *entry, char **cursor);
 static void free_macro_expansion_stack(MacroExpansionStack *expansions);
 static void free_macro_expansions(void);
-static bool materialize_scope_references(RDNState *stack, Vars *vars, size_t start_index);
+static bool materialize_scope_references(RDNState *stack, Vars *vars);
 
 // to_string builtin function convert value from the top stack to string without remove it
 static bool apply_to_string(RDNState *stack, Vars *vars);
