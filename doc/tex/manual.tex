@@ -24,7 +24,7 @@
 
 \lstdefinelanguage{Raden}{
   morekeywords={
-    let,set,const,unlet,defun,apply,demac,call,pcall,if,else,end,loop,break,
+    let,set,const,unlet,defun,apply,demac,call,pcall,ret,if,else,end,loop,break,
     continue,load,loadnative,add_load_path,add_native_path,true,false,null,
     print,type,to_string,exit,append,remove,index,len,enum,reset,error,assert,
     check,scall
@@ -393,6 +393,23 @@ else
 end
 \end{lstlisting}
 
+\subsection{ret}
+
+\code{ret} stops execution of the current function immediately. Raden
+uses stack returns, so any values already left on the stack are the
+function's return values.
+
+\begin{lstlisting}[language=Raden]
+check-less-three defun
+  n let
+  n 3 < if
+    true
+    ret
+  end
+  false
+end
+\end{lstlisting}
+
 \subsection{Scope}
 
 Functions create a new variable scope. Bindings created inside a function
@@ -477,6 +494,7 @@ Builtin & Stack shape & Description \\
 \code{demac} & \code{name tokens... end ->} & Define read-time macro \\
 \code{call} & \code{name args... -> results...} & Invoke a function \\
 \code{pcall} & \code{name args... -> result true | error false} & Protected call \\
+\code{ret} & \code{values... -> values...} & Return from current function \\
 \code{error} & \code{string -> error} & Raise an interpreter error \\
 \code{if} & \code{cond ... end ->} & Conditional execution \\
 \code{loop} & \code{cond ... next-cond end ->} & Loop while true \\
@@ -779,10 +797,10 @@ gcc -Wall -Wextra -Werror -ggdb -std=c11 -fPIC -shared \
 
 \section{Embedding}
 
-Raden exposes a minimal embedding API through \code{include/src.h}.
+Raden exposes a minimal embedding API through \code{include/rdn.h}.
 
 \begin{lstlisting}[language=C]
-#include "./include/src.h"
+#include "./include/rdn.h"
 
 int main(void) {
   char *argv[] = {

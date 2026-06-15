@@ -1,0 +1,17 @@
+3 enum tlata const
+enum rab3a const
+
+tlata print 
+"\n" print
+rab3a print 
+
+reset
+-1 
+enum haha const
+enum fofo const
+
+"\n" print
+haha print 
+"\n" print
+fofo print 
+

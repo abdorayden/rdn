@@ -1,0 +1,12 @@
+"34 print"
+do_string
+
+"./test.rdn" 
+do_file
+
+"34 print" src let
+"./test.rdn" path let
+src
+do_string
+path
+do_file

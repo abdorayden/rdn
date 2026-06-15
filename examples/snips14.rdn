@@ -1,0 +1,21 @@
+0 i let
+(
+    foo defun
+        "foo"
+    end
+
+    foo
+
+    i 0 = if
+        "i is 0"
+    end
+
+    i 10 < loop
+        i 2 % 0 != if
+            i
+        end
+        i 1 + i set
+        i 10 <
+    end
+) f let
+f 0 index call print

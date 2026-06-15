@@ -1,0 +1,38 @@
+check-less-three defun
+    n let
+    n 3 < if
+        true
+        ret
+    end
+    false
+end
+
+check-nested defun
+    n let
+    n 10 < if
+        n 3 < if
+            "small"
+            ret
+        end
+    end
+    "large"
+end
+
+find-three defun
+    0 i let
+    i 5 < loop
+        i 3 = if
+            i
+            ret
+        end
+        i 1 + i set
+        i 5 <
+    end
+    -1
+end
+
+2 check-less-three call print "\n" print
+4 check-less-three call print "\n" print
+2 check-nested call print "\n" print
+12 check-nested call print "\n" print
+find-three call print

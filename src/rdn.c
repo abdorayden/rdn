@@ -10,7 +10,7 @@
 
 #include "../include/rdn_native.h"
 #include "stack.h"
-#include "../include/src.h"
+#include "../include/rdn.h"
 
 
 static bool is_token(const char *value, const char *expected) {
@@ -23,7 +23,7 @@ static bool is_operator_token(const char *value) {
            is_token(value, "|") || is_token(value, "&") || is_token(value, "^") ||
            is_token(value, "<") || is_token(value, ">") || is_token(value, "<=") ||
            is_token(value, ">=") || is_token(value, "!=") || is_token(value, "=") ||
-           is_token(value, "!") || is_token(value, "%");
+           is_token(value, "!") || is_token(value, "%") || is_token(value, "//");
 }
 
 static char *copy_string(const char *text) {
@@ -1151,6 +1151,8 @@ static bool apply_binary_operator(RDNState *stack, Vars *vars, const char *opera
                 result = create_integer_value(left->as.integer * right->as.integer);
             }else if (is_token(operator_token, "%")) {
                 result = create_integer_value(left->as.integer % right->as.integer);
+            }else if (is_token(operator_token, "//")) {
+                result = create_integer_value((long)(left->as.integer / right->as.integer));
             }
         } else if (left->type == VALUE_INTEGER && right->type == VALUE_INTEGER && is_token(operator_token, "/") &&
                    left->as.integer % right->as.integer == 0) {
@@ -2498,7 +2500,7 @@ static bool execute_named_entry(RDNState *stack, Vars *vars, Funcs *funcs, Funcs
         return diagnostic_error_current("unexpected continue");
     }
 
-    if (stop_reason != BLOCK_STOP_END && stop_reason != BLOCK_STOP_EOF) {
+    if (stop_reason != BLOCK_STOP_END && stop_reason != BLOCK_STOP_EOF && stop_reason != BLOCK_STOP_RETURN) {
         return diagnostic_error_current("function body terminated unexpectedly");
     }
 
@@ -2977,10 +2979,20 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
                 fprintf(stderr, "unexpected continue\n");
                 return false;
             }
+            if (stop_reason == BLOCK_STOP_RETURN) {
+                fprintf(stderr, "unexpected ret\n");
+                return false;
+            }
             continue;
         } else if (is_token(token, "loop")) {
+            BlockStop stop_reason = BLOCK_STOP_EOF;
+
             free(token);
-            if (!apply_loop(stack, vars, funcs, cursor)) {
+            if (!apply_loop(stack, vars, funcs, cursor, &stop_reason)) {
+                return false;
+            }
+            if (stop_reason == BLOCK_STOP_RETURN) {
+                fprintf(stderr, "unexpected ret\n");
                 return false;
             }
             continue;
@@ -3020,6 +3032,10 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
             return false;
         } else if (is_token(token, "continue")) {
             fprintf(stderr, "unexpected continue\n");
+            free(token);
+            return false;
+        } else if (is_token(token, "ret")) {
+            fprintf(stderr, "unexpected ret\n");
             free(token);
             return false;
         } else if (is_value_token(token, is_string)) {
@@ -3612,7 +3628,7 @@ static bool apply_if(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor, B
 
         vars_pop_scope(vars);
 
-        if (branch_stop == BLOCK_STOP_BREAK || branch_stop == BLOCK_STOP_CONTINUE) {
+        if (branch_stop == BLOCK_STOP_BREAK || branch_stop == BLOCK_STOP_CONTINUE || branch_stop == BLOCK_STOP_RETURN) {
             *stop_reason = branch_stop;
             return true;
         }
@@ -3649,7 +3665,7 @@ static bool apply_if(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor, B
             return false;
         }
 
-        if (branch_stop == BLOCK_STOP_BREAK || branch_stop == BLOCK_STOP_CONTINUE) {
+        if (branch_stop == BLOCK_STOP_BREAK || branch_stop == BLOCK_STOP_CONTINUE || branch_stop == BLOCK_STOP_RETURN) {
             if (!materialize_scope_references(stack, vars, stack_start)) {
                 vars_pop_scope(vars);
                 return false;
@@ -3678,10 +3694,10 @@ static bool apply_if(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor, B
     return true;
 }
 
-static bool apply_loop(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor) {
+static bool apply_loop(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor, BlockStop *stop_reason) {
     Value *condition = NULL;
     bool condition_value = false;
-    BlockStop stop_reason = BLOCK_STOP_EOF;
+    BlockStop body_stop = BLOCK_STOP_EOF;
     char *body_start = *cursor;
     char *body_end = NULL;
 
@@ -3698,27 +3714,33 @@ static bool apply_loop(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor)
     free_value(condition);
 
     body_end = body_start;
-    if (!skip_block(&body_end, &stop_reason, false)) {
+    if (!skip_block(&body_end, &body_stop, false)) {
         return false;
     }
 
-    if (stop_reason != BLOCK_STOP_END) {
+    if (body_stop != BLOCK_STOP_END) {
         return diagnostic_error_current("loop missing end");
     }
 
     while (condition_value) {
         char *iteration_cursor = body_start;
 
-        if (!execute_block(stack, vars, funcs, &iteration_cursor, &stop_reason, false)) {
+        if (!execute_block(stack, vars, funcs, &iteration_cursor, &body_stop, false)) {
             return false;
         }
 
-        if (stop_reason == BLOCK_STOP_BREAK) {
+        if (body_stop == BLOCK_STOP_BREAK) {
             condition_value = false;
             break;
         }
 
-        if (stop_reason != BLOCK_STOP_END && stop_reason != BLOCK_STOP_CONTINUE) {
+        if (body_stop == BLOCK_STOP_RETURN) {
+            *cursor = body_end;
+            *stop_reason = BLOCK_STOP_RETURN;
+            return true;
+        }
+
+        if (body_stop != BLOCK_STOP_END && body_stop != BLOCK_STOP_CONTINUE) {
             return diagnostic_error_current("loop missing end");
         }
 
@@ -3736,6 +3758,7 @@ static bool apply_loop(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor)
     }
 
     *cursor = body_end;
+    *stop_reason = BLOCK_STOP_END;
     return true;
 }
 
@@ -3777,14 +3800,17 @@ static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **curs
             if (!apply_if(stack, vars, funcs, cursor, stop_reason)) {
                 return false;
             }
-            if (*stop_reason == BLOCK_STOP_BREAK || *stop_reason == BLOCK_STOP_CONTINUE) {
+            if (*stop_reason == BLOCK_STOP_BREAK || *stop_reason == BLOCK_STOP_CONTINUE || *stop_reason == BLOCK_STOP_RETURN) {
                 return true;
             }
             continue;
         } else if (is_token(token, "loop")) {
             free(token);
-            if (!apply_loop(stack, vars, funcs, cursor)) {
+            if (!apply_loop(stack, vars, funcs, cursor, stop_reason)) {
                 return false;
+            }
+            if (*stop_reason == BLOCK_STOP_RETURN) {
+                return true;
             }
             continue;
         } else if (is_token(token, "defun")) {
@@ -3824,6 +3850,10 @@ static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **curs
         } else if (is_token(token, "continue")) {
             free(token);
             *stop_reason = BLOCK_STOP_CONTINUE;
+            return true;
+        } else if (is_token(token, "ret")) {
+            free(token);
+            *stop_reason = BLOCK_STOP_RETURN;
             return true;
         } else if (is_value_token(token, is_string)) {
             if (!push_token_value(stack, token, is_string)) {
@@ -4238,6 +4268,11 @@ static bool evaluate_source(RDNState *stack, Vars* vars, Funcs *funcs, char *sou
     if (stop_reason == BLOCK_STOP_CONTINUE) {
         g_diagnostic_context = previous_context;
         return diagnostic_error_current("unexpected continue");
+    }
+
+    if (stop_reason == BLOCK_STOP_RETURN) {
+        g_diagnostic_context = previous_context;
+        return diagnostic_error_current("unexpected ret");
     }
 
     if (stop_reason != BLOCK_STOP_EOF) {
@@ -5252,16 +5287,6 @@ static void apply_argv(Vars* vars , const char* path, int argc , char** argv) {
     ray_append(vars, argv_var);
 
 }
-
-///
-///     unpack apply
-///         tha-list let
-///         tha-list type "list" != if 
-///         end
-///
-///     end
-///
-///
 
 int rdn_main(int argc , char** argv) {
     const char *path = NULL;

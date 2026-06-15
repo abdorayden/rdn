@@ -800,6 +800,18 @@
                 output.
             </p>
 
+            <h3>ret — early function return</h3>
+            <p><code>ret</code> stops execution of the current function immediately. Raden uses stack returns, so
+                any values already left on the stack are the function's return values.</p>
+            <pre><code>check-less-three defun
+                    n let
+                    n 3 &lt; if
+                    true
+                    ret
+                    end
+                    false
+                    end</code></pre>
+
             <h3>call — invoke by name</h3>
             <pre><code>"double" call call <span style="color:var(--text2)">[*looks up function by string name*] </span></code></pre>
 
@@ -1006,6 +1018,11 @@
                     <td><code>pcall</code></td>
                     <td><span class="sig">name args... -> result true|error false</span></td>
                     <td>Protected call — catches errors</td>
+                </tr>
+                <tr>
+                    <td><code>ret</code></td>
+                    <td><span class="sig">values... -> values...</span></td>
+                    <td>Return from the current function</td>
                 </tr>
                 <tr>
                     <td><code>error</code></td>
@@ -2227,7 +2244,7 @@
             <p>Raden exposes a single entry point for embedding:</p>
 
             <pre><code><span style="color:var(--text2)">// embed.c</span>
-                    #include "./include/src.h"
+                    #include "./include/rdn.h"
 
                     int main(void) {
                     char *argv[] = {

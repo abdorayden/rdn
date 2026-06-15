@@ -1,0 +1,51 @@
+"./libs/typecheck.rdn" load
+[* add_ints (Int Int) (Int) defun *]
+[*     + *]
+[* end *]
+[**]
+[* [* *]
+[* *   create nvim plugin to check if the module is available it will highligh the keyword scall and check *]
+[* * *]
+[* 35 34 add_ints scall print *]
+[* "\n" print *]
+[* 35 34 add_ints check print pop pop *]
+
+[* ========================== *]
+
+[* add_ints_without_check defun *]
+[*     + *]
+[* end *]
+[**]
+[* "\n" print *]
+[**]
+[* 35 34 add_ints_without_check call print *]
+
+[* ======================= *]
+
+[* test (Any) (Any) defun *]
+[*     print *]
+[*     23 *]
+[* end *]
+[**]
+[* "foo" test scall print *]
+[* "\n" print *]
+[**]
+[* call_with_23 (Func) (Any) defun *]
+[*     23 swap scall *]
+[* end *]
+[**]
+[* test call_with_23 scall print *]
+
+[* ============== *]
+
+[* ret-val () (Any) defun *]
+[*     "Hello" *]
+[* end *]
+[**]
+[* ret-val scall print *]
+
+acc (Any) () defun
+    print
+end
+
+"test" acc scall

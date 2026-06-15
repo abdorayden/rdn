@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include "../include/src.h"
+#include "../include/rdn.h"
 
 // GCC is ALL u neeeeed
 // built: gcc -o main main.c && ./main
@@ -72,4 +72,4 @@ int main(void)
     return 0;
 }
 
-#include "../src/src.c"
+#include "../src/rdn.c"

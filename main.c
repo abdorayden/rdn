@@ -1,4 +1,4 @@
-#include "./include/src.h"
+#include "./include/rdn.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -6,13 +6,7 @@
 // TODO: introduce big ints 
 // TODO: finish std native and nonative libs
 // TODO: optimize the code
-// TODO: introduce protected call
-// TODO: introduce deftype keyword to add a new type 
-// example:
-// (
-// 0  [*age*]
-// "" [*name*]
-// ) Person deftype
+// TODO: make sure that is cross platform
 
 int main(int argc, char **argv) {
     for(int i = 0 ; i < argc ; ++i) {
@@ -28,4 +22,4 @@ int main(int argc, char **argv) {
     return rdn_main(argc, argv);
 }
 
-#include "./src/src.c"
+#include "./src/rdn.c"

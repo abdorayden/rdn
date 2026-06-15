@@ -106,6 +106,7 @@ enum BlockStop{
     BLOCK_STOP_END,
     BLOCK_STOP_BREAK,
     BLOCK_STOP_CONTINUE,
+    BLOCK_STOP_RETURN,
 };
 
 struct RDNSharedState {
@@ -238,7 +239,7 @@ static bool apply_const(RDNState *stack, Vars *vars);
 static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else);
 static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor, BlockStop *stop_reason, bool allow_else);
 static bool apply_if(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor, BlockStop *stop_reason);
-static bool apply_loop(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor);
+static bool apply_loop(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor, BlockStop *stop_reason);
 static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor, BlockStop *stop_reason, bool allow_else);
 static bool skip_if(char **cursor);
 static bool skip_loop(char **cursor);

@@ -1,7 +1,7 @@
 #include <raylib.h>
 #include <stdio.h>
 #include <string.h>
-#include "../../include/src.h"
+#include "../../include/rdn.h"
 #include "raylib-6.0_linux_amd64/include/raylib.h"
 
 bool rdn_init_window(RDNApi* api) {
@@ -156,4 +156,4 @@ int main2(void)
     CloseWindow();
     return 0;
 }
-#include "../../src/src.c"
+#include "../../src/rdn.c"

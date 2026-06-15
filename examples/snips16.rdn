@@ -1,0 +1,15 @@
+when demac
+    if
+end
+
+do demac
+    true if
+end
+
+true when
+    "it's true" print
+end
+
+do 
+    "\nhey" print
+end

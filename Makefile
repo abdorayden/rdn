@@ -8,7 +8,7 @@ OBJECTS = $(SOURCES:.c=.o)
 $(TARGET): $(OBJECTS)
 	$(CC) $(OBJECTS) -O3 -o $(TARGET) $(LDFLAGS)
 
-main.o: main.c include/src.h include/rdn_native.h src/src.c src/stack.h
+main.o: main.c include/rdn.h include/rdn_native.h src/rdn.c src/stack.h
 	$(CC) $(CFLAGS) -O3 -c $< -o $@
 
 lib: ./nativelibs/math.c

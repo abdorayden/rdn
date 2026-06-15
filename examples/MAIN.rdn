@@ -1,0 +1,33 @@
+[* introduce apply  *]
+[* apply is like functions but called directly *]
+"./libs/io.rdn" load
+
+[* inc apply *]
+[*     ret let *]
+[*     ret 1 + ret set *]
+[*     ret *]
+[* end *]
+[**]
+[* 0 i let *]
+[**]
+[* i inc i set i println call *]
+[* i inc i set i println call *]
+
+[* inc apply *]
+[*     1 + dup *]
+[* end *]
+[**]
+[* 0 inc println call *]
+[* inc println call *]
+[* inc println call *]
+[* inc println call *]
+[* inc println call *]
+[* inc println call *]
+[* inc println call *]
+[* inc println call *]
+[* inc println call *]
+[* pop *]
+
+1 key let
+key print
+

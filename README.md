@@ -126,6 +126,19 @@ end
 hello call
 ```
 
+Use `ret` inside a function to stop executing that function early. Any values already left on the stack are the return values:
+
+```raden
+check-less-three defun
+    n let
+    n 3 < if
+        true
+        ret
+    end
+    false
+end
+```
+
 ### Builtins
 
 Common builtins include:
@@ -136,6 +149,7 @@ Common builtins include:
 - bitwise ops: `<< >> ^`
 - stack ops: `pop swap dup`
 - variables: `let set const`
+- functions: `defun call ret`
 - conversion: `type to_string`
 - containers: `append index remove len`
 - loading: `load loadnative`
@@ -362,14 +376,14 @@ The current embedding entry point is:
 int rdn_main(int argc, char **argv);
 ```
 
-It is declared in [`include/src.h`](./include/src.h).
+It is declared in [`include/rdn.h`](./include/rdn.h).
 
 At the moment, embedding is very lightweight and file-oriented: you invoke `rdn_main` with a script path just like the `main` executable does.
 
 Example host program:
 
 ```c
-#include "./include/src.h"
+#include "./include/rdn.h"
 
 int main(void) {
     char *argv[] = {
@@ -398,8 +412,8 @@ If you want a stronger embedding API later, the next logical step is exposing he
 ## Project Layout
 
 - [`main.c`](./main.c): thin entry point
-- [`src/src.c`](./src/src.c): interpreter implementation
-- [`include/src.h`](./include/src.h): internal interpreter declarations
+- [`src/rdn.c`](./src/rdn.c): interpreter implementation
+- [`include/rdn.h`](./include/rdn.h): internal interpreter declarations
 - [`include/rdn_native.h`](./include/rdn_native.h): native module API
 - [`nativelibs/`](./nativelibs): native module examples
 - [`libs/`](./libs): Raden library scripts

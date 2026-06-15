@@ -1,4 +1,4 @@
-[* 
+[*
 core.rdn
 Copyright (c) 2023-2026 Ray Den
 check the license file in the repo
@@ -32,10 +32,10 @@ mul apply *  end
 div apply /  end
 eq  apply =  end
 neq apply != end
-le  apply <= end 
-ge  apply >= end 
-gt  apply >  end 
-lt  apply <  end 
+le  apply <= end
+ge  apply >= end
+gt  apply >  end
+lt  apply <  end
 xor apply ^  end
 and apply &  end
 or  apply |  end
@@ -104,7 +104,7 @@ range apply
     )
 end
 
-for apply 
+for apply
     tha-list let
     fn let [* should return nothing *]
     0 i let
@@ -114,6 +114,14 @@ for apply
         tha-list i index fn call
 
         i 1 + i set
-        i length < 
+        i length <
     end
+end
+
+drop demac pop end
+
+over apply
+    top let
+    under-top let
+    under-top top under-top
 end
