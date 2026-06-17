@@ -3300,12 +3300,28 @@ static bool is_identifier_token(const char *token) {
         return false;
     }
 
-    if (!(isalpha((unsigned char)token[0]) || token[0] == '_')) {
+    if (!(isalpha((unsigned char)token[0]) || 
+                token[0] == '_' || 
+                token[index] == '?' || 
+                token[index] == '@' || 
+                token[index] == '#' || 
+                token[index] == '$' || 
+                token[index] == '!' || 
+                isdigit((unsigned char)token[0])
+                )) {
         return false;
     }
 
     for (index = 1; token[index] != '\0'; index++) {
-        if (!(isalnum((unsigned char)token[index]) || token[index] == '_' || token[index] == '-')) {
+        if (!(isalnum((unsigned char)token[index]) || 
+                    token[index] == '_' || 
+                    token[index] == '-' || 
+                    token[index] == '?' || 
+                    token[index] == '@' || 
+                    token[index] == '$' || 
+                    token[index] == '!' || 
+                    token[index] == '#'
+                    )) {
             return false;
         }
     }
