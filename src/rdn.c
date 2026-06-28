@@ -937,7 +937,7 @@ static bool values_equal(const Value *left, const Value *right) {
         return left->as.boolean == right->as.boolean;
     }
 
-    if (left->type == VALUE_STRING) {
+    if (left->type == VALUE_STRING || left->type == VALUE_AS_VAR) {
         return strcmp(left->as.string, right->as.string) == 0;
     }
 
