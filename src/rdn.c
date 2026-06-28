@@ -3307,6 +3307,8 @@ static bool is_identifier_token(const char *token) {
                 token[index] == '#' || 
                 token[index] == '$' || 
                 token[index] == '!' || 
+                token[index] == '-' || 
+                token[index] == '+' || 
                 isdigit((unsigned char)token[0])
                 )) {
         return false;
@@ -3319,6 +3321,7 @@ static bool is_identifier_token(const char *token) {
                     token[index] == '?' || 
                     token[index] == '@' || 
                     token[index] == '$' || 
+                    token[index] == '+' || 
                     token[index] == '!' || 
                     token[index] == '#'
                     )) {

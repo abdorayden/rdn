@@ -12,14 +12,12 @@ Exports:
 - shr : integer right shift, wraps >>
 
 Examples:
-"./libs/core.rdn" load
-true not call print
+"Core.rdn" load
+true not print
 "\n" print
-4 1 shl call print
+4 1 shl print
 "\n" print
-8 2 shr call print
-
-TODO: add function to get platform type
+8 2 shr print
 
 *]
 
@@ -48,6 +46,7 @@ is_list? apply type "list" eq end
 is_str? apply type "string" eq end
 nil apply null end
 str apply to_string swap pop end
+empty? apply len 0 = end
 
 [* Numeric helpers *]
 inc  apply 1 + end [* increment by 1 *]
@@ -84,14 +83,13 @@ between apply
     val lo >= val hi <= & 
 end
 
-clamp   apply 
+clamp apply 
     hi let 
     lo let 
     val let 
     val lo < if 
         lo 
     end 
-
     val hi > if 
         hi 
     else 
@@ -163,6 +161,15 @@ over apply
     under-top top under-top
 end
 
+rot apply
+    a let
+    b let
+    c let
+    a
+    b 
+    c 
+end
+
 [*(Str List) (Str) *]
 format defun
    list let
@@ -187,3 +194,22 @@ format defun
    end
    for_ret
 end
+
+reset
+enum LINUX const
+enum WINDOWS const
+enum MACOS const
+reset
+
+platform apply
+    __sharedlib_ext str ext let
+    ext ".dll" eq if 
+        WINDOWS
+    else ext ".dylib" eq if
+        MACOS
+    else ext ".so" eq if
+        LINUX
+    end end end
+end
+
+
