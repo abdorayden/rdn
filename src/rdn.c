@@ -3443,7 +3443,9 @@ static bool apply_unlet(RDNState *stack, Vars *vars) {
     }
 
     if (name->type != VALUE_AS_VAR) {
-        return diagnostic_error_current("unlet requires variable name");
+        diagnostic_error_current("unlet requires variable name");
+        ray_append(stack, name);
+        return false;
     }
 
     int idx_to_remove = -1;
@@ -3455,11 +3457,13 @@ static bool apply_unlet(RDNState *stack, Vars *vars) {
     }
 
     if (idx_to_remove == -1) {
-        return diagnostic_error_current("unlet variable is not idenrified");
+        ray_append(stack, name);
+        return diagnostic_error_current("unlet variable is not identified");
     }
 
+    free_var_entry(vars->items[idx_to_remove]);
     ray_remove_idx(vars, idx_to_remove);
-
+    free_value(name);
     return true;
 }
 
