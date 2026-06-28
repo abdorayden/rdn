@@ -3501,14 +3501,22 @@ static bool apply_assert(RDNState *stack, Vars *vars)
                 size_t column;
                 diagnostic_compute_location(NULL, &line, &column, NULL, NULL);
                 fprintf(stderr, "Assertion error at %zu:%zu : %s",line , column , msg->as.string);
+                free_value(condition);
+                free_value(msg);
                 return false;
             }
         }else {
+            free_value(condition);
+            free_value(msg);
             return diagnostic_error_current("assert message string type at top of the stack");
         }
     }else {
+        free_value(condition);
+        free_value(msg);
         return diagnostic_error_current("assert condition boolean type before top of the stack");
     }
+    free_value(condition);
+    free_value(msg);
     return true;
 }
 
