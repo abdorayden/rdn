@@ -3366,18 +3366,26 @@ static bool apply_error(RDNState *stack, Vars *vars) {
         return diagnostic_error_current("error keyword requires 1 operands");
     }
     name_or_val = ray_pop(stack);
-    if (name_or_val == NULL) {
-        return diagnostic_error_current("error keyword NULL value detected");
-    }
 
     if (name_or_val->type == VALUE_AS_VAR) {
         Vars_t* var = find_current_scope_var_entry(vars, name_or_val->as.string);
-        return diagnostic_error_current(var->var_value->as.string);
+        if (var == NULL) {
+            free_value(name_or_val);
+            return diagnostic_error_current("unknown variable in error keyword");
+        }
+        const char *msg = var->var_value->as.string;
+        free_value(name_or_val);
+        return diagnostic_error_current(msg);
     }
 
     if (name_or_val->type == VALUE_STRING) {
-        return diagnostic_error_current(name_or_val->as.string);
+        char *msg = copy_string(name_or_val->as.string);
+        free_value(name_or_val);
+        bool ok = diagnostic_error_current(msg == NULL ? "(unknown)" : msg);
+        free(msg);
+        return ok;
     }
+    free_value(name_or_val);
     return diagnostic_error_current("error keyword  requires variable name of type string or string literal");
 }
 
