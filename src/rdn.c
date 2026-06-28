@@ -1890,10 +1890,10 @@ static bool apply_load(RDNState *stack, Vars *vars, Funcs *funcs){
         return false;
     }
 
-    if (strstr(path, ".rdn") == NULL){
-        size_t len = strlen(path) + 5;
-        char* buffer = malloc(len);
-        snprintf(buffer, len, "%s.rdn", path);
+    size_t plen = strlen(path);
+    if (plen < 4 || strcmp(path + plen - 4, ".rdn") != 0){
+        char* buffer = malloc(plen + 5);
+        snprintf(buffer, plen + 5, "%s.rdn", path);
         path_copy = copy_string(buffer);
         free(buffer);
     }else {
@@ -1987,10 +1987,10 @@ static bool apply_loadnative(RDNState *stack, Vars *vars, Funcs *funcs) {
     }
 
     // TODO: handle the extension for other platforms (dll , ...)
-    if (strstr(path, ".so") == NULL){
-        size_t len = strlen(path) + 4;
-        char* buffer = malloc(len);
-        snprintf(buffer, len, "%s.so", path);
+    size_t plen = strlen(path);
+    if (plen < 3 || strcmp(path + plen - 3, ".so") != 0){
+        char* buffer = malloc(plen + 4);
+        snprintf(buffer, plen + 4, "%s.so", path);
         path_copy = copy_string(buffer);
         free(buffer);
     }else {
@@ -2953,8 +2953,7 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
         }
 
         if (token == NULL) {
-            fprintf(stderr, "unterminated list literal\n");
-            return false;
+            return diagnostic_error_current("unterminated list literal");
         }
 
         if (!is_string && is_token(token, ")")) {
@@ -2973,13 +2972,11 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
             ray_append(stack, list_value);
             continue;
         } else if (is_token(token, "else")) {
-            fprintf(stderr, "unexpected else\n");
             free(token);
-            return false;
+            return diagnostic_error_current("unexpected else");
         } else if (is_token(token, "end")) {
-            fprintf(stderr, "unexpected end\n");
             free(token);
-            return false;
+            return diagnostic_error_current("unexpected end");
         } else if (is_token(token, "if")) {
             BlockStop stop_reason = BLOCK_STOP_EOF;
 
@@ -2988,16 +2985,13 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
                 return false;
             }
             if (stop_reason == BLOCK_STOP_BREAK) {
-                fprintf(stderr, "unexpected break\n");
-                return false;
+                return diagnostic_error_current("unexpected break");
             }
             if (stop_reason == BLOCK_STOP_CONTINUE) {
-                fprintf(stderr, "unexpected continue\n");
-                return false;
+                return diagnostic_error_current("unexpected continue");
             }
             if (stop_reason == BLOCK_STOP_RETURN) {
-                fprintf(stderr, "unexpected ret\n");
-                return false;
+                return diagnostic_error_current("unexpected ret");
             }
             continue;
         } else if (is_token(token, "loop")) {
@@ -3008,8 +3002,7 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
                 return false;
             }
             if (stop_reason == BLOCK_STOP_RETURN) {
-                fprintf(stderr, "unexpected ret\n");
-                return false;
+                return diagnostic_error_current("unexpected ret");
             }
             continue;
         } else if (is_token(token, "defun")) {
@@ -3043,17 +3036,14 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
             }
             continue;
         } else if (is_token(token, "break")) {
-            fprintf(stderr, "unexpected break\n");
             free(token);
-            return false;
+            return diagnostic_error_current("unexpected break");
         } else if (is_token(token, "continue")) {
-            fprintf(stderr, "unexpected continue\n");
             free(token);
-            return false;
+            return diagnostic_error_current("unexpected continue");
         } else if (is_token(token, "ret")) {
-            fprintf(stderr, "unexpected ret\n");
             free(token);
-            return false;
+            return diagnostic_error_current("unexpected ret");
         } else if (is_value_token(token, is_string)) {
             if (!push_token_value(stack, token, is_string)) {
                 free(token);
@@ -3262,9 +3252,9 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
             free(token);
             continue;
         } else {
-            fprintf(stderr, "unknown token: %s\n", token);
+            bool ok = diagnostic_error_current("unknown token: %s", token);
             free(token);
-            return false;
+            return ok;
         }
     }
 }
@@ -4347,31 +4337,45 @@ static bool evaluate_source(RDNState *stack, Vars* vars, Funcs *funcs, char *sou
                 vars == NULL ? &_vars : vars, 
                 funcs == NULL ? &_funcs : funcs, &cursor, &stop_reason, false)) {
         g_diagnostic_context = previous_context;
-        return false;
+        goto cleanup;
     }
 
     if (stop_reason == BLOCK_STOP_BREAK) {
         g_diagnostic_context = previous_context;
-        return diagnostic_error_current("unexpected break");
+        diagnostic_error_current("unexpected break");
+        goto cleanup;
     }
 
     if (stop_reason == BLOCK_STOP_CONTINUE) {
         g_diagnostic_context = previous_context;
-        return diagnostic_error_current("unexpected continue");
+        diagnostic_error_current("unexpected continue");
+        goto cleanup;
     }
 
     if (stop_reason == BLOCK_STOP_RETURN) {
         g_diagnostic_context = previous_context;
-        return diagnostic_error_current("unexpected ret");
+        diagnostic_error_current("unexpected ret");
+        goto cleanup;
     }
 
     if (stop_reason != BLOCK_STOP_EOF) {
         g_diagnostic_context = previous_context;
-        return diagnostic_error_current("unexpected block terminator");
+        diagnostic_error_current("unexpected block terminator");
+        goto cleanup;
     }
 
     g_diagnostic_context = previous_context;
+
+    if (stack == NULL) free_stack_values(&_stack);
+    if (vars == NULL) free_vars(&_vars);
+    if (funcs == NULL) free_funcs(&_funcs);
     return true;
+
+cleanup:
+    if (stack == NULL) free_stack_values(&_stack);
+    if (vars == NULL) free_vars(&_vars);
+    if (funcs == NULL) free_funcs(&_funcs);
+    return false;
 }
 
 static bool evaluate_file(RDNState *stack, Vars *vars, Funcs *funcs, const char *path) {
