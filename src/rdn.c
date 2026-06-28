@@ -1931,6 +1931,7 @@ static bool apply_load(RDNState *stack, Vars *vars, Funcs *funcs){
     if (source == NULL) {
         free(resolved_path);
         free_value(target);
+        free(path_copy);
         return false;
     }
 
