@@ -3404,15 +3404,19 @@ static bool apply_do_string(RDNState *stack, Vars *vars, Funcs *funcs){
     Value* str = ray_pop(stack);
     if (str->type == VALUE_STRING) {
         evaluate_source(stack, vars, funcs, str->as.string);
+        free_value(str);
         return true;
     }else if(str->type == VALUE_AS_VAR) {
         Vars_t* var = find_current_scope_var_entry(vars, str->as.string);
-        if (var->var_value->type != VALUE_STRING) {
+        if (var == NULL || var->var_value->type != VALUE_STRING) {
+            free_value(str);
             return diagnostic_error_current("variable must be a string type");
         }
         evaluate_source(stack, vars, funcs, var->var_value->as.string);
+        free_value(str);
         return true;
     }
+    free_value(str);
     return diagnostic_error_current("the value is not a string type or variable of string");
 }
 
@@ -3423,15 +3427,19 @@ static bool apply_do_file(RDNState *stack, Vars *vars, Funcs *funcs){
     Value* path = ray_pop(stack);
     if (path->type == VALUE_STRING) {
         evaluate_file(stack, vars, funcs, path->as.string);
+        free_value(path);
         return true;
     }else if (path->type == VALUE_AS_VAR) {
         Vars_t* var = find_current_scope_var_entry(vars, path->as.string);
-        if (var->var_value->type != VALUE_STRING) {
+        if (var == NULL || var->var_value->type != VALUE_STRING) {
+            free_value(path);
             return diagnostic_error_current("variable must be a string type");
         }
         evaluate_file(stack, vars, funcs, var->var_value->as.string);
+        free_value(path);
         return true;
     }
+    free_value(path);
     return diagnostic_error_current("do_file requires 1 operands and must be string");
 }
 
