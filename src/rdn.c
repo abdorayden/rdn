@@ -3785,12 +3785,12 @@ static bool apply_loop(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor,
         return diagnostic_error_current("loop missing end");
     }
 
+    if (!vars_push_scope(vars)) {
+        return false;
+    }
+
     while (condition_value) {
         char *iteration_cursor = body_start;
-
-        if (!vars_push_scope(vars)) {
-            return false;
-        }
 
         if (!execute_block(stack, vars, funcs, &iteration_cursor, &body_stop, false)) {
             vars_pop_scope(vars);
@@ -3804,7 +3804,9 @@ static bool apply_loop(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor,
                 return false;
             }
             vars_pop_scope(vars);
-            break;
+            *cursor = body_end;
+            *stop_reason = BLOCK_STOP_END;
+            return true;
         }
 
         if (body_stop == BLOCK_STOP_RETURN) {
@@ -3823,14 +3825,8 @@ static bool apply_loop(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor,
             return diagnostic_error_current("loop missing end");
         }
 
-        if (!materialize_scope_references(stack, vars)) {
-            vars_pop_scope(vars);
-            return false;
-        }
-
-        vars_pop_scope(vars);
-
         if (stack->count < 1) {
+            vars_pop_scope(vars);
             return diagnostic_error_current("loop body must leave boolean condition on stack");
         }
 
@@ -3838,10 +3834,18 @@ static bool apply_loop(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor,
         if (!value_to_boolean(condition, &condition_value)) {
             diagnostic_error_current("loop body must leave boolean condition on stack");
             ray_append(stack, condition);
+            vars_pop_scope(vars);
             return false;
         }
         free_value(condition);
     }
+
+    if (!materialize_scope_references(stack, vars)) {
+        vars_pop_scope(vars);
+        return false;
+    }
+
+    vars_pop_scope(vars);
 
     *cursor = body_end;
     *stop_reason = BLOCK_STOP_END;
