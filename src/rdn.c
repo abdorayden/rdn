@@ -1893,8 +1893,9 @@ static bool apply_load(RDNState *stack, Vars *vars, Funcs *funcs){
     }
 
     if (strstr(path, ".rdn") == NULL){
-        char* buffer = malloc(256);
-        sprintf(buffer, "%s.rdn", path);
+        size_t len = strlen(path) + 5;
+        char* buffer = malloc(len);
+        snprintf(buffer, len, "%s.rdn", path);
         path_copy = copy_string(buffer);
         free(buffer);
     }else {
