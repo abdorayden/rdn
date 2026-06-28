@@ -1150,8 +1150,20 @@ static bool apply_binary_operator(RDNState *stack, Vars *vars, const char *opera
             } else if (is_token(operator_token, "*")) {
                 result = create_integer_value(left->as.integer * right->as.integer);
             }else if (is_token(operator_token, "%")) {
+                if (right->as.integer == 0) {
+                    diagnostic_error_current("division by zero");
+                    ray_append(stack, left);
+                    ray_append(stack, right);
+                    return false;
+                }
                 result = create_integer_value(left->as.integer % right->as.integer);
             }else if (is_token(operator_token, "//")) {
+                if (right->as.integer == 0) {
+                    diagnostic_error_current("division by zero");
+                    ray_append(stack, left);
+                    ray_append(stack, right);
+                    return false;
+                }
                 result = create_integer_value((long)(left->as.integer / right->as.integer));
             }
         } else if (left->type == VALUE_INTEGER && right->type == VALUE_INTEGER && is_token(operator_token, "/") &&
