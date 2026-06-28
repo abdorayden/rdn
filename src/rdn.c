@@ -3589,10 +3589,12 @@ static bool apply_enum(RDNState *stack, Vars *vars , bool reset) {
         Value* top = ray_pop(stack);
         if (top->type == VALUE_INTEGER) {
             counter = top->as.integer;
+            free_value(top);
             Value* enum_val = create_integer_value(counter++);
             ray_append(stack, enum_val);
             return true;
         }
+        ray_append(stack, top);
     }
     Value* enum_val = create_integer_value(counter++);
     ray_append(stack, enum_val);
