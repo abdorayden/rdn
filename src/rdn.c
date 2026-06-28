@@ -2008,6 +2008,7 @@ static bool apply_loadnative(RDNState *stack, Vars *vars, Funcs *funcs) {
         char *diagnostic_path = copy_string(resolved_path);
         free(resolved_path);
         free_value(target);
+        free(path_copy);
         if (diagnostic_path == NULL) {
             return diagnostic_error_current("failed to load native module: %s", dlerror());
         }
@@ -2024,6 +2025,7 @@ static bool apply_loadnative(RDNState *stack, Vars *vars, Funcs *funcs) {
         dlclose(handle);
         free(resolved_path);
         free_value(target);
+        free(path_copy);
         if (diagnostic_path == NULL) {
             return diagnostic_error_current("native module is missing rdn_module_init: %s", dlerror());
         }
@@ -2051,6 +2053,7 @@ static bool apply_loadnative(RDNState *stack, Vars *vars, Funcs *funcs) {
         dlclose(handle);
         free(resolved_path);
         free_value(target);
+        free(path_copy);
         return false;
     }
 
@@ -2062,6 +2065,7 @@ static bool apply_loadnative(RDNState *stack, Vars *vars, Funcs *funcs) {
             dlclose(handle);
             free(resolved_path);
             free_value(target);
+            free(path_copy);
             return false;
         }
     }
