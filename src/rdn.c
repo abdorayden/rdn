@@ -1270,7 +1270,6 @@ static bool apply_func_name(RDNState *stack, Funcs *funcs){
 static bool apply_type(RDNState *stack, Vars *vars, Funcs *funcs) {
     Value *value = NULL;
     Value *result = NULL;
-    Vars_t *var_entry = NULL;
 
     if (stack->count < 1) {
         return diagnostic_error_current("type requires 1 operand");
@@ -1278,8 +1277,7 @@ static bool apply_type(RDNState *stack, Vars *vars, Funcs *funcs) {
 
     value = ray_pop(stack);
     if (value->type == VALUE_AS_VAR) {
-        var_entry = find_var_entry(vars, value->as.string);
-        if (var_entry == NULL && find_func_entry(funcs, value->as.string) != NULL) {
+        if (find_func_entry(funcs, value->as.string) != NULL) {
             result = create_string_value_copy("function");
             free_value(value);
             value = NULL;
@@ -3790,24 +3788,47 @@ static bool apply_loop(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor,
     while (condition_value) {
         char *iteration_cursor = body_start;
 
+        if (!vars_push_scope(vars)) {
+            return false;
+        }
+
         if (!execute_block(stack, vars, funcs, &iteration_cursor, &body_stop, false)) {
+            vars_pop_scope(vars);
             return false;
         }
 
         if (body_stop == BLOCK_STOP_BREAK) {
             condition_value = false;
+            if (!materialize_scope_references(stack, vars)) {
+                vars_pop_scope(vars);
+                return false;
+            }
+            vars_pop_scope(vars);
             break;
         }
 
         if (body_stop == BLOCK_STOP_RETURN) {
+            if (!materialize_scope_references(stack, vars)) {
+                vars_pop_scope(vars);
+                return false;
+            }
+            vars_pop_scope(vars);
             *cursor = body_end;
             *stop_reason = BLOCK_STOP_RETURN;
             return true;
         }
 
         if (body_stop != BLOCK_STOP_END && body_stop != BLOCK_STOP_CONTINUE) {
+            vars_pop_scope(vars);
             return diagnostic_error_current("loop missing end");
         }
+
+        if (!materialize_scope_references(stack, vars)) {
+            vars_pop_scope(vars);
+            return false;
+        }
+
+        vars_pop_scope(vars);
 
         if (stack->count < 1) {
             return diagnostic_error_current("loop body must leave boolean condition on stack");

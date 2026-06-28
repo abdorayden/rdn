@@ -175,7 +175,7 @@ static bool value_to_double(const Value *value, double *out_value);
 static bool value_to_long(const Value *value, long *out_value);
 static bool value_to_boolean(const Value *value, bool *out_value);
 static Value *resolve_value_if_var(const Vars *vars, Value *value, const char *context);
-#define resolve_value_of_var_if_it_is(vars , value) do{resolve_value_if_var(vars, value, NULL);}while(0)
+
 static bool append_value_repr(char **buffer, size_t *length, const Value *value);
 static bool values_equal(const Value *left, const Value *right);
 static bool values_not_equal(const Value *left, const Value *right);
