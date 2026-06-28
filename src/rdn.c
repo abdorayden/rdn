@@ -1989,8 +1989,9 @@ static bool apply_loadnative(RDNState *stack, Vars *vars, Funcs *funcs) {
 
     // TODO: handle the extension for other platforms (dll , ...)
     if (strstr(path, ".so") == NULL){
-        char* buffer = malloc(256);
-        sprintf(buffer, "%s.so", path);
+        size_t len = strlen(path) + 4;
+        char* buffer = malloc(len);
+        snprintf(buffer, len, "%s.so", path);
         path_copy = copy_string(buffer);
         free(buffer);
     }else {
