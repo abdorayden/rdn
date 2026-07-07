@@ -176,18 +176,29 @@ format defun
    str-fmt let
    "" for_ret let
    0 val_idx let
+   list len lst_len let
    0 i let
    str-fmt len n let
    i n < loop
        str-fmt i index "%" = if
-           for_ret
-           list val_idx index
-           append
-           1 val_idx + val_idx set
+           i 1 + n < if
+               str-fmt i 1 + index "%" =
+           else
+               false
+           end
+           if
+               [* %% → literal % *]
+               for_ret "%" append
+               i 1 + i set
+           else
+               [* % → placeholder *]
+               val_idx lst_len < if
+                   for_ret list val_idx index append
+                   1 val_idx + val_idx set
+               end
+           end
        else
-           for_ret
-           str-fmt i index
-           append
+           for_ret str-fmt i index append
        end
        i 1 + i set
        i n <
