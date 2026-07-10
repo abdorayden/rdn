@@ -183,6 +183,7 @@ static bool values_compare(const Value *left, const Value *right, const char *op
 static void print_value(const Value *value);
 static char* exit_value(const Value* value , int* out_exit);
 static bool apply_binary_operator(RDNState *stack, Vars *vars, const char *operator_token);
+static bool apply_match(RDNState *stack, Vars *vars);
 static bool apply_print(RDNState *stack, Vars *vars);
 static bool apply_exit(RDNState *stack , Vars *vars, int* exit_status);
 static bool apply_type(RDNState *stack, Vars *vars, Funcs *funcs);

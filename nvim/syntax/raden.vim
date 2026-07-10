@@ -23,7 +23,7 @@ syntax keyword radenConditional if else end
 syntax keyword radenRepeat loop break continue
 syntax keyword radenKeyword let const enum reset demac defun apply call set pcall unlet ret
 
-syntax keyword radenBuiltin print type exit pop swap dup to_string load loadnative add_load_path add_native_path error do_string do_file
+syntax keyword radenBuiltin print type exit pop swap dup to_string load loadnative add_load_path add_native_path error do_string do_file match
 syntax keyword radenBuiltin assert append remove index len __argv __host_os __sharedlib_ext __line_col __file __func_name __stack_size
 
 syntax match radenOperator /\V+/

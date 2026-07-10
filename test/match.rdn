@@ -1,0 +1,85 @@
+[* match builtin tests *]
+
+[* Helper: test with expected true/false *]
+test apply
+    _expected let
+    _text let
+    _pat let
+    _pat _text match _expected = if
+        "." print   [* pass *]
+    else
+        "F" print
+        "FAIL: " print _pat print " " print _text print " " print
+        _expected print " " print
+        _pat _text match print "\n" print
+    end
+end
+
+[* ===== ? tests ===== *]
+"?" "a" true test
+"?" "" false test
+"??" "ab" true test
+"??" "a" false test
+"a?c" "abc" true test
+"?ello" "Hello" true test
+
+[* ===== * tests ===== *]
+"*" "" true test
+"*" "abc" true test
+"a*" "a" true test
+"a*" "ab" true test
+"a*" "abc" true test
+"a*" "ba" false test
+"*c" "abc" true test
+"*c" "ab" false test
+"a*b" "acb" true test
+"a*b" "ab" true test
+"a*b" "axxxb" true test
+"a*b" "ba" false test
+"a*b*c" "abc" true test
+"a*b*c" "aXXbYYc" true test
+"a*b*c" "ac" false test
+
+[* ===== ? and * combined ===== *]
+"?*" "a" true test
+"?*" "" false test
+"*?" "a" true test
+"*?" "" false test
+"*.txt" "hello.txt" true test
+"*.txt" "hello.md" false test
+"???-*" "abc-xyz" true test
+"???-*" "ab-xy" false test
+
+[* ===== [...] tests ===== *]
+"[abc]" "a" true test
+"[abc]" "b" true test
+"[abc]" "d" false test
+"[!abc]" "d" true test
+"[!abc]" "a" false test
+"[^abc]" "d" true test
+"[^abc]" "a" false test
+"[a-z]" "m" true test
+"[a-z]" "A" false test
+"[a-z]" "0" false test
+"[0-9]" "5" true test
+"[0-9]" "a" false test
+"[a-zA-Z]" "R" true test
+"[a-zA-Z]" "5" false test
+"[!0-9]" "a" true test
+"[!0-9]" "5" false test
+"file[0-9].txt" "file5.txt" true test
+"file[0-9].txt" "filea.txt" false test
+
+[* ===== edge cases ===== *]
+"" "" true test
+"" "a" false test
+"abc" "abc" true test
+"abc" "ab" false test
+"abc" "abcd" false test
+
+[* ===== variable support ===== *]
+"[a-z]*" pattern let
+"hello" text let
+pattern text true test
+
+"\n" print

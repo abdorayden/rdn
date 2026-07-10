@@ -1195,6 +1195,121 @@ static bool apply_binary_operator(RDNState *stack, Vars *vars, const char *opera
     return true;
 }
 
+static bool match_char_class(const char **pat, char ch) {
+    bool negate = false;
+    bool matched = false;
+    char prev = 0;
+    bool first = true;
+
+    if (**pat == '\0') {
+        return false;
+    }
+
+    if (**pat == '!' || **pat == '^') {
+        negate = true;
+        (*pat)++;
+    }
+
+    while (**pat != '\0' && **pat != ']') {
+        if (!first && **pat == '-' && (*pat)[1] != '\0' && (*pat)[1] != ']') {
+            char range_end = (*pat)[1];
+            if (ch >= prev && ch <= range_end) {
+                matched = true;
+            }
+            prev = range_end;
+            (*pat)++;
+        } else {
+            if (ch == **pat) {
+                matched = true;
+            }
+            prev = **pat;
+            first = false;
+        }
+        (*pat)++;
+    }
+
+    if (**pat == ']') {
+        (*pat)++;
+    }
+
+    return negate ? !matched : matched;
+}
+
+static bool match_pattern(const char *pat, const char *text) {
+    while (*pat != '\0') {
+        if (*pat == '*') {
+            pat++;
+            if (*pat == '\0') {
+                return true;
+            }
+            while (*text != '\0') {
+                if (match_pattern(pat, text)) {
+                    return true;
+                }
+                text++;
+            }
+            return false;
+        } else if (*pat == '?') {
+            if (*text == '\0') {
+                return false;
+            }
+            pat++;
+            text++;
+        } else if (*pat == '[') {
+            pat++;
+            if (*text == '\0') {
+                return false;
+            }
+            if (!match_char_class(&pat, *text)) {
+                return false;
+            }
+            text++;
+        } else {
+            if (*text != *pat) {
+                return false;
+            }
+            pat++;
+            text++;
+        }
+    }
+    return *text == '\0';
+}
+
+static bool apply_match(RDNState *stack, Vars *vars) {
+    Value *text_val = NULL;
+    Value *pat_val = NULL;
+    bool result = false;
+
+    if (stack->count < 2) {
+        return diagnostic_error_current("match requires 2 operands");
+    }
+
+    text_val = resolve_value_if_var(vars, ray_pop(stack), "match");
+    if (text_val == NULL) {
+        return false;
+    }
+
+    pat_val = resolve_value_if_var(vars, ray_pop(stack), "match");
+    if (pat_val == NULL) {
+        free_value(text_val);
+        return false;
+    }
+
+    if (text_val->type != VALUE_STRING || pat_val->type != VALUE_STRING) {
+        diagnostic_error_current("match requires string operands");
+        ray_append(stack, pat_val);
+        ray_append(stack, text_val);
+        return false;
+    }
+
+    result = match_pattern(pat_val->as.string, text_val->as.string);
+
+    free_value(text_val);
+    free_value(pat_val);
+
+    return push_value(stack, create_boolean_value(result));
+}
+
 static bool apply_print(RDNState *stack, Vars *vars) {
     Value *value = NULL;
 
@@ -3187,6 +3302,13 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
             }
             free(token);
             continue;
+        } else if (is_token(token, "match")) {
+            if (!apply_match(stack, vars)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
         } else if (is_token(token, "add_load_path")) {
             if (!apply_add_load_path(stack, vars)) {
                 free(token);
@@ -4125,6 +4247,13 @@ static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **curs
                 return false;
             }
             free(token);
+        } else if (is_token(token, "match")) {
+            if (!apply_match(stack, vars)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
             continue;
         } else if (is_token(token, "add_load_path")) {
             if (!apply_add_load_path(stack, vars)) {
