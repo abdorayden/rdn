@@ -1,0 +1,69 @@
+[*
+coroutines.rdn
+Copyright (c) 2023-2026 Ray Den
+SPDX-License-Identifier: MIT
+
+Purpose:
+Lightweight coroutine helpers built on top of the native coroutine module.
+
+Coroutine objects are mutable lists with this layout:
+
+- index 0: step function name
+- index 1: current state
+- index 2: alive boolean
+
+Step functions follow the convention:
+
+state -> yield new-state alive
+
+Exports:
+- co_create : state step-fn -> coroutine
+- resume    : coroutine -> yield alive
+- co_status : coroutine -> "alive" | "dead"
+*]
+
+"../nativelibs/coroutines" __sharedlib_ext to_string swap pop append loadnative
+
+Couroutines.co_create defun
+    coCreate call
+end
+
+Couroutines.resume defun
+    co let
+    co 2 index alive let
+    alive if
+        co 0 index step let
+        co 1 index state let
+        state step call
+        alive let
+        new_state let
+        yield let
+        co new_state alive coUpdate call pop
+        yield alive
+    else
+        null
+        false
+    end
+end
+
+Couroutines.co_status defun
+    co let
+    co 2 index alive let
+    alive if
+        "alive"
+    else
+        "dead"
+    end
+end
+
+@co_create apply
+    Couroutines.co_create call
+end
+
+@resume apply
+    Couroutines.resume call
+end
+
+@co_status apply
+    Couroutines.co_status call
+end

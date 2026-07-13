@@ -1,0 +1,23 @@
+"../libs/coroutines" load
+
+counter defun
+    state let
+    state 2 < if
+        state
+        state 1 + 
+        true
+    else
+        null
+        0
+        false
+    end
+end
+
+0 counter @co_create coro let
+
+coro @co_status print "\n" print
+coro @resume swap print "\n" print print "\n" print
+coro @co_status print "\n" print
+coro @resume swap print "\n" print print "\n" print
+coro @resume swap print "\n" print print "\n" print
+coro @co_status print
