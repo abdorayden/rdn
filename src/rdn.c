@@ -1,4 +1,3 @@
-#include <dlfcn.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <ctype.h>
@@ -7,6 +6,18 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <dlfcn.h>
+#endif
+
+#ifdef _WIN32
+#define PATH_SEPARATOR '\\'
+#else
+#define PATH_SEPARATOR '/'
+#endif
 
 #include "../include/rdn_native.h"
 #include "stack.h"
@@ -25,6 +36,14 @@ static bool is_operator_token(const char *value) {
            is_token(value, ">=") || is_token(value, "!=") || is_token(value, "=") ||
            is_token(value, "!") || is_token(value, "%") || is_token(value, "//");
 }
+
+static void *native_library_open(const char *path);
+static void *native_library_symbol(void *handle, const char *name);
+static void native_library_close(void *handle);
+static const char *native_library_last_error(void);
+static bool path_is_separator_char(char ch);
+static const char *path_last_separator(const char *path);
+static char *get_install_prefix(void);
 
 static char *copy_string(const char *text) {
     size_t length = strlen(text) + 1;
@@ -447,11 +466,75 @@ static void free_funcs(Funcs *funcs) {
 
         free_func_entry(entry);
         if (library_handle != NULL && !seen) {
-            dlclose(library_handle);
+            native_library_close(library_handle);
         }
     }
 
     ray_clear(funcs);
+}
+
+static void *native_library_open(const char *path) {
+#ifdef _WIN32
+    return (void *)LoadLibraryA(path);
+#else
+    return dlopen(path, RTLD_NOW | RTLD_LOCAL);
+#endif
+}
+
+static void *native_library_symbol(void *handle, const char *name) {
+#ifdef _WIN32
+    return (void *)GetProcAddress((HMODULE)handle, name);
+#else
+    return dlsym(handle, name);
+#endif
+}
+
+static void native_library_close(void *handle) {
+    if (handle == NULL) {
+        return;
+    }
+
+#ifdef _WIN32
+    FreeLibrary((HMODULE)handle);
+#else
+    dlclose(handle);
+#endif
+}
+
+static const char *native_library_last_error(void) {
+#ifdef _WIN32
+    static char message[512];
+    DWORD error = GetLastError();
+    DWORD size = 0;
+
+    if (error == 0) {
+        return NULL;
+    }
+
+    size = FormatMessageA(
+        FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+        NULL,
+        error,
+        0,
+        message,
+        (DWORD)sizeof(message),
+        NULL
+    );
+
+    if (size == 0) {
+        snprintf(message, sizeof(message), "Windows error %lu", (unsigned long)error);
+        return message;
+    }
+
+    while (size > 0 && (message[size - 1] == '\r' || message[size - 1] == '\n' || message[size - 1] == ' ' || message[size - 1] == '\t')) {
+        message[--size] = '\0';
+    }
+
+    return message;
+#else
+    const char *error = dlerror();
+    return error == NULL ? NULL : error;
+#endif
 }
 
 static bool vars_push_scope(Vars *vars) {
@@ -1922,7 +2005,6 @@ static bool apply_len(RDNState *stack, Vars *vars) {
     return true;
 }
 
-// TODO: rayden was here
 static bool apply_add_load_path(RDNState *stack, Vars *vars) {
     Value *target = NULL;
     char *path = NULL;
@@ -2096,20 +2178,27 @@ static bool apply_loadnative(RDNState *stack, Vars *vars, Funcs *funcs) {
     RDNModule module = {0};
     NativeModuleLoadState module_state = {0};
     bool ok = false;
+    const char *library_error = NULL;
+    const char *shared_ext = host_shared_library_extension();
+    size_t path_length = 0;
+    size_t shared_ext_length = 0;
 
     if (!pop_string_path_operand(stack, vars, "loadnative", &target, &path)) {
         return false;
     }
 
-    // TODO: handle the extension for other platforms (dll , ...)
-    size_t plen = strlen(path);
-    if (plen < 3 || strcmp(path + plen - 3, ".so") != 0){
-        char* buffer = malloc(plen + 4);
-        snprintf(buffer, plen + 4, "%s.so", path);
-        path_copy = copy_string(buffer);
-        free(buffer);
-    }else {
+    path_length = strlen(path);
+    shared_ext_length = strlen(shared_ext);
+    if (path_length >= shared_ext_length && strcmp(path + path_length - shared_ext_length, shared_ext) == 0) {
         path_copy = copy_string(path);
+    } else {
+        char *buffer = malloc(path_length + shared_ext_length + 1);
+
+        if (buffer != NULL) {
+            snprintf(buffer, path_length + shared_ext_length + 1, "%s%s", path, shared_ext);
+            path_copy = copy_string(buffer);
+            free(buffer);
+        }
     }
 
     if (path_copy == NULL) {
@@ -2131,34 +2220,42 @@ static bool apply_loadnative(RDNState *stack, Vars *vars, Funcs *funcs) {
         resolved_path = canonical_path;
     }
 
-    handle = dlopen(resolved_path, RTLD_NOW | RTLD_LOCAL);
+    handle = native_library_open(resolved_path);
     if (handle == NULL) {
         char *diagnostic_path = copy_string(resolved_path);
+        library_error = native_library_last_error();
         free(resolved_path);
         free_value(target);
         free(path_copy);
         if (diagnostic_path == NULL) {
-            return diagnostic_error_current("failed to load native module: %s", dlerror());
+            return diagnostic_error_current("failed to load native module: %s",
+                                            library_error == NULL ? "unknown error" : library_error);
         }
         {
-            bool ok = diagnostic_error_current("failed to load native module '%s': %s", diagnostic_path, dlerror());
+            bool ok = diagnostic_error_current("failed to load native module '%s': %s",
+                                               diagnostic_path,
+                                               library_error == NULL ? "unknown error" : library_error);
             free(diagnostic_path);
             return ok;
         }
     }
 
-    init_function = (RDNModuleInit)dlsym(handle, "rdn_module_init");
+    init_function = (RDNModuleInit)native_library_symbol(handle, "rdn_module_init");
     if (init_function == NULL) {
         char *diagnostic_path = copy_string(resolved_path);
-        dlclose(handle);
+        library_error = native_library_last_error();
+        native_library_close(handle);
         free(resolved_path);
         free_value(target);
         free(path_copy);
         if (diagnostic_path == NULL) {
-            return diagnostic_error_current("native module is missing rdn_module_init: %s", dlerror());
+            return diagnostic_error_current("native module is missing rdn_module_init: %s",
+                                            library_error == NULL ? "unknown error" : library_error);
         }
         {
-            bool ok = diagnostic_error_current("native module '%s' is missing rdn_module_init: %s", diagnostic_path, dlerror());
+            bool ok = diagnostic_error_current("native module '%s' is missing rdn_module_init: %s",
+                                               diagnostic_path,
+                                               library_error == NULL ? "unknown error" : library_error);
             free(diagnostic_path);
             return ok;
         }
@@ -2178,7 +2275,7 @@ static bool apply_loadnative(RDNState *stack, Vars *vars, Funcs *funcs) {
         diagnostic_error_current("%s", module_state.error_message == NULL ? "native module initialization failed" : module_state.error_message);
         free_native_module_regs(&module_state.regs);
         free(module_state.error_message);
-        dlclose(handle);
+        native_library_close(handle);
         free(resolved_path);
         free_value(target);
         free(path_copy);
@@ -2190,7 +2287,7 @@ static bool apply_loadnative(RDNState *stack, Vars *vars, Funcs *funcs) {
         if (!funcs_define_native(funcs, reg->name, reg->function, handle)) {
             free_native_module_regs(&module_state.regs);
             free(module_state.error_message);
-            dlclose(handle);
+            native_library_close(handle);
             free(resolved_path);
             free_value(target);
             free(path_copy);
@@ -3452,6 +3549,7 @@ static bool is_identifier_token(const char *token) {
                     token[index] == '$' || 
                     token[index] == '+' || 
                     token[index] == '!' || 
+                    token[index] == '.' || 
                     token[index] == '#'
                     )) {
             return false;
@@ -4591,6 +4689,34 @@ static bool path_is_readable_file(const char *path) {
     return true;
 }
 
+static bool path_is_separator_char(char ch) {
+#ifdef _WIN32
+    return ch == '/' || ch == '\\';
+#else
+    return ch == '/';
+#endif
+}
+
+static const char *path_last_separator(const char *path) {
+    const char *last_forward = NULL;
+
+    if (path == NULL) {
+        return NULL;
+    }
+
+    last_forward = strrchr(path, '/');
+#ifdef _WIN32
+    {
+        const char *last_backward = strrchr(path, '\\');
+
+        if (last_backward != NULL && (last_forward == NULL || last_backward > last_forward)) {
+            return last_backward;
+        }
+    }
+#endif
+    return last_forward;
+}
+
 static char *resolve_path_from_current_source(const char *path) {
     const char *slash = NULL;
     size_t dir_length = 0;
@@ -4601,11 +4727,20 @@ static char *resolve_path_from_current_source(const char *path) {
         return NULL;
     }
 
-    if (path[0] == '/' || g_current_source_path == NULL) {
+    if (g_current_source_path == NULL || path[0] == '/') {
         return copy_string(path);
     }
 
-    slash = strrchr(g_current_source_path, '/');
+#ifdef _WIN32
+    if (path[0] == '\\' ||
+        (((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z')) &&
+         path[1] == ':' &&
+         path_is_separator_char(path[2]))) {
+        return copy_string(path);
+    }
+#endif
+
+    slash = path_last_separator(g_current_source_path);
     if (slash == NULL) {
         return copy_string(path);
     }
@@ -4634,7 +4769,7 @@ static char *join_paths(const char *base, const char *path) {
 
     base_length = strlen(base);
     path_length = strlen(path);
-    need_sep = base_length > 0 && base[base_length - 1] != '/';
+    need_sep = base_length > 0 && !path_is_separator_char(base[base_length - 1]);
 
     joined = malloc(base_length + path_length + (need_sep ? 2 : 1));
     if (joined == NULL) {
@@ -4643,7 +4778,7 @@ static char *join_paths(const char *base, const char *path) {
 
     memcpy(joined, base, base_length);
     if (need_sep) {
-        joined[base_length] = '/';
+        joined[base_length] = PATH_SEPARATOR;
         memcpy(joined + base_length + 1, path, path_length + 1);
     } else {
         memcpy(joined + base_length, path, path_length + 1);
@@ -4723,6 +4858,7 @@ static char *canonicalize_existing_path(const char *path) {
     size_t length = 0;
     size_t out_length = 0;
     bool absolute = false;
+    size_t prefix_length = 0;
     char *normalized = NULL;
     const char *cursor = NULL;
 
@@ -4736,24 +4872,42 @@ static char *canonicalize_existing_path(const char *path) {
         return NULL;
     }
 
-    absolute = path[0] == '/';
+    if (path[0] == '/') {
+        absolute = true;
+        prefix_length = 1;
+    }
+#ifdef _WIN32
+    if (path[0] == '\\') {
+        absolute = true;
+        prefix_length = 1;
+    }
+    if (((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z')) &&
+        path[1] == ':' && path_is_separator_char(path[2])) {
+        absolute = true;
+        prefix_length = 3;
+    }
+#endif
     cursor = path;
 
     if (absolute) {
-        normalized[out_length++] = '/';
-        cursor++;
+        if (prefix_length == 3) {
+            normalized[out_length++] = path[0];
+            normalized[out_length++] = path[1];
+        }
+        normalized[out_length++] = PATH_SEPARATOR;
+        cursor += prefix_length;
     }
 
     while (*cursor != '\0') {
         const char *segment_start = cursor;
         size_t segment_length = 0;
 
-        while (*cursor == '/') {
+        while (path_is_separator_char(*cursor)) {
             cursor++;
         }
         segment_start = cursor;
 
-        while (*cursor != '\0' && *cursor != '/') {
+        while (*cursor != '\0' && !path_is_separator_char(*cursor)) {
             cursor++;
         }
 
@@ -4767,19 +4921,19 @@ static char *canonicalize_existing_path(const char *path) {
         }
 
         if (segment_length == 2 && segment_start[0] == '.' && segment_start[1] == '.') {
-            if (out_length > 0 && !(out_length == 1 && normalized[0] == '/')) {
-                if (normalized[out_length - 1] == '/') {
+            if (out_length > prefix_length) {
+                if (path_is_separator_char(normalized[out_length - 1])) {
                     out_length--;
                 }
-                while (out_length > 0 && normalized[out_length - 1] != '/') {
+                while (out_length > prefix_length && !path_is_separator_char(normalized[out_length - 1])) {
                     out_length--;
                 }
-                if (out_length == 0 && absolute) {
-                    normalized[out_length++] = '/';
+                if (out_length == prefix_length && absolute) {
+                    normalized[out_length++] = PATH_SEPARATOR;
                 }
             } else if (!absolute) {
-                if (out_length > 0 && normalized[out_length - 1] != '/') {
-                    normalized[out_length++] = '/';
+                if (out_length > 0 && !path_is_separator_char(normalized[out_length - 1])) {
+                    normalized[out_length++] = PATH_SEPARATOR;
                 }
                 normalized[out_length++] = '.';
                 normalized[out_length++] = '.';
@@ -4787,8 +4941,8 @@ static char *canonicalize_existing_path(const char *path) {
             continue;
         }
 
-        if (out_length > 0 && normalized[out_length - 1] != '/') {
-            normalized[out_length++] = '/';
+        if (out_length > 0 && !path_is_separator_char(normalized[out_length - 1])) {
+            normalized[out_length++] = PATH_SEPARATOR;
         }
 
         memcpy(normalized + out_length, segment_start, segment_length);
@@ -4796,7 +4950,7 @@ static char *canonicalize_existing_path(const char *path) {
     }
 
     if (out_length == 0) {
-        normalized[out_length++] = absolute ? '/' : '.';
+        normalized[out_length++] = absolute ? PATH_SEPARATOR : '.';
     }
 
     normalized[out_length] = '\0';
@@ -4873,23 +5027,81 @@ static bool push_search_path(SearchPathStack *paths, const char *path) {
     return true;
 }
 
-// TODO: rayden was here
+static char *get_install_prefix(void) {
+#ifdef _WIN32
+    char module_path[MAX_PATH];
+    DWORD size = 0;
+    const char *suffix = "\\..\\share\\rdn";
+    size_t module_length = 0;
+    size_t suffix_length = strlen(suffix);
+    const char *separator = NULL;
+    char *prefix = NULL;
+
+    size = GetModuleFileNameA(NULL, module_path, (DWORD)sizeof(module_path));
+    if (size == 0 || size >= sizeof(module_path)) {
+        return copy_string(RDN_INSTALL_PREFIX);
+    }
+
+    module_path[size] = '\0';
+    separator = path_last_separator(module_path);
+    if (separator == NULL) {
+        return copy_string(RDN_INSTALL_PREFIX);
+    }
+
+    module_length = (size_t)(separator - module_path);
+    prefix = malloc(module_length + suffix_length + 1);
+    if (prefix == NULL) {
+        return NULL;
+    }
+
+    memcpy(prefix, module_path, module_length);
+    memcpy(prefix + module_length, suffix, suffix_length + 1);
+    return prefix;
+#else
+    return copy_string(RDN_INSTALL_PREFIX);
+#endif
+}
+
 static bool reset_search_paths(void) {
+    char *install_prefix = NULL;
+    char *script_prefix = NULL;
+    char *native_prefix = NULL;
+
     free_search_path_stack(&g_script_search_paths);
     free_search_path_stack(&g_native_search_paths);
 
     if (!push_search_path(&g_script_search_paths, "libs")) {
         return false;
     }
-    if (!push_search_path(&g_script_search_paths, RDN_INSTALL_PREFIX "/libs")) {
-        return false;
-    }
     if (!push_search_path(&g_native_search_paths, "nativelibs")) {
         return false;
     }
-    if (!push_search_path(&g_native_search_paths, RDN_INSTALL_PREFIX "/nativelibs")) {
+
+    install_prefix = get_install_prefix();
+    if (install_prefix == NULL) {
         return false;
     }
+
+    script_prefix = join_paths(install_prefix, "libs");
+    native_prefix = join_paths(install_prefix, "nativelibs");
+    if (script_prefix == NULL || native_prefix == NULL) {
+        free(script_prefix);
+        free(native_prefix);
+        free(install_prefix);
+        return false;
+    }
+
+    if (!push_search_path(&g_script_search_paths, script_prefix) ||
+        !push_search_path(&g_native_search_paths, native_prefix)) {
+        free(script_prefix);
+        free(native_prefix);
+        free(install_prefix);
+        return false;
+    }
+
+    free(script_prefix);
+    free(native_prefix);
+    free(install_prefix);
 
     return true;
 }
