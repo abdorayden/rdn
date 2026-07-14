@@ -33,28 +33,48 @@ Examples:
 
 "../nativelibs/math" __sharedlib_ext to_string swap pop append loadnative
 
-2.7182818284590452354  M_E		    const
-1.4426950408889634074  M_LOG2E	    const
-0.43429448190325182765 M_LOG10E	    const
-0.69314718055994530942 M_LN2		const
-2.30258509299404568402 M_LN10		const
-3.14159265358979323846 M_PI		    const
-1.57079632679489661923 M_PI_2		const
-0.78539816339744830962 M_PI_4		const
-0.31830988618379067154 M_1_PI		const
-0.63661977236758134308 M_2_PI		const
-1.12837916709551257390 M_2_SQRTPI	const
-1.41421356237309504880 M_SQRT2	    const
-0.70710678118654752440 M_SQRT1_2	const
+2.7182818284590452354  E		const
+1.4426950408889634074  LOG2E	const
+0.43429448190325182765 LOG10E	const
+0.69314718055994530942 LN2		const
+2.30258509299404568402 LN10		const
+3.14159265358979323846 PI		const
+1.57079632679489661923 PI_2		const
+0.78539816339744830962 PI_4		const
+0.31830988618379067154 1_PI		const
+0.63661977236758134308 2_PI		const
+1.12837916709551257390 2_SQRTPI	const
+1.41421356237309504880 SQRT2	const
+0.70710678118654752440 SQRT1_2	const
 
 sqrt defun
     sqrtOf call
 end
 
-powf defun
+pow defun
     powerOf call
 end
 
-pow defun
-    powerOf call
+cos defun
+    cosOf call
+end
+
+sin defun
+    sinOf call
+end
+
+arc-sin defun
+    asinOf call
+end
+
+arc-cos defun
+    acosOf call
+end
+
+arc-tan defun
+    atanOf call
+end
+
+tan defun
+    tanOf call
 end

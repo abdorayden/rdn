@@ -1,0 +1,58 @@
+[**
+* sqrt implementation in rdn as example
+*]
+
+[*(Real) (Real)*]
+my-sqrt defun 
+
+    input-n let
+
+    0.0001 SQRT_TOLERANCE const
+
+    0.0 guess let
+    0.0 min let 
+    0.0 max let
+    0.0 delta let
+
+    repeated demac
+        guess guess * delta set
+        delta input-n - delta set
+    end
+
+    input-n 0.0 < if
+        "errno: EDOM\n" print
+        -1.0
+    else
+
+        input-n 1.0 < if
+            input-n 2.0 * guess set
+            1.0 max set
+        else
+            input-n 2.0 / guess set
+            input-n max set
+        end
+
+        0.0 min set
+        repeated
+
+        true loop
+            repeated
+
+            delta SQRT_TOLERANCE > if
+                guess max set
+            else
+                delta SQRT_TOLERANCE -1 * < if
+                    guess min set
+                else
+                    break
+                end
+            end
+            min max + guess set
+            guess 2.0 / guess set
+            true
+        end
+    end
+    guess
+end
+
+120.0 my-sqrt call print

@@ -127,3 +127,7 @@ end
 printfn apply
     printf "\n" print
 end
+
+@fmt apply
+    format call
+end

@@ -1,4 +1,4 @@
-"../libs/math_native.rdn" load
+"../libs/math.rdn" load
 
 4.0 sqrt call print "\n" print
-2.0 4.0 powf call print
+2.0 4.0 pow call print
