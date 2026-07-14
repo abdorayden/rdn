@@ -3573,7 +3573,7 @@ static bool identifier_is_name_target(char *cursor) {
 
     if (!is_string &&
         (is_token(next, "let") || is_token(next, "set") || is_token(next, "const") ||
-         is_token(next, "defun") || is_token(next, "apply") || is_token(next, "call") || is_token(next, "unlet"))) {
+         is_token(next, "defun") || is_token(next, "apply") || is_token(next, "call") || is_token(next, "unlet") || is_token(next, "demac"))) {
         free(next);
         return true;
     }
@@ -5563,22 +5563,24 @@ static bool source_has_complete_blocks(const char *source, const Funcs *funcs, b
         } else if (!is_string && is_identifier_token(token)) {
             Funcs_t *entry = find_func_entry(funcs, token);
 
-            if (entry != NULL && entry->type == FUNC_DEMAC) {
-                size_t body_length = strlen(entry->as.func_body);
-                size_t rest_length = strlen(cursor);
-                char *expanded = malloc(body_length + rest_length + 1);
+            if (entry != NULL && entry->type == FUNC_DEMAC) { // TODO: check if next token is demac
+                if (!next_token(&cursor, &token, &is_string) || !is_token(token, "demac"))  {
+                    size_t body_length = strlen(entry->as.func_body);
+                    size_t rest_length = strlen(cursor);
+                    char *expanded = malloc(body_length + rest_length + 1);
 
-                if (expanded == NULL) {
-                    free(token);
-                    g_diagnostic_context = previous_context;
-                    free_macro_expansion_stack(&expansions);
-                    return false;
+                    if (expanded == NULL) {
+                        free(token);
+                        g_diagnostic_context = previous_context;
+                        free_macro_expansion_stack(&expansions);
+                        return false;
+                    }
+
+                    memcpy(expanded, entry->as.func_body, body_length);
+                    memcpy(expanded + body_length, cursor, rest_length + 1);
+                    ray_append(&expansions, expanded);
+                    cursor = expanded;
                 }
-
-                memcpy(expanded, entry->as.func_body, body_length);
-                memcpy(expanded + body_length, cursor, rest_length + 1);
-                ray_append(&expansions, expanded);
-                cursor = expanded;
             }
         }
 
