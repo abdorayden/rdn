@@ -2352,6 +2352,35 @@ static bool append_typecheck_signature(Vars *vars, const char *name, const Value
     return true;
 }
 
+static char *build_nested_module_prefix(const char *previous_prefix, const char *name, const char *suffix, size_t suffix_len) {
+    size_t previous_len = previous_prefix == NULL ? 0 : strlen(previous_prefix);
+    size_t base_len = previous_len > suffix_len ? previous_len - suffix_len : 0;
+    size_t name_len = strlen(name);
+    size_t total_len = base_len + (previous_prefix != NULL ? 1 : 0) + name_len + suffix_len + 1;
+    char *prefix = malloc(total_len);
+
+    if (prefix == NULL) {
+        return NULL;
+    }
+
+    if (base_len > 0) {
+        memcpy(prefix, previous_prefix, base_len);
+    }
+
+    if (previous_prefix != NULL) {
+        prefix[base_len] = '.';
+        memcpy(prefix + base_len + 1, name, name_len);
+        memcpy(prefix + base_len + 1 + name_len, suffix, suffix_len);
+        prefix[base_len + 1 + name_len + suffix_len] = '\0';
+    } else {
+        memcpy(prefix, name, name_len);
+        memcpy(prefix + name_len, suffix, suffix_len);
+        prefix[name_len + suffix_len] = '\0';
+    }
+
+    return prefix;
+}
+
 static bool apply_module(RDNState *stack, Vars *vars, Funcs *funcs, char **cursor) {
     Value *name = NULL;
     char *body = NULL;
@@ -2417,30 +2446,21 @@ static bool apply_module(RDNState *stack, Vars *vars, Funcs *funcs, char **curso
                 {
                     char *previous_func_prefix = g_module_func_prefix;
                     char *previous_var_prefix = g_module_var_prefix;
-                    size_t name_len = strlen(name->as.string);
-                    size_t outer_func_len = previous_func_prefix ? strlen(previous_func_prefix) : 0;
-                    size_t outer_var_len = previous_var_prefix ? strlen(previous_var_prefix) : 0;
+                    char *new_func_prefix = build_nested_module_prefix(previous_func_prefix, name->as.string, "::", 2);
+                    char *new_var_prefix = build_nested_module_prefix(previous_var_prefix, name->as.string, ".", 1);
 
-                    g_module_func_prefix = malloc(outer_func_len + name_len + 3);
-                    if (g_module_func_prefix != NULL) {
-                        if (previous_func_prefix != NULL) {
-                            memcpy(g_module_func_prefix, previous_func_prefix, outer_func_len);
-                        }
-                        memcpy(g_module_func_prefix + outer_func_len, name->as.string, name_len);
-                        g_module_func_prefix[outer_func_len + name_len] = ':';
-                        g_module_func_prefix[outer_func_len + name_len + 1] = ':';
-                        g_module_func_prefix[outer_func_len + name_len + 2] = '\0';
+                    if (new_func_prefix == NULL || new_var_prefix == NULL) {
+                        free(new_func_prefix);
+                        free(new_var_prefix);
+                        diagnostic_error_at(token_start, "failed to allocate module prefix");
+                        free(token);
+                        free_value(name);
+                        free(body);
+                        return false;
                     }
 
-                    g_module_var_prefix = malloc(outer_var_len + name_len + 2);
-                    if (g_module_var_prefix != NULL) {
-                        if (previous_var_prefix != NULL) {
-                            memcpy(g_module_var_prefix, previous_var_prefix, outer_var_len);
-                        }
-                        memcpy(g_module_var_prefix + outer_var_len, name->as.string, name_len);
-                        g_module_var_prefix[outer_var_len + name_len] = '.';
-                        g_module_var_prefix[outer_var_len + name_len + 1] = '\0';
-                    }
+                    g_module_func_prefix = new_func_prefix;
+                    g_module_var_prefix = new_var_prefix;
 
                     if (!evaluate_source(stack, vars, funcs, body)) {
                         free(token);

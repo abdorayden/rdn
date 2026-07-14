@@ -1,0 +1,9 @@
+Mod1 module
+    NestedMod1 module
+        nm apply
+            "nm\n" print
+        end
+    end
+end
+
+Mod1.NestedMod1::nm
