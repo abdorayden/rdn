@@ -33,48 +33,94 @@ Examples:
 
 "../nativelibs/math" __sharedlib_ext to_string swap pop append loadnative
 
-2.7182818284590452354  E		const
-1.4426950408889634074  LOG2E	const
-0.43429448190325182765 LOG10E	const
-0.69314718055994530942 LN2		const
-2.30258509299404568402 LN10		const
-3.14159265358979323846 PI		const
-1.57079632679489661923 PI_2		const
-0.78539816339744830962 PI_4		const
-0.31830988618379067154 1_PI		const
-0.63661977236758134308 2_PI		const
-1.12837916709551257390 2_SQRTPI	const
-1.41421356237309504880 SQRT2	const
-0.70710678118654752440 SQRT1_2	const
+2.7182818284590452354  Math.E		const
+1.4426950408889634074  Math.LOG2E	const
+0.43429448190325182765 Math.LOG10E	const
+0.69314718055994530942 Math.LN2		const
+2.30258509299404568402 Math.LN10		const
+3.14159265358979323846 Math.PI		const
+1.57079632679489661923 Math.PI_2		const
+0.78539816339744830962 Math.PI_4		const
+0.31830988618379067154 Math.1_PI		const
+0.63661977236758134308 Math.2_PI		const
+1.12837916709551257390 Math.2_SQRTPI	const
+1.41421356237309504880 Math.SQRT2	const
+0.70710678118654752440 Math.SQRT1_2	const
 
-sqrt defun
+Math.sqrt defun
     sqrtOf call
 end
 
-pow defun
+Math.pow defun
     powerOf call
 end
 
-cos defun
+Math.cos defun
     cosOf call
 end
 
-sin defun
+Math.sin defun
     sinOf call
 end
 
-arc-sin defun
+Math.arc-sin defun
     asinOf call
 end
 
-arc-cos defun
+Math.arc-cos defun
     acosOf call
 end
 
-arc-tan defun
+Math.arc-tan defun
     atanOf call
 end
 
-tan defun
+Math.tan defun
     tanOf call
 end
+
+Math.log defun
+    logOf call
+end
+
+Math.log10 defun
+    logOf10 call
+end
+
+Math.log2 defun
+    logOf2 call
+end
+
+Math.gcd defun
+    b let
+    a let
+
+    0 b = if
+        a
+        ret
+    end
+
+    0 c let
+
+    b 0 != loop
+        a b % c set
+        b a set
+        c b set
+
+        b 0 !=
+    end
+    a
+end
+
+@gcd apply Math.gcd call end
+@log apply Math.log call end
+@log10 apply Math.log10 call end
+@log2 apply Math.log2 call end
+@sqrt apply Math.sqrt call end
+@pow apply Math.pow call end
+@cos apply Math.cos call end
+@acos apply Math.arc-cos call end
+@sin apply Math.sin call end
+@asin apply Math.arc-sin call end
+@tan apply Math.tan call end
+@atan apply Math.arc-tan call end

@@ -1,7 +1,7 @@
 "../libs/math.rdn" load
 
-2 6 pow call print "\n" print
-2 -6 pow call print "\n" print
-2 0 pow call print "\n" print
--2 3 pow call print "\n" print
--2 -3 pow call print
+2 6 @pow print "\n" print
+2 -6 @pow print "\n" print
+2 0 @pow print "\n" print
+-2 3 @pow print "\n" print
+-2 -3 @pow print

@@ -1,0 +1,23 @@
+
+gcd defun
+    b let
+    a let
+
+    0 b = if
+        a
+        ret
+    end
+
+    0 c let
+
+    b 0 != loop
+        a b % c set
+        b a set
+        c b set
+
+        b 0 !=
+    end
+    a
+end
+
+99 25 gcd call print

@@ -153,6 +153,8 @@ build_all() {
     build_native "$ROOT_DIR/nativelibs/strconv.c" "$ROOT_DIR/nativelibs/strconv.$shared_ext"
     build_native "$ROOT_DIR/nativelibs/json.c" "$ROOT_DIR/nativelibs/json.$shared_ext"
     build_native "$ROOT_DIR/nativelibs/io.c" "$ROOT_DIR/nativelibs/io.$shared_ext"
+    build_native "$ROOT_DIR/nativelibs/bint.c" "$ROOT_DIR/nativelibs/bint.$shared_ext"
+    build_native "$ROOT_DIR/nativelibs/coroutines.c" "$ROOT_DIR/nativelibs/coroutines.$shared_ext"
 }
 
 case "${1:-all}" in

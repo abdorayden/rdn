@@ -192,6 +192,73 @@ static bool atanOf(RDNApi* api) {
     
     return api->push_number(api, atan(x));
 }
+
+static bool logOf2(RDNApi* api) {
+    double x = 0;
+
+    if (api->stack_size(api) < 1) {
+        return api->raise_error(api, "logOf2 requires 1 operands");
+    }
+
+    if (!api->is_number(api, -1)) {
+        return api->raise_error(api, "logOf2 requires number operands");
+    }
+
+    if (!api->to_number(api , -1 , &x)) {
+        return api->raise_error(api, "logOf2 requires number operands");
+    }
+    
+    if (!api->pop(api, 1)) {
+        return false;
+    }
+    
+    return api->push_number(api, log2(x));
+}
+
+static bool logOf10(RDNApi* api) {
+    double x = 0;
+
+    if (api->stack_size(api) < 1) {
+        return api->raise_error(api, "logOf10 requires 1 operands");
+    }
+
+    if (!api->is_number(api, -1)) {
+        return api->raise_error(api, "logOf10 requires number operands");
+    }
+
+    if (!api->to_number(api , -1 , &x)) {
+        return api->raise_error(api, "logOf10 requires number operands");
+    }
+    
+    if (!api->pop(api, 1)) {
+        return false;
+    }
+    
+    return api->push_number(api, log10(x));
+}
+
+static bool logOf(RDNApi* api) {
+    double x = 0;
+
+    if (api->stack_size(api) < 1) {
+        return api->raise_error(api, "logOf requires 1 operands");
+    }
+
+    if (!api->is_number(api, -1)) {
+        return api->raise_error(api, "logOf requires number operands");
+    }
+
+    if (!api->to_number(api , -1 , &x)) {
+        return api->raise_error(api, "logOf requires number operands");
+    }
+    
+    if (!api->pop(api, 1)) {
+        return false;
+    }
+    
+    return api->push_number(api, log(x));
+}
+
 bool rdn_module_init(RDNModule *module) {
     if (!module->register_function(module, "powerOf", powerOf)) {
         return false;
@@ -222,6 +289,18 @@ bool rdn_module_init(RDNModule *module) {
     }
     
     if (!module->register_function(module, "atanOf", atanOf)) {
+        return false;
+    }
+    
+    if (!module->register_function(module, "logOf", logOf)) {
+        return false;
+    }
+    
+    if (!module->register_function(module, "logOf10", logOf10)) {
+        return false;
+    }
+    
+    if (!module->register_function(module, "logOf2", logOf2)) {
         return false;
     }
     
