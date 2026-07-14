@@ -1,0 +1,49 @@
+Module module
+    0 vr let
+    func1 defun
+        "func1\n" print
+    end
+    func2 defun
+        "func2\n" print
+    end
+    app1 apply
+        "app1\n" print
+    end
+    app2 apply
+        "app2\n" print
+    end
+    mac1 demac
+        "mac1\n" print
+    end
+    mac2 demac
+        "mac2\n" print
+    end
+end
+
+10 Module.vr set
+
+Module.vr print
+
+Module::func1 call
+Module::func2 call
+
+Module::app1
+Module::app2
+
+Module::mac1
+Module::mac2
+
+Module open
+
+20 vr set
+
+vr print
+
+func1 call
+func2 call
+
+app1
+app2
+
+mac1
+mac2

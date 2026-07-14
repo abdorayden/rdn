@@ -1,0 +1,25 @@
+"./module.rdn" load
+
+10 Module.vr set
+
+Module::func1 call
+Module::func2 call
+
+Module::app1
+Module::app2
+
+Module::mac1
+Module::mac2
+
+Module open
+
+20 vr set
+
+func1 call
+func2 call
+
+app1
+app2
+
+mac1
+mac2

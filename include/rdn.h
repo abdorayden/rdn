@@ -62,6 +62,8 @@ struct Vars_t {
     Value* var_value;
     bool is_scope_marker; // define the variable in scope
     bool is_const; // check if the variable is constant
+
+    char* module_name; // this for the module that if the variable defined inside it
 };
 
 enum FuncType {
@@ -72,6 +74,8 @@ enum FuncType {
 };
 
 struct Funcs_t {
+    char* module_name; // this for the module that if the function defined inside it
+ 
     char* func_name;
     FuncType type;
     union {
@@ -132,6 +136,8 @@ static SearchPathStack g_native_search_paths = {0};
 static MacroExpansionStack g_macro_expansions = {0};
 static RLList(char*) g_stack_trace_protected = {0};
 static bool g_diagnostics_suppressed = false;
+static char *g_module_func_prefix = NULL;
+static char *g_module_var_prefix = NULL;
 
 static bool is_token(const char *value, const char *expected);
 static bool is_operator_token(const char *value);
@@ -201,6 +207,8 @@ static bool apply_loadnative(RDNState *stack, Vars *vars, Funcs *funcs);
 static bool typecheck_signature_types_valid(const Value *types);
 static bool append_typecheck_signature(Vars *vars, const char *name, const Value *params, const Value *returns);
 static bool apply_defun(RDNState *stack, Vars *vars, Funcs *funcs, char **cursor);
+static bool apply_module(RDNState *stack, Vars *vars, Funcs *funcs, char **cursor);
+static bool apply_open(RDNState *stack, Vars *vars, Funcs *funcs, char **cursor);
 static bool apply_apply(RDNState *stack, Funcs *funcs, char **cursor);
 static bool apply_demac(RDNState *stack, Funcs *funcs, char **cursor);
 static bool apply_call(RDNState *stack, Vars *vars, Funcs *funcs);

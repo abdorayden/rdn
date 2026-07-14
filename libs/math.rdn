@@ -48,49 +48,17 @@ Examples:
 1.41421356237309504880 Math.SQRT2	const
 0.70710678118654752440 Math.SQRT1_2	const
 
-Math.sqrt (Real) (Real) defun
-    sqrtOf call
-end
-
-Math.pow (Real) (Real) defun
-    powerOf call
-end
-
-Math.cos (Real) (Real) defun
-    cosOf call
-end
-
-Math.sin (Real) (Real) defun
-    sinOf call
-end
-
-Math.arc-sin (Real) (Real) defun
-    asinOf call
-end
-
-Math.arc-cos (Real) (Real) defun
-    acosOf call
-end
-
-Math.arc-tan (Real) (Real) defun
-    atanOf call
-end
-
-Math.tan (Real) (Real) defun
-    tanOf call
-end
-
-Math.log (Real) (Real) defun
-    logOf call
-end
-
-Math.log10 (Real) (Real) defun
-    logOf10 call
-end
-
-Math.log2 (Real) (Real) defun
-    logOf2 call
-end
+Math.sqrt    (Real) (Real) defun sqrtOf     call end
+Math.pow     (Real) (Real) defun powerOf    call end
+Math.cos     (Real) (Real) defun cosOf      call end
+Math.sin     (Real) (Real) defun sinOf      call end
+Math.arc-sin (Real) (Real) defun asinOf     call end
+Math.arc-cos (Real) (Real) defun acosOf     call end
+Math.arc-tan (Real) (Real) defun atanOf     call end
+Math.tan     (Real) (Real) defun tanOf      call end
+Math.log     (Real) (Real) defun logOf      call end
+Math.log10   (Real) (Real) defun logOf10    call end
+Math.log2    (Real) (Real) defun logOf2     call end
 
 Math.gcd (Int Int) (Int) defun
     b let
@@ -113,15 +81,15 @@ Math.gcd (Int Int) (Int) defun
     a
 end
 
-@gcd apply Math.gcd call end
-@log apply Math.log call end
-@log10 apply Math.log10 call end
-@log2 apply Math.log2 call end
-@sqrt apply Math.sqrt call end
-@pow apply Math.pow call end
-@cos apply Math.cos call end
-@acos apply Math.arc-cos call end
-@sin apply Math.sin call end
-@asin apply Math.arc-sin call end
-@tan apply Math.tan call end
-@atan apply Math.arc-tan call end
+@gcd    apply Math.gcd      call end
+@log    apply Math.log      call end
+@log10  apply Math.log10    call end
+@log2   apply Math.log2     call end
+@sqrt   apply Math.sqrt     call end
+@pow    apply Math.pow      call end
+@cos    apply Math.cos      call end
+@acos   apply Math.arc-cos  call end
+@sin    apply Math.sin      call end
+@asin   apply Math.arc-sin  call end
+@tan    apply Math.tan      call end
+@atan   apply Math.arc-tan  call end

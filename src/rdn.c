@@ -2352,6 +2352,205 @@ static bool append_typecheck_signature(Vars *vars, const char *name, const Value
     return true;
 }
 
+static bool apply_module(RDNState *stack, Vars *vars, Funcs *funcs, char **cursor) {
+    Value *name = NULL;
+    char *body = NULL;
+    char *body_start = *cursor;
+    char *scan = *cursor;
+    char *token = NULL;
+    bool is_string = false;
+    int depth = 1;
+    size_t source_line = 1;
+    size_t source_column = 1;
+
+    if (stack->count < 1) {
+        return diagnostic_error_current("module requires module name");
+    }
+
+    name = ray_pop(stack);
+    if (name->type != VALUE_AS_VAR) {
+        diagnostic_error_current("module requires module name");
+        ray_append(stack, name);
+        return false;
+    }
+
+    diagnostic_compute_location(body_start, &source_line, &source_column, NULL, NULL);
+
+    while (true) {
+        char *token_start = scan;
+
+        if (!next_token(&scan, &token, &is_string)) {
+            free_value(name);
+            return false;
+        }
+
+        if (token == NULL) {
+            diagnostic_error_at(scan, "module missing end");
+            free_value(name);
+            return false;
+        }
+
+        if (!is_string && is_token(token, "demac")) {
+            if (!skip_demac(&scan)) {
+                free(token);
+                free_value(name);
+                return false;
+            }
+        } else if (!is_string && (is_token(token, "if") || is_token(token, "loop") || is_token(token, "defun") ||
+                                  is_token(token, "apply") || is_token(token, "module"))) {
+            depth++;
+        } else if (!is_string && is_token(token, "end")) {
+            depth--;
+            if (depth == 0) {
+                size_t body_length = (size_t)(token_start - body_start);
+                body = malloc(body_length + 1);
+                if (body == NULL) {
+                    diagnostic_error_at(token_start, "failed to allocate module body");
+                    free(token);
+                    free_value(name);
+                    return false;
+                }
+
+                memcpy(body, body_start, body_length);
+                body[body_length] = '\0';
+
+                {
+                    char *previous_func_prefix = g_module_func_prefix;
+                    char *previous_var_prefix = g_module_var_prefix;
+                    size_t name_len = strlen(name->as.string);
+                    size_t outer_func_len = previous_func_prefix ? strlen(previous_func_prefix) : 0;
+                    size_t outer_var_len = previous_var_prefix ? strlen(previous_var_prefix) : 0;
+
+                    g_module_func_prefix = malloc(outer_func_len + name_len + 3);
+                    if (g_module_func_prefix != NULL) {
+                        if (previous_func_prefix != NULL) {
+                            memcpy(g_module_func_prefix, previous_func_prefix, outer_func_len);
+                        }
+                        memcpy(g_module_func_prefix + outer_func_len, name->as.string, name_len);
+                        g_module_func_prefix[outer_func_len + name_len] = ':';
+                        g_module_func_prefix[outer_func_len + name_len + 1] = ':';
+                        g_module_func_prefix[outer_func_len + name_len + 2] = '\0';
+                    }
+
+                    g_module_var_prefix = malloc(outer_var_len + name_len + 2);
+                    if (g_module_var_prefix != NULL) {
+                        if (previous_var_prefix != NULL) {
+                            memcpy(g_module_var_prefix, previous_var_prefix, outer_var_len);
+                        }
+                        memcpy(g_module_var_prefix + outer_var_len, name->as.string, name_len);
+                        g_module_var_prefix[outer_var_len + name_len] = '.';
+                        g_module_var_prefix[outer_var_len + name_len + 1] = '\0';
+                    }
+
+                    if (!evaluate_source(stack, vars, funcs, body)) {
+                        free(token);
+                        free_value(name);
+                        free(body);
+                        free(g_module_func_prefix);
+                        free(g_module_var_prefix);
+                        g_module_func_prefix = previous_func_prefix;
+                        g_module_var_prefix = previous_var_prefix;
+                        return false;
+                    }
+
+                    free(g_module_func_prefix);
+                    free(g_module_var_prefix);
+                    g_module_func_prefix = previous_func_prefix;
+                    g_module_var_prefix = previous_var_prefix;
+                }
+
+                free(token);
+                free_value(name);
+                free(body);
+                *cursor = scan;
+                return true;
+            }
+        }
+
+        free(token);
+    }
+}
+
+static bool apply_open(RDNState *stack, Vars *vars, Funcs *funcs, char **cursor) {
+    (void)cursor;
+    Value *name = NULL;
+    size_t index = 0;
+    size_t prefix_len = 0;
+
+    if (stack->count < 1) {
+        return diagnostic_error_current("open requires module name");
+    }
+
+    name = ray_pop(stack);
+    if (name->type != VALUE_AS_VAR) {
+        diagnostic_error_current("open requires module name");
+        ray_append(stack, name);
+        return false;
+    }
+
+    prefix_len = strlen(name->as.string);
+
+    for (index = 0; index < funcs->count; index++) {
+        Funcs_t *entry = funcs->items[index];
+        size_t func_name_len = strlen(entry->func_name);
+
+        if (func_name_len > prefix_len + 2 &&
+            entry->func_name[prefix_len] == ':' &&
+            entry->func_name[prefix_len + 1] == ':' &&
+            strncmp(entry->func_name, name->as.string, prefix_len) == 0) {
+            const char *alias = entry->func_name + prefix_len + 2;
+            Funcs_t *existing = find_func_entry(funcs, alias);
+
+            if (existing == NULL) {
+                Funcs_t *alias_entry = malloc(sizeof(Funcs_t));
+                if (alias_entry == NULL) {
+                    free_value(name);
+                    return diagnostic_error_current("failed to allocate module function alias");
+                }
+                memcpy(alias_entry, entry, sizeof(Funcs_t));
+                alias_entry->func_name = copy_string(alias);
+                if (func_entry_has_body(alias_entry)) {
+                    alias_entry->as.func_body = copy_string(entry->as.func_body);
+                }
+                alias_entry->source_path = copy_string(entry->source_path);
+                ray_append(funcs, alias_entry);
+            }
+        }
+    }
+
+    for (index = 0; index < vars->count; index++) {
+        Vars_t *entry = vars->items[index];
+        if (entry->is_scope_marker) continue;
+        if (entry->var_name == NULL) continue;
+
+        size_t var_name_len = strlen(entry->var_name);
+        if (var_name_len > prefix_len + 1 &&
+            entry->var_name[prefix_len] == '.' &&
+            strncmp(entry->var_name, name->as.string, prefix_len) == 0) {
+            const char *alias = entry->var_name + prefix_len + 1;
+            Vars_t *existing = find_var_entry(vars, alias);
+
+            if (existing == NULL) {
+                Value *copy = clone_value(entry->var_value);
+                if (copy == NULL) {
+                    free_value(name);
+                    return diagnostic_error_current("failed to clone module variable value");
+                }
+                Vars_t *alias_entry = create_var_entry(alias, copy, entry->is_const);
+                if (alias_entry == NULL) {
+                    free_value(copy);
+                    free_value(name);
+                    return diagnostic_error_current("failed to allocate module variable alias");
+                }
+                ray_append(vars, alias_entry);
+            }
+        }
+    }
+
+    free_value(name);
+    return true;
+}
+
 static bool apply_defun(RDNState *stack, Vars *vars, Funcs *funcs, char **cursor) {
     Value *name = NULL;
     Value *params = NULL;
@@ -2388,6 +2587,20 @@ static bool apply_defun(RDNState *stack, Vars *vars, Funcs *funcs, char **cursor
             ray_append(stack, returns);
         }
         return false;
+    }
+
+    if (g_module_func_prefix != NULL) {
+        size_t name_len = strlen(name->as.string);
+        size_t prefix_len = strlen(g_module_func_prefix);
+        char *prefixed = malloc(prefix_len + name_len + 1);
+        if (prefixed == NULL) {
+            free_value(name);
+            return diagnostic_error_current("failed to allocate module-prefixed function name");
+        }
+        memcpy(prefixed, g_module_func_prefix, prefix_len);
+        memcpy(prefixed + prefix_len, name->as.string, name_len + 1);
+        free(name->as.string);
+        name->as.string = prefixed;
     }
 
     if (signed_defun && (!typecheck_signature_types_valid(params) || !typecheck_signature_types_valid(returns))) {
@@ -2497,6 +2710,20 @@ static bool apply_apply(RDNState *stack, Funcs *funcs, char **cursor) {
         return false;
     }
 
+    if (g_module_func_prefix != NULL) {
+        size_t name_len = strlen(name->as.string);
+        size_t prefix_len = strlen(g_module_func_prefix);
+        char *prefixed = malloc(prefix_len + name_len + 1);
+        if (prefixed == NULL) {
+            free_value(name);
+            return diagnostic_error_current("failed to allocate module-prefixed apply name");
+        }
+        memcpy(prefixed, g_module_func_prefix, prefix_len);
+        memcpy(prefixed + prefix_len, name->as.string, name_len + 1);
+        free(name->as.string);
+        name->as.string = prefixed;
+    }
+
     diagnostic_compute_location(body_start, &source_line, &source_column, NULL, NULL);
 
     while (true) {
@@ -2573,6 +2800,20 @@ static bool apply_demac(RDNState *stack, Funcs *funcs, char **cursor) {
         diagnostic_error_current("demac requires macro name");
         ray_append(stack, name);
         return false;
+    }
+
+    if (g_module_func_prefix != NULL) {
+        size_t name_len = strlen(name->as.string);
+        size_t prefix_len = strlen(g_module_func_prefix);
+        char *prefixed = malloc(prefix_len + name_len + 1);
+        if (prefixed == NULL) {
+            free_value(name);
+            return diagnostic_error_current("failed to allocate module-prefixed demac name");
+        }
+        memcpy(prefixed, g_module_func_prefix, prefix_len);
+        memcpy(prefixed + prefix_len, name->as.string, name_len + 1);
+        free(name->as.string);
+        name->as.string = prefixed;
     }
 
     diagnostic_compute_location(body_start, &source_line, &source_column, NULL, NULL);
@@ -3223,6 +3464,18 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
                 return false;
             }
             continue;
+        } else if (is_token(token, "module")) {
+            free(token);
+            if (!apply_module(stack, vars, funcs, cursor)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "open")) {
+            free(token);
+            if (!apply_open(stack, vars, funcs, cursor)) {
+                return false;
+            }
+            continue;
         } else if (is_token(token, "apply")) {
             free(token);
             if (!apply_apply(stack, funcs, cursor)) {
@@ -3535,6 +3788,7 @@ static bool is_identifier_token(const char *token) {
                 token[index] == '!' || 
                 token[index] == '-' || 
                 token[index] == '+' || 
+                token[index] == ':' || 
                 isdigit((unsigned char)token[0])
                 )) {
         return false;
@@ -3550,7 +3804,9 @@ static bool is_identifier_token(const char *token) {
                     token[index] == '+' || 
                     token[index] == '!' || 
                     token[index] == '.' || 
-                    token[index] == '#'
+                    token[index] == ':' || 
+                    token[index] == '#' ||
+                    token[index] == ':'
                     )) {
             return false;
         }
@@ -3573,7 +3829,8 @@ static bool identifier_is_name_target(char *cursor) {
 
     if (!is_string &&
         (is_token(next, "let") || is_token(next, "set") || is_token(next, "const") ||
-         is_token(next, "defun") || is_token(next, "apply") || is_token(next, "call") || is_token(next, "unlet") || is_token(next, "demac"))) {
+         is_token(next, "defun") || is_token(next, "apply") || is_token(next, "call") || is_token(next, "unlet") || is_token(next, "demac") ||
+         is_token(next, "module") || is_token(next, "open"))) {
         free(next);
         return true;
     }
@@ -3768,6 +4025,21 @@ static bool apply_let(RDNState *stack, Vars *vars) {
         return false;
     }
 
+    if (g_module_var_prefix != NULL) {
+        size_t name_len = strlen(name->as.string);
+        size_t prefix_len = strlen(g_module_var_prefix);
+        char *prefixed = malloc(prefix_len + name_len + 1);
+        if (prefixed == NULL) {
+            free_value(name);
+            free_value(value);
+            return diagnostic_error_current("failed to allocate module-prefixed variable name");
+        }
+        memcpy(prefixed, g_module_var_prefix, prefix_len);
+        memcpy(prefixed + prefix_len, name->as.string, name_len + 1);
+        free(name->as.string);
+        name->as.string = prefixed;
+    }
+
     if (!vars_let(vars, name->as.string, value)) {
         ray_append(stack, value);
         ray_append(stack, name);
@@ -3847,6 +4119,21 @@ static bool apply_const(RDNState *stack, Vars *vars) {
         ray_append(stack, value);
         ray_append(stack, name);
         return false;
+    }
+
+    if (g_module_var_prefix != NULL) {
+        size_t name_len = strlen(name->as.string);
+        size_t prefix_len = strlen(g_module_var_prefix);
+        char *prefixed = malloc(prefix_len + name_len + 1);
+        if (prefixed == NULL) {
+            free_value(name);
+            free_value(value);
+            return diagnostic_error_current("failed to allocate module-prefixed const name");
+        }
+        memcpy(prefixed, g_module_var_prefix, prefix_len);
+        memcpy(prefixed + prefix_len, name->as.string, name_len + 1);
+        free(name->as.string);
+        name->as.string = prefixed;
     }
 
     if (!vars_const(vars, name->as.string, value)) {
@@ -4116,6 +4403,18 @@ static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **curs
         } else if (is_token(token, "defun")) {
             free(token);
             if (!apply_defun(stack, vars, funcs, cursor)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "module")) {
+            free(token);
+            if (!apply_module(stack, vars, funcs, cursor)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "open")) {
+            free(token);
+            if (!apply_open(stack, vars, funcs, cursor)) {
                 return false;
             }
             continue;
@@ -4531,7 +4830,7 @@ static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else) {
             continue;
         }
 
-        if (is_token(token, "loop") || is_token(token, "defun") || is_token(token, "apply")) {
+        if (is_token(token, "loop") || is_token(token, "defun") || is_token(token, "apply") || is_token(token, "module")) {
             free(token);
             if (!skip_loop(cursor)) {
                 return false;
@@ -4539,7 +4838,7 @@ static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else) {
             continue;
         }
 
-        if (is_token(token, "break") || is_token(token, "continue")) {
+        if (is_token(token, "break") || is_token(token, "continue") || is_token(token, "open")) {
             free(token);
             continue;
         }
@@ -5542,8 +5841,8 @@ static bool source_has_complete_blocks(const char *source, const Funcs *funcs, b
 
                 free(token);
             }
-        } else if (!is_string && (is_token(token, "if") || is_token(token, "loop") || is_token(token, "defun") ||
-                                  is_token(token, "apply"))) {
+            } else if (!is_string && (is_token(token, "if") || is_token(token, "loop") || is_token(token, "defun") ||
+                                  is_token(token, "apply") || is_token(token, "module"))) {
             depth++;
         } else if (!is_string && is_token(token, "end")) {
             depth--;
@@ -5563,7 +5862,7 @@ static bool source_has_complete_blocks(const char *source, const Funcs *funcs, b
         } else if (!is_string && is_identifier_token(token)) {
             Funcs_t *entry = find_func_entry(funcs, token);
 
-            if (entry != NULL && entry->type == FUNC_DEMAC) { // TODO: check if next token is demac
+            if (entry != NULL && entry->type == FUNC_DEMAC) {
                 if (!next_token(&cursor, &token, &is_string) || !is_token(token, "demac"))  {
                     size_t body_length = strlen(entry->as.func_body);
                     size_t rest_length = strlen(cursor);

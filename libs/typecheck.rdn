@@ -1,5 +1,6 @@
 [*
 *   TODO: add sig function to get signature foo sig call -> (foo (Int Int) (Int))
+*   TODO: add sig for let keyword
 * *]
      
 reset

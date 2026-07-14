@@ -1,0 +1,3 @@
+fn defun
+    "fnn\n" print
+end

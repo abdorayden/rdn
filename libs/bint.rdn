@@ -47,6 +47,8 @@ Examples:
 
 "../nativelibs/bint" __sharedlib_ext to_string swap pop append loadnative
 
+"Typecheck" load
+
 [* 
  * __ensure_bint
  * 
@@ -67,7 +69,7 @@ end
 
 [* Arithmetic wrappers *]
 
-Bint.add defun
+Bint.add (Str Str) (Str) defun
     __ensure_bint call
     swap
     __ensure_bint call
@@ -75,7 +77,7 @@ Bint.add defun
     _bint_add call
 end
 
-Bint.sub defun
+Bint.sub (Str Str) (Str) defun
     __ensure_bint call
     swap
     __ensure_bint call
@@ -83,7 +85,7 @@ Bint.sub defun
     _bint_sub call
 end
 
-Bint.mul defun
+Bint.mul (Str Str) (Str) defun
     __ensure_bint call
     swap
     __ensure_bint call
@@ -91,7 +93,7 @@ Bint.mul defun
     _bint_mul call
 end
 
-Bint.div defun
+Bint.div (Str Str) (Str) defun
     __ensure_bint call
     swap
     __ensure_bint call
@@ -99,7 +101,7 @@ Bint.div defun
     _bint_div call
 end
 
-Bint.mod defun
+Bint.mod (Str Str) (Str) defun
     __ensure_bint call
     swap
     __ensure_bint call
@@ -107,25 +109,25 @@ Bint.mod defun
     _bint_mod call
 end
 
-Bint.pow defun
+Bint.pow (Str Int) (Str) defun
     swap
     __ensure_bint call
     swap
     _bint_pow call
 end
 
-Bint.neg defun
+Bint.neg (Str) (Str) defun
     __ensure_bint call
     _bint_neg call
 end
 
-Bint.abs defun
+Bint.abs (Str) (Str) defun
     __ensure_bint call
     _bint_abs call
 end
 
 [* Comparison wrappers *]
-Bint.cmp defun
+Bint.cmp (Str Str) (Str) defun
     __ensure_bint call
     swap
     __ensure_bint call
@@ -133,7 +135,7 @@ Bint.cmp defun
     _bint_cmp call
 end
 
-Bint.eq defun
+Bint.eq (Str Str) (Str) defun
     __ensure_bint call
     swap
     __ensure_bint call
@@ -141,7 +143,7 @@ Bint.eq defun
     _bint_eq call
 end
 
-Bint.lt defun
+Bint.lt (Str Str) (Str) defun
     __ensure_bint call
     swap
     __ensure_bint call
@@ -149,7 +151,7 @@ Bint.lt defun
     _bint_lt call
 end
 
-Bint.gt defun
+Bint.gt (Str Str) (Str) defun
     __ensure_bint call
     swap
     __ensure_bint call
@@ -157,7 +159,7 @@ Bint.gt defun
     _bint_gt call
 end
 
-Bint.le defun
+Bint.le (Str Str) (Str) defun
     __ensure_bint call
     swap
     __ensure_bint call
@@ -165,7 +167,7 @@ Bint.le defun
     _bint_le call
 end
 
-Bint.ge defun
+Bint.ge (Str Str) (Str) defun
     __ensure_bint call
     swap
     __ensure_bint call
@@ -174,7 +176,7 @@ Bint.ge defun
 end
 
 [* Bitwise wrappers *]
-Bint.and defun
+Bint.and (Str Str) (Str) defun
     __ensure_bint call
     swap
     __ensure_bint call
@@ -182,7 +184,7 @@ Bint.and defun
     _bint_and call
 end
 
-Bint.or defun
+Bint.or (Str Str) (Str) defun
     __ensure_bint call
     swap
     __ensure_bint call
@@ -190,7 +192,7 @@ Bint.or defun
     _bint_or call
 end
 
-Bint.xor defun
+Bint.xor (Str Str) (Str) defun
     __ensure_bint call
     swap
     __ensure_bint call
@@ -198,101 +200,66 @@ Bint.xor defun
     _bint_xor call
 end
 
-Bint.not defun
+Bint.not (Str) (Str) defun
     __ensure_bint call
     _bint_not call
 end
 
-Bint.shl defun
+Bint.shl (Str Int) (Str) defun
     swap
     __ensure_bint call
     swap
     _bint_shl call
 end
 
-Bint.shr defun
+Bint.shr (Str Int) (Str) defun
     swap
     __ensure_bint call
     swap
     _bint_shr call
 end
 
-@badd apply
-    Bint.add call
-end
+@badd apply Bint.add call end
+@bsub apply Bint.sub call end
+@bmul apply Bint.mul call end
+@bdiv apply Bint.div call end
+@bmod apply Bint.mod call end
+@bpow apply Bint.pow call end
+@bneg apply Bint.neg call end
+@babs apply Bint.abs call end
+@bcmp apply Bint.cmp call end
+@beq  apply Bint.eq  call end
+@blt  apply Bint.lt  call end
+@bgt  apply Bint.gt  call end
+@ble  apply Bint.le  call end
+@bge  apply Bint.ge  call end
+@band apply Bint.and call end
+@bor  apply Bint.or  call end
+@bxor apply Bint.xor call end
+@bnot apply Bint.not call end
+@bshl apply Bint.shl call end
+@bshr apply Bint.shr call end
 
-@bsub apply
-    Bint.sub call
-end
-
-@bmul apply
-    Bint.mul call
-end
-
-@bdiv apply
-    Bint.div call
-end
-
-@bmod apply
-    Bint.mod call
-end
-
-@bpow apply
-    Bint.pow call
-end
-
-@bneg apply
-    Bint.neg call
-end
-
-@babs apply
-    Bint.abs call
-end
-
-@bcmp apply
-    Bint.cmp call
-end
-
-@beq apply
-    Bint.eq call
-end
-
-@blt apply
-    Bint.lt call
-end
-
-@bgt apply
-    Bint.gt call
-end
-
-@ble apply
-    Bint.le call
-end
-
-@bge apply
-    Bint.ge call
-end
-
-@band apply
-    Bint.and call
-end
-
-@bor apply
-    Bint.or call
-end
-
-@bxor apply
-    Bint.xor call
-end
-
-@bnot apply
-    Bint.not call
-end
-
-@bshl apply
-    Bint.shl call
-end
-
-@bshr apply
-    Bint.shr call
-end
+[*
+*   for safety checking the stack and return value if match the sig
+* *]
+@safe-badd apply Bint.add scall end
+@safe-bsub apply Bint.sub scall end
+@safe-bmul apply Bint.mul scall end
+@safe-bdiv apply Bint.div scall end
+@safe-bmod apply Bint.mod scall end
+@safe-bpow apply Bint.pow scall end
+@safe-bneg apply Bint.neg scall end
+@safe-babs apply Bint.abs scall end
+@safe-bcmp apply Bint.cmp scall end
+@safe-beq  apply Bint.eq  scall end
+@safe-blt  apply Bint.lt  scall end
+@safe-bgt  apply Bint.gt  scall end
+@safe-ble  apply Bint.le  scall end
+@safe-bge  apply Bint.ge  scall end
+@safe-band apply Bint.and scall end
+@safe-bor  apply Bint.or  scall end
+@safe-bxor apply Bint.xor scall end
+@safe-bnot apply Bint.not scall end
+@safe-bshl apply Bint.shl scall end
+@safe-bshr apply Bint.shr scall end
