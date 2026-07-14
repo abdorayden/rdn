@@ -26,9 +26,9 @@ end
 
 Fn::fn call
 
-[*10 Module.vr set*]
+[*10 Module::vr set*]
 [**]
-[*Module.vr print*]
+[*Module::vr print*]
 [**]
 [*Module::func1 call*]
 [*Module::func2 call*]

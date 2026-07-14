@@ -2356,7 +2356,7 @@ static char *build_nested_module_prefix(const char *previous_prefix, const char 
     size_t previous_len = previous_prefix == NULL ? 0 : strlen(previous_prefix);
     size_t base_len = previous_len > suffix_len ? previous_len - suffix_len : 0;
     size_t name_len = strlen(name);
-    size_t total_len = base_len + (previous_prefix != NULL ? 1 : 0) + name_len + suffix_len + 1;
+    size_t total_len = base_len + (previous_prefix != NULL ? 2 : 0) + name_len + suffix_len + 1;
     char *prefix = malloc(total_len);
 
     if (prefix == NULL) {
@@ -2368,10 +2368,11 @@ static char *build_nested_module_prefix(const char *previous_prefix, const char 
     }
 
     if (previous_prefix != NULL) {
-        prefix[base_len] = '.';
-        memcpy(prefix + base_len + 1, name, name_len);
-        memcpy(prefix + base_len + 1 + name_len, suffix, suffix_len);
-        prefix[base_len + 1 + name_len + suffix_len] = '\0';
+        prefix[base_len] = ':';
+        prefix[base_len + 1] = ':';
+        memcpy(prefix + base_len + 2, name, name_len);
+        memcpy(prefix + base_len + 2 + name_len, suffix, suffix_len);
+        prefix[base_len + 2 + name_len + suffix_len] = '\0';
     } else {
         memcpy(prefix, name, name_len);
         memcpy(prefix + name_len, suffix, suffix_len);
@@ -2447,7 +2448,7 @@ static bool apply_module(RDNState *stack, Vars *vars, Funcs *funcs, char **curso
                     char *previous_func_prefix = g_module_func_prefix;
                     char *previous_var_prefix = g_module_var_prefix;
                     char *new_func_prefix = build_nested_module_prefix(previous_func_prefix, name->as.string, "::", 2);
-                    char *new_var_prefix = build_nested_module_prefix(previous_var_prefix, name->as.string, ".", 1);
+                    char *new_var_prefix = build_nested_module_prefix(previous_var_prefix, name->as.string, "::", 2);
 
                     if (new_func_prefix == NULL || new_var_prefix == NULL) {
                         free(new_func_prefix);
@@ -2544,10 +2545,11 @@ static bool apply_open(RDNState *stack, Vars *vars, Funcs *funcs, char **cursor)
         if (entry->var_name == NULL) continue;
 
         size_t var_name_len = strlen(entry->var_name);
-        if (var_name_len > prefix_len + 1 &&
-            entry->var_name[prefix_len] == '.' &&
+        if (var_name_len > prefix_len + 2 &&
+            entry->var_name[prefix_len] == ':' &&
+            entry->var_name[prefix_len + 1] == ':' &&
             strncmp(entry->var_name, name->as.string, prefix_len) == 0) {
-            const char *alias = entry->var_name + prefix_len + 1;
+            const char *alias = entry->var_name + prefix_len + 2;
             Vars_t *existing = find_var_entry(vars, alias);
 
             if (existing == NULL) {

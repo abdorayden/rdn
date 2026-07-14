@@ -6,4 +6,4 @@ Mod1 module
     end
 end
 
-Mod1.NestedMod1::nm
+Mod1::NestedMod1::nm

@@ -1,7 +1,7 @@
 "./module.rdn" load
 
-10 Module.vr set
-
+10 Module::vr set
+Module::vr print
 Module::func1 call
 Module::func2 call
 
@@ -14,6 +14,7 @@ Module::mac2
 Module open
 
 20 vr set
+vr print
 
 func1 call
 func2 call
