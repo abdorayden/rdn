@@ -1,0 +1,51 @@
+"../libs/bint.rdn" load
+
+[* Basic arithmetic *]
+"123" "456" @badd call print "\n" print
+"100" "50" @bsub call print "\n" print
+"12" "34" @bmul call print "\n" print
+"100" "30" @bdiv call print "\n" print
+"100" "30" @bmod call print "\n" print
+
+[* Power *]
+"2" 10 @bpow call print "\n" print
+"7" 13 @bpow call print "\n" print
+
+[* Negation and absolute value *]
+"123" @bneg call print "\n" print
+"-123" @babs call print "\n" print
+"0" @bneg call print "\n" print
+
+[* Comparison *]
+"123" "456" @beq call print "\n" print
+"123" "456" @blt call print "\n" print
+"123" "456" @bgt call print "\n" print
+"500" "200" @bgt call print "\n" print
+"123" "123" @bcmp call print "\n" print
+"100" "200" @bcmp call print "\n" print
+"200" "100" @bcmp call print "\n" print
+
+[* Negative arithmetic *]
+"5" "-3" @badd call print "\n" print
+"5" "-8" @badd call print "\n" print
+"-5" "-3" @badd call print "\n" print
+"5" "-3" @bsub call print "\n" print
+
+[* Zero handling *]
+"0" "5" @badd call print "\n" print
+
+[* Auto-convert from Raden integers *]
+123 456 @badd call print "\n" print
+
+[* Large numbers *]
+"12345678901234567890" "9876543210" @badd call print "\n" print
+"999999999" "999999999" @bmul call print "\n" print
+
+[* Bitwise (non-negative only) *]
+"12" "10" @band call print "\n" print
+"12" "10" @bor call print "\n" print
+"12" "10" @bxor call print "\n" print
+
+[* Shift *]
+"5" 60 @bshl call print "\n" print
+"5764607523034234880" 60 @bshr call print "\n" print

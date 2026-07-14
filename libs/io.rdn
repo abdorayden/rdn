@@ -38,11 +38,6 @@ nl call
 "../nativelibs/io" __sharedlib_ext to_string swap pop append loadnative
 "Core" load
 
-stringValue defun
-    to_string
-    swap pop
-end
-
 readLine readln let
 
 readAll defun
@@ -50,7 +45,7 @@ readAll defun
 end
 
 prompt defun
-    stringValue call print
+    str call print
     readLine call
 end
 

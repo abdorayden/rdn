@@ -1,0 +1,298 @@
+[* 
+bint.rdn
+Copyright (c) 2023-2026 Ray Den
+SPDX-License-Identifier: MIT
+
+Big integer module for Raden.
+
+Provides arbitrary-precision integer arithmetic using a native module.
+Big integers live on the stack as decimal strings.  The wrapper
+functions accept both strings and Raden integers, auto-converting
+integers via to_string.
+
+Loading:
+    "./libs/bint.rdn" load
+
+Arithmetic:
+    a b Bint.add call    -> a + b
+    a b Bint.sub call    -> a - b
+    a b Bint.mul call    -> a * b
+    a b Bint.div call    -> a / b  (integer division)
+    a b Bint.mod call    -> a % b
+    a b Bint.pow call    -> a ^ b  (b is a Raden integer)
+    a   Bint.neg call    -> -a
+    a   Bint.abs call    -> |a|
+
+Comparison (return Raden boolean):
+    a b Bint.cmp call    -> -1, 0, or 1
+    a b Bint.eq call     -> true if a == b
+    a b Bint.lt call     -> true if a < b
+    a b Bint.gt call     -> true if a > b
+    a b Bint.le call     -> true if a <= b
+    a b Bint.ge call     -> true if a >= b
+
+Bitwise (non-negative operands only):
+    a b Bint.and call    -> a & b
+    a b Bint.or call     -> a | b
+    a b Bint.xor call    -> a ^ b
+    a   Bint.not call    -> ~a  (= -(a+1))
+    a n Bint.shl call    -> a << n
+    a n Bint.shr call    -> a >> n
+
+Examples:
+    "12345678901234567890" "9876543210" Bint.add call print
+    "2" 100 Bint.pow call print
+    123 "456" Bint.mul call print
+*]
+
+"../nativelibs/bint" __sharedlib_ext to_string swap pop append loadnative
+
+[* 
+ * __ensure_bint
+ * 
+ * Convert the value at the top of the stack to a decimal string.
+ * Raden integers are converted via to_string.
+ * Strings are left as-is.
+ * 
+ * Stack: ... value -> ... string
+ *]
+__ensure_bint defun
+    dup
+    type "string" != if
+        to_string
+        swap
+        pop
+    end
+end
+
+[* Arithmetic wrappers *]
+
+Bint.add defun
+    __ensure_bint call
+    swap
+    __ensure_bint call
+    swap
+    _bint_add call
+end
+
+Bint.sub defun
+    __ensure_bint call
+    swap
+    __ensure_bint call
+    swap
+    _bint_sub call
+end
+
+Bint.mul defun
+    __ensure_bint call
+    swap
+    __ensure_bint call
+    swap
+    _bint_mul call
+end
+
+Bint.div defun
+    __ensure_bint call
+    swap
+    __ensure_bint call
+    swap
+    _bint_div call
+end
+
+Bint.mod defun
+    __ensure_bint call
+    swap
+    __ensure_bint call
+    swap
+    _bint_mod call
+end
+
+Bint.pow defun
+    swap
+    __ensure_bint call
+    swap
+    _bint_pow call
+end
+
+Bint.neg defun
+    __ensure_bint call
+    _bint_neg call
+end
+
+Bint.abs defun
+    __ensure_bint call
+    _bint_abs call
+end
+
+[* Comparison wrappers *]
+Bint.cmp defun
+    __ensure_bint call
+    swap
+    __ensure_bint call
+    swap
+    _bint_cmp call
+end
+
+Bint.eq defun
+    __ensure_bint call
+    swap
+    __ensure_bint call
+    swap
+    _bint_eq call
+end
+
+Bint.lt defun
+    __ensure_bint call
+    swap
+    __ensure_bint call
+    swap
+    _bint_lt call
+end
+
+Bint.gt defun
+    __ensure_bint call
+    swap
+    __ensure_bint call
+    swap
+    _bint_gt call
+end
+
+Bint.le defun
+    __ensure_bint call
+    swap
+    __ensure_bint call
+    swap
+    _bint_le call
+end
+
+Bint.ge defun
+    __ensure_bint call
+    swap
+    __ensure_bint call
+    swap
+    _bint_ge call
+end
+
+[* Bitwise wrappers *]
+Bint.and defun
+    __ensure_bint call
+    swap
+    __ensure_bint call
+    swap
+    _bint_and call
+end
+
+Bint.or defun
+    __ensure_bint call
+    swap
+    __ensure_bint call
+    swap
+    _bint_or call
+end
+
+Bint.xor defun
+    __ensure_bint call
+    swap
+    __ensure_bint call
+    swap
+    _bint_xor call
+end
+
+Bint.not defun
+    __ensure_bint call
+    _bint_not call
+end
+
+Bint.shl defun
+    swap
+    __ensure_bint call
+    swap
+    _bint_shl call
+end
+
+Bint.shr defun
+    swap
+    __ensure_bint call
+    swap
+    _bint_shr call
+end
+
+@badd apply
+    Bint.add call
+end
+
+@bsub apply
+    Bint.sub call
+end
+
+@bmul apply
+    Bint.mul call
+end
+
+@bdiv apply
+    Bint.div call
+end
+
+@bmod apply
+    Bint.mod call
+end
+
+@bpow apply
+    Bint.pow call
+end
+
+@bneg apply
+    Bint.neg call
+end
+
+@babs apply
+    Bint.abs call
+end
+
+@bcmp apply
+    Bint.cmp call
+end
+
+@beq apply
+    Bint.eq call
+end
+
+@blt apply
+    Bint.lt call
+end
+
+@bgt apply
+    Bint.gt call
+end
+
+@ble apply
+    Bint.le call
+end
+
+@bge apply
+    Bint.ge call
+end
+
+@band apply
+    Bint.and call
+end
+
+@bor apply
+    Bint.or call
+end
+
+@bxor apply
+    Bint.xor call
+end
+
+@bnot apply
+    Bint.not call
+end
+
+@bshl apply
+    Bint.shl call
+end
+
+@bshr apply
+    Bint.shr call
+end

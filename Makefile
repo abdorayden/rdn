@@ -23,6 +23,8 @@ lib: ./nativelibs/math.c
 	$(CC) $(CFLAGS) -O3 -fPIC -shared ./nativelibs/strconv.c -I. -o ./nativelibs/strconv.so
 	$(CC) $(CFLAGS) -O3 -fPIC -shared ./nativelibs/json.c -I. -o ./nativelibs/json.so
 	$(CC) $(CFLAGS) -O3 -fPIC -shared ./nativelibs/io.c -I. -o ./nativelibs/io.so
+	$(CC) $(CFLAGS) -O3 -fPIC -shared ./nativelibs/bint.c -I. -o ./nativelibs/bint.so
+	$(CC) $(CFLAGS) -O3 -fPIC -shared ./nativelibs/coroutines.c -I. -o ./nativelibs/coroutines.so
 
 clean:
 	rm -f $(OBJECTS) $(TARGET)

@@ -1,0 +1,50 @@
+"../libs/coroutines" load
+
+[* counter coroutine: yields 0, 1, 2 then dies *]
+counter defun
+    state let
+    state 3 < if
+        state           # yield value
+        state 1 +       # new state
+        true            # alive
+    else
+        null
+        0
+        false
+    end
+end
+
+0 counter co_create call coro let [*list*]
+
+coro resume call swap print "\n" print print "\n" print
+coro resume call swap print "\n" print print "\n" print
+coro resume call swap print "\n" print print "\n" print
+coro resume call swap print "\n" print print "\n" print
+coro co_status call print "\n" print
+
+[* resume dead coro *]
+coro resume call swap print "\n" print print "\n" print
+coro co_status call print "\n" print
+
+[* range coroutine *]
+range defun
+    state let
+    state 0 index i let
+    state 1 index max let
+    i max < if
+        i
+        (i 1 + max)
+        true
+    else
+        null
+        (0 0)
+        false
+    end
+end
+
+(0 3) range co_create call ranger let
+ranger resume call swap print "\n" print print "\n" print
+ranger resume call swap print "\n" print print "\n" print
+ranger resume call swap print "\n" print print "\n" print
+ranger resume call swap print "\n" print print "\n" print
+ranger co_status call print
