@@ -27,7 +27,7 @@
     let,set,const,unlet,defun,apply,demac,call,pcall,ret,if,else,end,loop,break,
     continue,load,loadnative,add_load_path,add_native_path,true,false,null,
     print,type,to_string,exit,append,remove,index,len,enum,reset,error,assert,
-    check,scall
+    check,scall,module,open,match
   },
   sensitive=true,
   morecomment=[s]{[*}{*]},
@@ -415,6 +415,90 @@ end
 Functions create a new variable scope. Bindings created inside a function
 are local unless \code{set} updates an existing outer binding.
 
+\section{Modules}
+
+\code{module} groups functions, macros, apply-words, and variables into a
+named namespace. Names inside a module are prefixed with \code{ModuleName::}
+for functions and \code{ModuleName.} for variables to distinguish them from
+top-level names.
+
+\subsection{module}
+\begin{lstlisting}[language=Raden]
+MyModule module
+    func1 defun
+        "hello\n" print
+    end
+    app1 apply
+        "world\n" print
+    end
+end
+
+MyModule::func1 call
+MyModule::app1
+\end{lstlisting}
+
+Variables and constants inside a module use \code{.} as prefix:
+\begin{lstlisting}[language=Raden]
+Cfg module
+    10 limit let
+end
+
+Cfg.limit print
+\end{lstlisting}
+
+\subsection{open}
+
+\code{open} exposes all members of a module in the current scope without
+requiring the module prefix. Unqualified names are created for each
+function and variable.
+
+\begin{lstlisting}[language=Raden]
+MyModule open
+
+[* now call without prefix *]
+func1 call
+app1
+\end{lstlisting}
+
+For functions, \code{open} creates short aliases using \code{::}
+prefix matching; for variables, it uses \code{.} prefix matching.
+
+\subsection{Nested Modules}
+
+Modules can be nested. Inner module names are chained with \code{::}:
+
+\begin{lstlisting}[language=Raden]
+Mod1 module
+    NestedMod1 module
+        nm apply
+            "nm\n" print
+        end
+    end
+end
+
+Mod1::NestedMod1::nm
+\end{lstlisting}
+
+\subsection{Cross-file Modules}
+
+Modules work across files. A module defined in one file can be accessed
+from another file by loading it first:
+
+\begin{lstlisting}[language=Raden]
+[* file: module.rdn *]
+MyModule module
+    greet defun
+        "hi\n" print
+    end
+end
+
+[* file: main.rdn *]
+"./module.rdn" load
+MyModule::greet call
+MyModule open
+greet call
+\end{lstlisting}
+
 \section{Control Flow}
 
 \subsection{if}
@@ -503,6 +587,25 @@ Builtin & Stack shape & Description \\
 \code{exit} & \code{status ->} & Exit process \\
 \bottomrule
 \end{longtable}
+
+\subsection{String Matching}
+
+\code{match} performs glob-style pattern matching and returns a boolean:
+
+\begin{lstlisting}[language=Raden]
+"hello.txt" "*.txt" match print   [* true *]
+"hello.md" "*.txt" match print    [* false *]
+"abc" "a?c" match print           [* true *]
+\end{lstlisting}
+
+Pattern syntax:
+\begin{itemize}
+\item \code{*} — matches any sequence of characters (including empty)
+\item \code{?} — matches any single character
+\item \code{[abc]} — matches any character in the set
+\item \code{[!abc]} or \code{[\^{}abc]} — matches any character not in the set
+\item \code{[a-z]} — matches any character in the range
+\end{itemize}
 
 \section{Lists and Strings}
 

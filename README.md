@@ -139,6 +139,47 @@ check-less-three defun
 end
 ```
 
+### Modules
+
+Define a named namespace with `module` and expose its members with `open`:
+
+```raden
+MyModule module
+    func1 defun
+        "hello\n" print
+    end
+end
+
+MyModule::func1 call
+
+MyModule open
+func1 call
+```
+
+Functions and apply-words use `::` prefix, variables use `.`:
+
+```raden
+Cfg module
+    10 limit let
+end
+
+Cfg.limit print
+```
+
+Modules nest with `::` chaining:
+
+```raden
+Mod1 module
+    NestedMod1 module
+        nm apply
+            "nm\n" print
+        end
+    end
+end
+
+Mod1::NestedMod1::nm
+```
+
 ### Builtins
 
 Common builtins include:
@@ -152,7 +193,9 @@ Common builtins include:
 - functions: `defun call ret`
 - conversion: `type to_string`
 - containers: `append index remove len`
+- string matching: `match`
 - loading: `load loadnative`
+- modules: `module open`
 
 ## Lists And Strings
 
@@ -178,6 +221,17 @@ The same sequence builtins also work with strings:
 "abcd" 1 remove print "\n" print
 "ab" "cd" append print "\n" print
 "hello" len print
+```
+
+### String Matching
+
+Use `match` for glob-style pattern matching (`*` for any, `?` for single char, `[...]` for character classes):
+
+```raden
+"hello.txt" "*.txt" match print   [* true *]
+"hello.md" "*.txt" match print    [* false *]
+"abc" "a?c" match print           [* true *]
+"test5.txt" "test[0-9].txt" match print   [* true *]
 ```
 
 For string variables, `append` and `remove` mutate the variable in place:

@@ -363,6 +363,7 @@
             <a href="#containers">Lists &amp; Strings</a>
             <a href="#errorhandling">Error Handling</a>
             <a href="#loading">Loading Code</a>
+            <a href="#modules">Modules</a>
 
             <div class="nav-section">Standard Library</div>
             <a href="#lib-core">core</a>
@@ -830,6 +831,70 @@
         </section>
 
         <!-- ============ CONTROL FLOW ============ -->
+        <!-- ============ MODULES ============ -->
+        <section class="section" id="modules">
+            <h2>Modules</h2>
+            <p><code>module</code> groups functions, macros, apply-words, and variables into a named namespace. Names
+                inside a module are prefixed with <code>ModuleName::</code> for functions/macros/apply-words and
+                <code>ModuleName.</code> for variables/constants.</p>
+
+            <h3>module — define a namespace</h3>
+            <pre><code>MyModule module
+                func1 defun
+                "hello\n" print
+                end
+                app1 apply
+                "world\n" print
+                end
+                end
+
+                MyModule::func1 call
+                MyModule::app1</code></pre>
+
+            <h3>Variables and constants inside modules</h3>
+            <pre><code>Cfg module
+                10 limit let
+                end
+
+                Cfg.limit print</code></pre>
+
+            <h3>open — expose module members</h3>
+            <p><code>open</code> creates unqualified aliases for all functions and variables in a module, so they can
+                be used without the prefix:</p>
+            <pre><code>MyModule open
+
+                [* now call without prefix *]
+                func1 call
+                app1</code></pre>
+
+            <h3>Nested modules</h3>
+            <p>Modules can be nested. Inner module names are chained with <code>::</code>:</p>
+            <pre><code>Mod1 module
+                NestedMod1 module
+                nm apply
+                "nm\n" print
+                end
+                end
+                end
+
+                Mod1::NestedMod1::nm</code></pre>
+
+            <h3>Cross-file modules</h3>
+            <pre><code>[* file: module.rdn *]
+                MyModule module
+                greet defun
+                "hi\n" print
+                end
+                end
+
+                [* file: main.rdn *]
+                "./module.rdn" load
+                MyModule::greet call
+                MyModule open
+                greet call</code></pre>
+        </section>
+
+        <!-- ============ CONTROL FLOW ============ -->
         <section class="section" id="controlflow">
             <h2>Control Flow</h2>
 
@@ -966,6 +1031,11 @@
                     <td><span class="sig">target -> integer</span></td>
                     <td>Length of list or string</td>
                 </tr>
+                <tr>
+                    <td><code>match</code></td>
+                    <td><span class="sig">text pattern -> boolean</span></td>
+                    <td>Glob-style pattern matching</td>
+                </tr>
             </table>
 
             <h3>Loading</h3>
@@ -1008,6 +1078,16 @@
                     <td><code>demac</code></td>
                     <td><span class="sig">name tokens... end -></span></td>
                     <td>Define a macro expanded at read time</td>
+                </tr>
+                <tr>
+                    <td><code>module</code></td>
+                    <td><span class="sig">name ... end -></span></td>
+                    <td>Define a named namespace for functions and variables</td>
+                </tr>
+                <tr>
+                    <td><code>open</code></td>
+                    <td><span class="sig">modname -></span></td>
+                    <td>Expose module members without prefix</td>
                 </tr>
                 <tr>
                     <td><code>call</code></td>
@@ -1090,6 +1170,22 @@
                     "hi" text let
                     text "!" append
                     text print <span style="color:var(--text2)">[* "hi!"*]</span></code></pre>
+
+            <h3>String Matching</h3>
+            <p><code>match</code> performs glob-style pattern matching and returns a boolean:</p>
+            <pre><code>"hello.txt" "*.txt" match print <span style="color:var(--text2)">[* true*]</span>
+                    "hello.md" "*.txt" match print <span style="color:var(--text2)">[* false*]</span>
+                    "abc" "a?c" match print <span style="color:var(--text2)">[* true*]</span>
+                    "test5.txt" "test[0-9].txt" match print <span style="color:var(--text2)">[* true*]</span></code></pre>
+
+            <p>Pattern syntax:</p>
+            <ul>
+                <li><code>*</code> — matches any sequence of characters (including empty)</li>
+                <li><code>?</code> — matches any single character</li>
+                <li><code>[abc]</code> — matches any character in the set</li>
+                <li><code>[!abc]</code> or <code>[^abc]</code> — matches any character not in the set</li>
+                <li><code>[a-z]</code> — matches any character in the range</li>
+            </ul>
 
             <h3>Nesting</h3>
             <pre><code>(1 (2 3) 4) 1 index 0 index print <span style="color:var(--text2)">[*2*]</span></code></pre>
