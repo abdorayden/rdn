@@ -4,7 +4,7 @@
 #include "./rdn_native.h"
 #include "../src/stack.h"
 
-#define RADEN_VERSION "1.1.0"
+#define RADEN_VERSION "1.2.0"
 #define RDN_TYPECHECK_FUNC_CODE 6
 #define RDN_TYPECHECK_ANY_CODE 7
 
