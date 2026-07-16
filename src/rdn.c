@@ -23,6 +23,25 @@
 #include "stack.h"
 #include "../include/rdn.h"
 
+static const char *g_current_source_path = NULL;
+static DiagnosticContext g_diagnostic_context = {0};
+static LoadPathStack g_load_path_stack = {0};
+static SearchPathStack g_script_search_paths = {0};
+static SearchPathStack g_native_search_paths = {0};
+static MacroExpansionStack g_macro_expansions = {0};
+static RLList(char*) g_stack_trace_protected = {0};
+static bool g_diagnostics_suppressed = false;
+static char *g_module_func_prefix = NULL;
+static char *g_module_var_prefix = NULL;
+static RLList(char*) g_modules = {0};
+
+static void free_modules(void) {
+    while (g_modules.count > 0) {
+        free(ray_pop(&g_modules));
+    }
+    ray_clear(&g_modules);
+    g_modules.count = 0;
+}
 
 static bool is_token(const char *value, const char *expected) {
     return strcmp(value, expected) == 0;
@@ -2404,6 +2423,17 @@ static bool apply_module(RDNState *stack, Vars *vars, Funcs *funcs, char **curso
         return false;
     }
 
+    for(size_t i = 0 ; i < g_modules.count ; ++i) {
+        if (strcmp(name->as.string, g_modules.items[i]) == 0) {
+            // module exists
+            diagnostic_error_current("module '%s' is already defined", name->as.string);
+            free_value(name);
+            return false;
+        }
+    }
+
+    ray_append(&g_modules, copy_string(name->as.string));
+
     diagnostic_compute_location(body_start, &source_line, &source_column, NULL, NULL);
 
     while (true) {
@@ -3797,12 +3827,12 @@ static Value *parse_list_literal(char **cursor, Vars *vars, Funcs *funcs) {
 static bool is_identifier_token(const char *token) {
     size_t index = 0;
 
-    if (token == NULL || token[0] == '\0') {
+    if (token == NULL || token[index] == '\0') {
         return false;
     }
 
-    if (!(isalpha((unsigned char)token[0]) || 
-                token[0] == '_' || 
+    if (!(isalpha((unsigned char)token[index]) || 
+                token[index] == '_' || 
                 token[index] == '?' || 
                 token[index] == '@' || 
                 token[index] == '#' || 
@@ -3911,19 +3941,20 @@ static bool apply_do_string(RDNState *stack, Vars *vars, Funcs *funcs){
         return diagnostic_error_current("do_string requires 1 operands and must be string");
     }
     Value* str = ray_pop(stack);
+    bool ok = true;
     if (str->type == VALUE_STRING) {
-        evaluate_source(stack, vars, funcs, str->as.string);
+        ok = evaluate_source(stack, vars, funcs, str->as.string);
         free_value(str);
-        return true;
+        return ok;
     }else if(str->type == VALUE_AS_VAR) {
         Vars_t* var = find_current_scope_var_entry(vars, str->as.string);
         if (var == NULL || var->var_value->type != VALUE_STRING) {
             free_value(str);
             return diagnostic_error_current("variable must be a string type");
         }
-        evaluate_source(stack, vars, funcs, var->var_value->as.string);
+        ok = evaluate_source(stack, vars, funcs, var->var_value->as.string);
         free_value(str);
-        return true;
+        return ok;
     }
     free_value(str);
     return diagnostic_error_current("the value is not a string type or variable of string");
@@ -4666,13 +4697,13 @@ static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **curs
                 return false;
             }
             free(token);
+            continue;
         } else if (is_token(token, "match")) {
             if (!apply_match(stack, vars)) {
                 free(token);
                 return false;
             }
             free(token);
-            continue;
             continue;
         } else if (is_token(token, "add_load_path")) {
             if (!apply_add_load_path(stack, vars)) {
@@ -5949,6 +5980,7 @@ static int run_repl(void) {
             free_stack_values(&stack);
             free_vars(&vars);
             free_funcs(&funcs);
+            free_modules();
             return EXIT_FAILURE;
         }
 
@@ -5971,6 +6003,7 @@ static int run_repl(void) {
             stack = (RDNState){0};
         }
         free_macro_expansions();
+        free_modules();
 
         free(source);
         source = NULL;
@@ -5982,6 +6015,7 @@ static int run_repl(void) {
     free_stack_values(&stack);
     free_vars(&vars);
     free_funcs(&funcs);
+    free_modules();
     return EXIT_SUCCESS;
 }
 
@@ -6070,6 +6104,7 @@ int rdn_main(int argc , char** argv) {
         free_stack_values(&stack);
         free_vars(&vars);
         free_funcs(&funcs);
+        free_modules();
         return exit_code;
     }
 
@@ -6079,6 +6114,7 @@ int rdn_main(int argc , char** argv) {
         free_stack_values(&stack);
         free_vars(&vars);
         free_funcs(&funcs);
+        free_modules();
         return exit_code;
     }
 
@@ -6086,5 +6122,6 @@ int rdn_main(int argc , char** argv) {
     free_stack_values(&stack);
     free_vars(&vars);
     free_funcs(&funcs);
+    free_modules();
     return EXIT_SUCCESS;
 }

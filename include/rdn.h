@@ -128,17 +128,6 @@ struct DiagnosticContext {
     const char *last_token_end;
 };
 
-static const char *g_current_source_path = NULL;
-static DiagnosticContext g_diagnostic_context = {0};
-static LoadPathStack g_load_path_stack = {0};
-static SearchPathStack g_script_search_paths = {0};
-static SearchPathStack g_native_search_paths = {0};
-static MacroExpansionStack g_macro_expansions = {0};
-static RLList(char*) g_stack_trace_protected = {0};
-static bool g_diagnostics_suppressed = false;
-static char *g_module_func_prefix = NULL;
-static char *g_module_var_prefix = NULL;
-
 static bool is_token(const char *value, const char *expected);
 static bool is_operator_token(const char *value);
 static char *copy_string(const char *text) ;
