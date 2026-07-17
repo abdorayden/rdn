@@ -34,6 +34,28 @@ static bool g_diagnostics_suppressed = false;
 static char *g_module_func_prefix = NULL;
 static char *g_module_var_prefix = NULL;
 static RLList(char*) g_modules = {0};
+static LoadPathStack g_loaded_files = {0};
+
+bool loaded_files_contains(const char *path){
+    for(size_t i = 0 ; i < g_loaded_files.count ; ++i) {
+        if (strcmp(path, g_loaded_files.items[i]) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void add_loaded_file(const char *path) {
+    ray_append(&g_loaded_files, copy_string(path));
+}
+
+void free_loaded_files() {
+    while (g_loaded_files.count > 0) {
+        free(ray_pop(&g_loaded_files));
+    }
+    ray_clear(&g_loaded_files);
+    g_loaded_files.count = 0;
+}
 
 static void free_modules(void) {
     while (g_modules.count > 0) {
@@ -2154,6 +2176,13 @@ static bool apply_load(RDNState *stack, Vars *vars, Funcs *funcs){
         return ok;
     }
 
+    if (loaded_files_contains(resolved_path)) {
+        free_value(target);
+        free(resolved_path);
+        free(path_copy);
+        return true;
+    }
+
     source = read_file(resolved_path);
     if (source == NULL) {
         free(resolved_path);
@@ -2179,6 +2208,7 @@ static bool apply_load(RDNState *stack, Vars *vars, Funcs *funcs){
     }
 
     pop_load_path();
+    add_loaded_file(resolved_path);
     free(source);
     free(resolved_path);
     free_value(target);
@@ -5981,6 +6011,7 @@ static int run_repl(void) {
             free_vars(&vars);
             free_funcs(&funcs);
             free_modules();
+            free_loaded_files();
             return EXIT_FAILURE;
         }
 
@@ -6004,6 +6035,7 @@ static int run_repl(void) {
         }
         free_macro_expansions();
         free_modules();
+        free_loaded_files();
 
         free(source);
         source = NULL;
@@ -6016,6 +6048,7 @@ static int run_repl(void) {
     free_vars(&vars);
     free_funcs(&funcs);
     free_modules();
+    free_loaded_files();
     return EXIT_SUCCESS;
 }
 
@@ -6105,6 +6138,7 @@ int rdn_main(int argc , char** argv) {
         free_vars(&vars);
         free_funcs(&funcs);
         free_modules();
+        free_loaded_files();
         return exit_code;
     }
 
@@ -6115,6 +6149,7 @@ int rdn_main(int argc , char** argv) {
         free_vars(&vars);
         free_funcs(&funcs);
         free_modules();
+        free_loaded_files();
         return exit_code;
     }
 
@@ -6123,5 +6158,6 @@ int rdn_main(int argc , char** argv) {
     free_vars(&vars);
     free_funcs(&funcs);
     free_modules();
+    free_loaded_files();
     return EXIT_SUCCESS;
 }
