@@ -1,42 +1,111 @@
 [* 
+
 files.rdn
+
 Copyright (c) 2023-2026 Ray Den
-SPDX-License-Identifier: MIT
 
-Purpose:
-Cross-platform wrapper over the native file IO module.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-Loading behavior:
-This module chooses the shared-library suffix from __sharedlib_ext and loads:
-../nativelibs/files(.so|.dylib|.dll)
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
 
-Exports:
-- readLines   : native function, path -> list of lines
-- writeLines  : native function, path list -> true
-- appendLines : native function, path list -> true
-- slurp       : wrapper, path -> full text string
-- spit        : wrapper, path text -> true
-- appendFileText : wrapper, path text -> true
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
 
-Examples:
-"./libs/files.rdn" load
-"/tmp/demo.txt" ("alpha" "beta") writeLines call pop
-"/tmp/demo.txt" readLines call print
-"\n" print
-"/tmp/demo.txt" "gamma" spit call pop
-"/tmp/demo.txt" slurp call print
 *]
 
-"../nativelibs/files" __sharedlib_ext to_string swap pop append loadnative
+"Core" load
+"../nativelibs/files" __sharedlib_ext str append loadnative
+"Typecheck" load
 
-slurp defun
-    readText call
+[*
+*   Files module 
+*   it's a module that covered functionalities to write read and append text to a files
+*   it has nested module named File allowing to open file discriptor to work with it
+* *]
+
+Files module
+    File module
+        [*
+        *   NOTE: fd-desc is a global public variable you cannot use File module as type or instance
+        *   if you opened other file fd-desc will overwritten so make sure that you close file before you open it
+        *   this is a first version of the module and i will make it better in the future
+        *   the current solution is buffering the content for each file and write them sync
+        * *]
+        null fd-desc let
+
+        fopen ( Str [* filename *] Str [* mode *]) () defun
+            openFileHandle call Files::File::fd-desc set
+        end
+
+        fread (Int [* byte count *]) (Str) defun
+            Files::File::fd-desc null = if
+                "no file descriptor are opened" error
+            end
+            Files::File::fd-desc swap readFromFileHandle call
+        end
+
+        fwrite (Str) (Bool) defun
+            Files::File::fd-desc null = if
+                "no file descriptor are opened" error
+            end
+            writeFromFileHandle call
+        end
+
+        fclose () (Bool) defun
+            Files::File::fd-desc 
+            closeHandle call ok let
+            null Files::File::fd-desc set
+            ok
+        end
+    end
+
+    read-lines (Str [* file path *]) (List [* list of lines *]) defun
+        readLines call
+    end
+
+    read-text (Str [* file path *]) (Str [* file content *]) defun
+        readText call
+    end
+
+    write-lines (Str [* file path *] List [* list of lines *]) (Bool [* if it's okay or not *]) defun
+        writeLines call
+    end
+
+    write-text (Str [* file path *] Str [* string content *]) (Bool [* if it's okay or not *]) defun
+        writeText call
+    end
+
+    append-lines (Str [* file path *] List [* list of lines *]) (Bool [* if it's okay or not *]) defun
+        appendLines call
+    end
+
+    append-text (Str [* file path *] Str [* string content *]) (Bool [* if it's okay or not *]) defun
+        appendText call
+    end
 end
 
-spit defun
-    writeText call
-end
+@read-lines apply Files::read-lines call end
+@write-lines apply Files::write-lines call end
+@append-lines apply Files::append-lines call end
+@read-text apply Files::read-text call end
+@write-text apply Files::write-text call end
+@append-text apply Files::append-text call end
 
-appendFileText defun
-    appendText call
-end
+[*safe*]
+@safe-read-lines apply Files::read-lines scall end
+@safe-write-lines apply Files::write-lines scall end
+@safe-append-lines apply Files::append-lines scall end
+@safe-read-text apply Files::read-text scall end
+@safe-write-text apply Files::write-text scall end
+@safe-append-text apply Files::append-text scall end
