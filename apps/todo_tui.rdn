@@ -28,27 +28,27 @@ stringValue defun
 end
 
 printBanner defun
-    "\nRaden Todo TUI" println call
-    "----------------" println call
+    "\nRaden Todo TUI" @println
+    "----------------" @println
 end
 
 printHelp defun
-    "commands:" println call
-    "  help   show this help" println call
-    "  list   show pending and done tasks" println call
-    "  add    add a new pending task" println call
-    "  done   move a pending task to done by exact title" println call
-    "  undo   move a done task back to pending by exact title" println call
-    "  clear  remove all done tasks" println call
-    "  quit   exit the app" println call
+    "commands:" @println
+    "  help   show this help" @println
+    "  list   show pending and done tasks" @println
+    "  add    add a new pending task" @println
+    "  done   move a pending task to done by exact title" @println
+    "  undo   move a done task back to pending by exact title" @println
+    "  clear  remove all done tasks" @println
+    "  quit   exit the app" @println
 end
 
 printTaskGroup defun
     items let
     title let
-    title println call
+    title @println
     items isEmpty call if
-        "  (empty)" println call
+        "  (empty)" @println
     else
         0 i let
         items len list-length let
@@ -56,7 +56,7 @@ printTaskGroup defun
             "  " print
             i 1 + print
             ". " print
-            items i index println call
+            items i index @println
             i 1 + i set
             i list-length <
         end
@@ -103,46 +103,46 @@ moveTaskByTitle defun
 end
 
 addTask defun
-    "new task> " prompt call title let
+    "new task> " Io::prompt call title let
     title null = if
         false
     else
         title len 0 > if
             __todo_pending title stringValue call append
-            "added task." println call
+            "added task." @println
             true
         else
-            "empty task ignored." println call
+            "empty task ignored." @println
             false
         end
     end
 end
 
 markDone defun
-    "done task title> " prompt call title let
+    "done task title> " Io::prompt call title let
     title null = if
         false
     else
         title stringValue call __todo_pending __todo_done moveTaskByTitle call if
-            "marked done." println call
+            "marked done." @println
             true
         else
-            "pending task not found." println call
+            "pending task not found." @println
             false
         end
     end
 end
 
 undoDone defun
-    "undo task title> " prompt call title let
+    "undo task title> " Io::prompt call title let
     title null = if
         false
     else
         title stringValue call __todo_done __todo_pending moveTaskByTitle call if
-            "moved back to pending." println call
+            "moved back to pending." @println
             true
         else
-            "done task not found." println call
+            "done task not found." @println
             false
         end
     end
@@ -150,7 +150,7 @@ end
 
 clearDone defun
     () __todo_done set
-    "cleared done tasks." println call
+    "cleared done tasks." @println
 end
 
 runTodoTui defun
@@ -162,7 +162,7 @@ runTodoTui defun
 
     true running let
     running loop
-        "\ncmd> " prompt call command let
+        "\ncmd> " Io::prompt call command let
         command null = if
             false running set
         else
@@ -187,7 +187,7 @@ runTodoTui defun
                                     command "quit" = command "q" = | if
                                         false running set
                                     else
-                                        "unknown command. type 'help'." println call
+                                        "unknown command. type 'help'." @println
                                     end
                                 end
                             end
@@ -199,5 +199,5 @@ runTodoTui defun
         running
     end
 
-    "\nbye." println call
+    "\nbye." @println
 end

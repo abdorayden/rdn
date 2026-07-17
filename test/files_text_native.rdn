@@ -1,6 +1,6 @@
 "../libs/files.rdn" load
 
-"/tmp/rdn_files_text_native.txt" "alpha" spit call print "\n" print
-"/tmp/rdn_files_text_native.txt" slurp call print "\n" print
-"/tmp/rdn_files_text_native.txt" "beta" appendFileText call print "\n" print
-"/tmp/rdn_files_text_native.txt" slurp call print
+"/tmp/rdn_files_text_native.txt" "alpha" Files::write-text call print "\n" print
+"/tmp/rdn_files_text_native.txt" Files::read-text call print "\n" print
+"/tmp/rdn_files_text_native.txt" "beta" Files::append-text call print "\n" print
+"/tmp/rdn_files_text_native.txt" Files::read-text call print

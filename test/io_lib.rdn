@@ -1,17 +1,5 @@
 "../libs/io.rdn" load
 
-nl call
-"hello" println call
-"left" ":" printWith call
-nl call
-"a" "b" printPair call
-nl call
-"1" "2" "3" printTriplet call
-nl call
-("x" "y" "z") printAll call
-nl call
-("alpha" "beta") printLines call
-("a" "b" "c") ", " printJoin call
-nl call
-() ", " printJoin call
-nl call
+"hello" @println
+
+"im %" ("rayden") @printfn
