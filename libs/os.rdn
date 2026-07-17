@@ -23,10 +23,25 @@ THE SOFTWARE.
 Purpose:
 Cross-platform process and runtime helpers over the native syscall module.
 
+Exports:
+- platform  : -> OS enum
+- system    : command -> exit code
+- get-pid   : -> process id
+- get-cwd   : -> current directory
+- getenv    : name -> value or null
+- setenv    : name value -> true
+- env       : -> list of "NAME=VALUE" strings
+- sleep     : ms -> true
+- now       : -> epoch seconds
+- clock     : -> monotonic ms
+- random    : min max -> random int in [min, max]
+- cd        : path -> 0 on success
+
 *]
 
-"../nativelibs/syscall" __sharedlib_ext to_string swap pop append loadnative
 "Typecheck" load
+"Core" load
+"../nativelibs/syscall" __sharedlib_ext str append loadnative
 
 Os module
 
@@ -75,12 +90,32 @@ Os module
         chdr call
     end
 
+    setenv (Str Str) (Bool) defun
+        setEnv call
+    end
+
+    env () (List) defun
+        listEnv call
+    end
+
+    clock () (Int) defun
+        clockMs call
+    end
+
+    random (Int Int) (Int) defun
+        randomInt call
+    end
+
     @platform apply Os::platform call end
     @system apply Os::system call end
     @get-pid apply Os::get-pid call end
     @get-cwd apply Os::get-cwd call end
     @getenv apply Os::getenv call end
+    @setenv apply Os::setenv call end
+    @env apply Os::env call end
     @sleep apply Os::sleep call end
     @now apply Os::now call end
+    @clock apply Os::clock call end
+    @random apply Os::random call end
     @cd apply Os::cd call end
 end
