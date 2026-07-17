@@ -21,22 +21,75 @@
  * now call print
  */
 
+#include <linux/limits.h>
 #define _POSIX_C_SOURCE 200809L
 
 #include "../include/rdn_native.h"
 
 #include <errno.h>
 #include <stdlib.h>
-#include <string.h>
 #include <time.h>
 
 #if defined(_WIN32)
 #include <processthreadsapi.h>
 #include <synchapi.h>
+#include <direct.h>
+#define RDN_GTCWD _getcwd
+#define RDN_CHDR _chdir
+#define RDN_MAX_PATH MAX_PATH
 #else
 #include <sys/types.h>
 #include <unistd.h>
+#define RDN_GTCWD getcwd
+#define RDN_CHDR chdir
+#define RDN_MAX_PATH PATH_MAX
 #endif
+
+static bool chdr (RDNApi* api) {
+    if (api->stack_size(api) < 1) {
+        return api->raise_error(api, "cd requires 1 param (string)");
+    }
+
+    const char* new_dir = api->to_string(api, -1);
+    if (new_dir == NULL) {
+        api->raise_error(api, "cd requires (string)");
+        return false;
+    }
+    
+    return api->push_integer(api , (long)RDN_CHDR(new_dir));
+}
+
+static bool gtcwd(RDNApi* api) {
+    char buf[RDN_MAX_PATH];
+    if (RDN_GTCWD(buf, sizeof(buf)) == NULL ) {
+        api->raise_error(api, "getcwd failed");
+        return false;
+    }
+    return api->push_string(api , buf);
+}
+
+static bool systm (RDNApi* api) {
+    if (api->stack_size(api) < 1) {
+        return api->raise_error(api, "system requires 1 param (string)");
+    }
+
+    const char *command = NULL;
+    command = api->to_string(api, -1);
+    if (command == NULL) {
+        return api->raise_error(api, "system requires string name");
+    }
+
+    long ret = (long)system(command);
+
+    if (!api->pop(api, 1)) {
+        return false;
+    }
+
+    api->push_integer(api , ret);
+
+    return true;
+
+}
 
 static bool pid(RDNApi *api) {
 #if defined(_WIN32)
@@ -138,6 +191,15 @@ bool rdn_module_init(RDNModule *module) {
         return false;
     }
     if (!module->register_function(module, "epochTime", epochTime)) {
+        return false;
+    }
+    if (!module->register_function(module, "systm", systm)) {
+        return false;
+    }
+    if (!module->register_function(module, "gtcwd", gtcwd)) {
+        return false;
+    }
+    if (!module->register_function(module, "chdr", chdr)) {
         return false;
     }
     return true;

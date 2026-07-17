@@ -122,15 +122,15 @@ markDone defun
     "done task title> " Io::prompt call title let
     title null = if
         false
-    else
-        title stringValue call __todo_pending __todo_done moveTaskByTitle call if
-            "marked done." @println
-            true
-        else
-            "pending task not found." @println
-            false
-        end
+        ret
     end
+    title stringValue call __todo_pending __todo_done moveTaskByTitle call if
+        "marked done." @println
+        true
+        ret
+    end
+    "pending task not found." @println
+    false
 end
 
 undoDone defun

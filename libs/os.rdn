@@ -1,41 +1,86 @@
 [* 
 os.rdn
-Copyright (c) 2023-2026 Ray Den
-SPDX-License-Identifier: MIT
 
+Copyright (c) 2023-2026 Ray Den
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
 Purpose:
 Cross-platform process and runtime helpers over the native syscall module.
 
-Loading behavior:
-This module chooses the shared-library suffix from __sharedlib_ext and loads:
-../nativelibs/syscall(.so|.dylib|.dll)
-
-Exports:
-- pid   : -> current process id
-- env   : variable-name -> string | null
-- sleep : milliseconds -> true
-- now   : -> current Unix epoch time in seconds
-
-Examples:
-"./libs/os.rdn" load
-pid call print
-"\n" print
-"PATH" env call type print
-"\n" print
-0 sleep call pop
-now call print
 *]
 
 "../nativelibs/syscall" __sharedlib_ext to_string swap pop append loadnative
+"Typecheck" load
 
-env defun
-    getEnv call
-end
+Os module
 
-sleep defun
-    sleepMs call
-end
+    reset
+    enum LINUX const
+    enum WINDOWS const
+    enum MACOS const
+    reset
 
-now defun
-    epochTime call
+    platform () (Str) defun
+        __sharedlib_ext str ext let
+        ext ".dll" eq if 
+            WINDOWS
+        else ext ".dylib" eq if
+            MACOS
+        else ext ".so" eq if
+            LINUX
+        end end end
+    end
+
+    system (Str) (Int) defun
+        systm call
+    end
+
+    get-pid () (Int) defun
+        pid call
+    end
+
+    getenv (Str) (Str) defun
+        getEnv call
+    end
+
+    sleep (Int) (Bool) defun
+        sleepMs call
+    end
+
+    now () (Int) defun
+        epochTime call
+    end
+
+    get-cwd () (Str) defun
+        gtcwd call
+    end
+
+    cd (Str) (Int) defun
+        chdr call
+    end
+
+    @platform apply Os::platform call end
+    @system apply Os::system call end
+    @get-pid apply Os::get-pid call end
+    @get-cwd apply Os::get-cwd call end
+    @getenv apply Os::getenv call end
+    @sleep apply Os::sleep call end
+    @now apply Os::now call end
+    @cd apply Os::cd call end
 end
