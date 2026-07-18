@@ -1,4 +1,4 @@
 "../libs/math.rdn" load
 
-4.0 @sqrt print "\n" print
-2.0 4.0 @pow print
+4.0 Math::@sqrt print "\n" print
+2.0 4.0 Math::@pow print
