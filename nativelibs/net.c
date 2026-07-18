@@ -12,6 +12,8 @@
  * - urlDecode(text) -> string
  */
 
+#include <errno.h>
+#include <stdbool.h>
 #define _POSIX_C_SOURCE 200809L
 
 #include "../include/rdn_native.h"
@@ -24,6 +26,7 @@
 #include <windows.h>
 #else
 #include <unistd.h>
+#include <sys/socket.h>
 #endif
 
 static bool hostName(RDNApi *api) {
@@ -148,6 +151,44 @@ static bool urlDecode(RDNApi *api) {
     return ok;
 }
 
+static bool suck(RDNApi* api) {
+#ifndef _WIN32
+    // linux shit
+    long domain;
+    long type;
+    long protocol;
+
+    if (api->stack_size(api) < 3) {
+        return api->raise_error(api , "socket requires 3 parameters");
+    }
+
+    if (!api->to_integer(api , -1 , &protocol)) {
+        return api->raise_error(api , "socket requires integer value at top of the stack and it's protocol");
+    }
+
+    if (!api->to_integer(api , -2 , &type)) {
+        return api->raise_error(api , "socket requires integer value at under top of the stack and it's type");
+    }
+
+    if (!api->to_integer(api , -3 , &domain)) {
+        return api->raise_error(api , "socket requires integer value at second under top of the stack and it's domain");
+    }
+
+    int sockfd = socket(domain , type , protocol);
+    if (sockfd == -1) {
+        return api->raise_error(api, strerror(errno));
+    }
+
+    api->push_integer(api , (long)sockfd);
+
+#else
+
+    // TODO: later
+
+#endif /* ifndef _WIN32 */
+    return true;
+}
+
 bool rdn_module_init(RDNModule *module) {
     if (!module->register_function(module, "hostName", hostName)) {
         return false;
@@ -156,6 +197,9 @@ bool rdn_module_init(RDNModule *module) {
         return false;
     }
     if (!module->register_function(module, "urlDecode", urlDecode)) {
+        return false;
+    }
+    if (!module->register_function(module, "suckit", suck)) {
         return false;
     }
     return true;

@@ -3912,7 +3912,8 @@ static bool identifier_is_name_target(char *cursor) {
     if (!is_string &&
         (is_token(next, "let") || is_token(next, "set") || is_token(next, "const") ||
          is_token(next, "defun") || is_token(next, "apply") || is_token(next, "call") || is_token(next, "unlet") || is_token(next, "demac") ||
-         is_token(next, "module") || is_token(next, "open"))) {
+         is_token(next, "module") || is_token(next, "open")
+         )) {
         free(next);
         return true;
     }

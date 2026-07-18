@@ -52,10 +52,6 @@ static bool readLine(RDNApi *api) {
     size_t capacity = 0;
     int ch = 0;
 
-    if (api->stack_size(api) != 0) {
-        return api->raise_error(api, "readLine requires 0 params");
-    }
-
     while ((ch = fgetc(stdin)) != EOF) {
         if (ch == '\n') {
             break;
@@ -96,10 +92,6 @@ static bool readAllInput(RDNApi *api) {
     size_t length = 0;
     size_t capacity = 0;
     int ch = 0;
-
-    if (api->stack_size(api) != 0) {
-        return api->raise_error(api, "readAllInput requires 0 params");
-    }
 
     while ((ch = fgetc(stdin)) != EOF) {
         if (!append_char(&buffer, &length, &capacity, (char)ch)) {

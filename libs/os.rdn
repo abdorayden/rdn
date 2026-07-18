@@ -53,11 +53,11 @@ Os module
 
     platform () (Str) defun
         __sharedlib_ext str ext let
-        ext ".dll" eq if 
+        ext ".dll" @eq if 
             WINDOWS
-        else ext ".dylib" eq if
+        else ext ".dylib" @eq if
             MACOS
-        else ext ".so" eq if
+        else ext ".so" @eq if
             LINUX
         end end end
     end
