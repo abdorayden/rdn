@@ -1,5 +1,5 @@
 "../libs/strings.rdn" load
 
-"foo" "bar" concat call print "\n" print
-"foo" "bar" "-" concatBy call print "\n" print
-"n=" 42 concat call print
+"foo" "bar" Strings::concat call print "\n" print
+"foo" "bar" "-" Strings::concat-by call print "\n" print
+"n=" 42 Strings::concat call print

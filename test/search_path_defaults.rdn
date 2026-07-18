@@ -1,5 +1,5 @@
 "strings.rdn" load
 "math" __sharedlib_ext to_string swap pop append loadnative
 
-"abc" "b" contains call print "\n" print
+"abc" "b" Strings::contains call print "\n" print
 9.0 sqrtOf call print

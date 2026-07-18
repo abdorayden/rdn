@@ -1,8 +1,8 @@
 "../libs/strings.rdn" load
 
-"hello world" "world" contains call print "\n" print
-"prefix-value" "prefix-" hasPrefix call print "\n" print
-"file.txt" ".txt" hasSuffix call print "\n" print
-"  alpha beta  " trimSpace call print "\n" print
-"a,b,c" "," split call print "\n" print
-"go gopher go" "go" "rdn" replaceAll call print
+"hello world" "world" Strings::contains call print "\n" print
+"prefix-value" "prefix-" Strings::has-prefix call print "\n" print
+"file.txt" ".txt" Strings::has-suffix call print "\n" print
+"  alpha beta  " Strings::trim-space call print "\n" print
+"a,b,c" "," Strings::split call print "\n" print
+"go gopher go" "go" "rdn" Strings::replace-all call print

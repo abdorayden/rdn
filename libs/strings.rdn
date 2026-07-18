@@ -27,54 +27,81 @@ Examples:
 "n=" 42 concat call print
 *]
 
-"../nativelibs/strings" __sharedlib_ext to_string swap pop append loadnative
+"Core" load
+"Typecheck" load
+"../nativelibs/strings" __sharedlib_ext str append loadnative
 
-stringValue defun
-    to_string
-    swap pop
-end
+Strings module
 
-concatBy defun
-    by let
-    second let
-    first let
+    concat-by (Str Str Str) (Str) defun
+        by let
+        second let
+        first let
+        first str
+        by str
+        append
+        second str
+        append
+    end
 
-    first stringValue call
-    by stringValue call
-    append
-    second stringValue call
-    append
-end
+    concat (Str Str) (Str) defun
+        second let
+        first let
+        first str
+        second str
+        append
+    end
 
-concat defun
-    second let
-    first let
+    contains (Str Str) (Bool) defun
+        strContains call
+    end
 
-    first stringValue call
-    second stringValue call
-    append
-end
+    has-prefix (Str Str) (Bool) defun
+        strHasPrefix call
+    end
 
-contains defun
-    strContains call
-end
+    has-suffix (Str Str) (Bool) defun
+        strHasSuffix call
+    end
 
-hasPrefix defun
-    strHasPrefix call
-end
+    trim-space (Str) (Str) defun
+        strTrimSpace call
+    end
 
-hasSuffix defun
-    strHasSuffix call
-end
+    split (Str Str) (List) defun
+        strSplit call
+    end
 
-trimSpace defun
-    strTrimSpace call
-end
+    replace-all (Str Str Str) (Str) defun
+        strReplaceAll call
+    end
 
-split defun
-    strSplit call
-end
+    @replace-all apply
+        Strings::replace-all call
+    end
 
-replaceAll defun
-    strReplaceAll call
+    @has-prefix apply
+        Strings::has-prefix call
+    end
+
+    @contains apply
+        Strings::contains call
+    end
+
+    @concat-by apply
+        Strings::concat-by call
+    end
+
+    @concat apply
+        Strings::concat call
+    end
+
+    @trim-space apply
+        Strings::trim-space call
+    end
+
+    @split apply
+        Strings::split call
+    end
+
 end
