@@ -13,4 +13,4 @@ printer defun
 end
 
 printer callback let
-(1 2 3) callback map call
+(1 2 3) callback Lists::map call

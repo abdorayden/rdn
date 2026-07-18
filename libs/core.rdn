@@ -60,12 +60,12 @@ true not print
 @and apply &  end
 @or  apply |  end
 
-is_null? apply type "null" eq end
-is_int? apply type "integer" eq end
-is_float? apply type "double" eq end
-is_bool? apply type "boolean" eq end
-is_list? apply type "list" eq end
-is_str? apply type "string" eq end
+is_null? apply type "null" @eq end
+is_int? apply type "integer" @eq end
+is_float? apply type "double" @eq end
+is_bool? apply type "boolean" @eq end
+is_list? apply type "list" @eq end
+is_str? apply type "string" @eq end
 nil apply null end
 str apply to_string swap pop end
 empty? apply len 0 = end
@@ -226,23 +226,6 @@ format defun
        i n <
    end
    for_ret
-end
-
-reset
-enum LINUX const
-enum WINDOWS const
-enum MACOS const
-reset
-
-platform apply
-    __sharedlib_ext str ext let
-    ext ".dll" eq if 
-        WINDOWS
-    else ext ".dylib" eq if
-        MACOS
-    else ext ".so" eq if
-        LINUX
-    end end end
 end
 
 use demac open end

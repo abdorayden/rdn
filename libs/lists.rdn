@@ -1,10 +1,25 @@
-"Typecheck" load
-
 [* 
 lists.rdn
-Copyright (c) 2023-2026 Ray Den
-SPDX-License-Identifier: MIT
 
+Copyright (c) 2023-2026 Ray Den
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
 Purpose:
 List-oriented helpers built in Raden itself.
 
@@ -55,267 +70,326 @@ add2 defun
 end
 *]
 
-each defun
-    callback let
-    tha-list let
-    0 i let
-    tha-list len list-length let
-    i list-length < loop
-        tha-list i index callback call
-        i 1 + i set
-        i list-length <
-    end
-end
+"Typecheck" load
 
-each map let
-each foreach let
+Lists module
 
-copy (List) (List) defun
-    tha-list let
-    0 i let
-    tha-list len list-length let
-    (
-        i list-length < loop
-            tha-list i index
-            i 1 + i set
-            i list-length <
-        end
-    )
-end
-
-collect defun
-    callback let
-    tha-list let
-    0 i let
-    tha-list len list-length let
-    (
+    each (List Func) () defun
+        callback let
+        tha-list let
+        0 i let
+        tha-list len list-length let
         i list-length < loop
             tha-list i index callback call
             i 1 + i set
             i list-length <
         end
-    )
-end
+    end
 
-filter defun
-    callback let
-    tha-list let
-    0 i let
-    tha-list len list-length let
-    (
+    Lists::each map let
+    Lists::each foreach let
+
+    copy (List) (List) defun
+        tha-list let
+        0 i let
+        tha-list len list-length let
+        (
+            i list-length < loop
+                tha-list i index
+                i 1 + i set
+                i list-length <
+            end
+        )
+    end
+
+    collect (List Func) (List) defun
+        callback let
+        tha-list let
+        0 i let
+        tha-list len list-length let
+        (
+            i list-length < loop
+                tha-list i index callback call
+                i 1 + i set
+                i list-length <
+            end
+        )
+    end
+
+    filter (List Func) (List) defun
+        callback let
+        tha-list let
+        0 i let
+        tha-list len list-length let
+        (
+            i list-length < loop
+                tha-list i index
+                dup callback call if
+                else
+                    pop
+                end
+                i 1 + i set
+                i list-length <
+            end
+        )
+    end
+
+    reduce (List Int Func) (Int) defun
+        callback let
+        accumulator let
+        tha-list let
+        0 i let
+        tha-list len list-length let
         i list-length < loop
-            tha-list i index
-            dup callback call if
-            else
-                pop
+            accumulator tha-list i index callback call
+            accumulator set
+            i 1 + i set
+            i list-length <
+        end
+        accumulator
+    end
+
+    reverse (List) (List) defun
+        tha-list let
+        tha-list len i let
+        (
+            i 0 > loop
+                tha-list i 1 - index
+                i 1 - i set
+                i 0 >
+            end
+        )
+    end
+
+    concat (List List) (List) defun
+        right let
+        left let
+        0 i let
+        0 j let
+        left len left-length let
+        right len list-length let
+        (
+            i left-length < loop
+                left i index
+                i 1 + i set
+                i left-length <
+            end
+            j list-length < loop
+                right j index
+                j 1 + j set
+                j list-length <
+            end
+        )
+    end
+
+    first (List) (Any) defun
+        tha-list let
+        tha-list len 0 > if
+            tha-list 0 index
+        else
+            null
+        end
+    end
+
+    first head let
+
+    last (List) (Any) defun
+        tha-list let
+        tha-list len list-length let
+        list-length 0 > if
+            tha-list list-length 1 - index
+        else
+            null
+        end
+    end
+
+    tail (List) (List) defun
+        tha-list let
+        1 i let
+        tha-list len list-length let
+        (
+            i list-length < loop
+                tha-list i index
+                i 1 + i set
+                i list-length <
+            end
+        )
+    end
+
+    tail rest let
+
+    count (List) (Int) defun
+        len
+    end
+
+    isEmpty (List) (Bool) defun
+        len 0 =
+    end
+
+    includes (List Any) (Bool) defun
+        needle let
+        tha-list let
+        0 i let
+        false found let
+        tha-list len list-length let
+        i list-length < found ! & loop
+            tha-list i index needle = if
+                true found set
             end
             i 1 + i set
-            i list-length <
+            i list-length < found ! &
         end
-    )
-end
-
-reduce defun
-    callback let
-    accumulator let
-    tha-list let
-    0 i let
-    tha-list len list-length let
-    i list-length < loop
-        accumulator tha-list i index callback call
-        accumulator set
-        i 1 + i set
-        i list-length <
+        found
     end
-    accumulator
-end
 
-reverse (List) (List) defun
-    tha-list let
-    tha-list len i let
-    (
-        i 0 > loop
-            tha-list i 1 - index
-            i 1 - i set
-            i 0 >
-        end
-    )
-end
-
-concat (List List) (List) defun
-    right let
-    left let
-    0 i let
-    0 j let
-    left len left-length let
-    right len list-length let
-    (
-        i left-length < loop
-            left i index
-            i 1 + i set
-            i left-length <
-        end
-        j list-length < loop
-            right j index
-            j 1 + j set
-            j list-length <
-        end
-    )
-end
-
-first (List) (Any) defun
-    tha-list let
-    tha-list len 0 > if
-        tha-list 0 index
-    else
-        null
-    end
-end
-
-first head let
-
-last (List) (Any) defun
-    tha-list let
-    tha-list len list-length let
-    list-length 0 > if
-        tha-list list-length 1 - index
-    else
-        null
-    end
-end
-
-tail (List) (List) defun
-    tha-list let
-    1 i let
-    tha-list len list-length let
-    (
-        i list-length < loop
-            tha-list i index
-            i 1 + i set
-            i list-length <
-        end
-    )
-end
-
-tail rest let
-
-count (List) (Int) defun
-    len
-end
-
-isEmpty (List) (Bool) defun
-    len 0 =
-end
-
-includes (List Any) (Bool) defun
-    needle let
-    tha-list let
-    0 i let
-    false found let
-    tha-list len list-length let
-    i list-length < found ! & loop
-        tha-list i index needle = if
-            true found set
-        end
-        i 1 + i set
-        i list-length < found ! &
-    end
-    found
-end
-
-any defun
-    callback let
-    tha-list let
-    0 i let
-    false found let
-    tha-list len list-length let
-    i list-length < found ! & loop
-        tha-list i index callback call if
-            true found set
-        end
-        i 1 + i set
-        i list-length < found ! &
-    end
-    found
-end
-
-all defun
-    callback let
-    tha-list let
-    0 i let
-    true ok let
-    tha-list len list-length let
-    i list-length < ok & loop
-        tha-list i index callback call ! if
-            false ok set
-        end
-        i 1 + i set
-        i list-length < ok &
-    end
-    ok
-end
-
-shift (List) (Any) defun
-    tha-list let
-    tha-list len 0 > if 
-        tha-list 0 index forRet let
-        tha-list 0 remove
-        forRet
-    else
-        null
-    end
-end
-
-popLast (List) (Any) defun
-    tha-list let
-    tha-list len list-length let
-    list-length 0 > if
-        tha-list list-length 1 - index forRet let
-        tha-list list-length 1 - remove
-        forRet
-    else
-        null
-    end
-end
-
-unpack apply
-    tha-list let
-    tha-list type "list" != if 
-        null
-    else
+    any (List Func) (Bool) defun
+        callback let
+        tha-list let
         0 i let
-        tha-list len l let
-        i l < loop
-            tha-list i index
+        false found let
+        tha-list len list-length let
+        i list-length < found ! & loop
+            tha-list i index callback call if
+                true found set
+            end
             i 1 + i set
-            i l <
+            i list-length < found ! &
+        end
+        found
+    end
+
+    all (List Func) (Bool) defun
+        callback let
+        tha-list let
+        0 i let
+        true ok let
+        tha-list len list-length let
+        i list-length < ok & loop
+            tha-list i index callback call ! if
+                false ok set
+            end
+            i 1 + i set
+            i list-length < ok &
+        end
+        ok
+    end
+
+    shift (List) (Any) defun
+        tha-list let
+        tha-list len 0 > if 
+            tha-list 0 index forRet let
+            tha-list 0 remove
+            forRet
+        else
+            null
         end
     end
-end
 
-insert (List Int Any) (List) defun
-    tha-val let
-    tha-idx let
-    tha-list let
-    tha-idx tha-list len >= if
-        tha-list tha-val append
-        tha-list
-    else
-        0 tha-idx >= if 
-            tha-list reverse call tha-val append reverse call
+    popLast (List) (Any) defun
+        tha-list let
+        tha-list len list-length let
+        list-length 0 > if
+            tha-list list-length 1 - index forRet let
+            tha-list list-length 1 - remove
+            forRet
+        else
+            null
+        end
+    end
+
+    insert (List Int Any) (List) defun
+        tha-val let
+        tha-idx let
+        tha-list let
+        tha-idx tha-list len >= if
+            tha-list tha-val append
+            tha-list
+        else
+            0 tha-idx >= if 
+                tha-list reverse call tha-val append reverse call
+            else
+                0 i let
+                (
+                    i tha-list len < loop
+                        i tha-idx = if 
+                            tha-val
+                        end
+                        tha-list i index
+                        i 1 + i set
+                        i tha-list len <
+                    end
+                )
+            end
+        end
+    end
+
+    @unpack apply
+        tha-list let
+        tha-list type "list" != if 
+            null
         else
             0 i let
-            (
-                i tha-list len < loop
-                    i tha-idx = if 
-                        tha-val
-                    end
-
-                    tha-list i index
-                    i 1 + i set
-                    i tha-list len <
-                end
-            )
+            tha-list len l let
+            i l < loop
+                tha-list i index
+                i 1 + i set
+                i l <
+            end
         end
     end
+    @each apply
+        Lists::each call
+    end
+    @copy apply
+        Lists::copy call
+    end
+    @collect apply
+        Lists::collect call
+    end
+    @filter apply
+        Lists::filter call
+    end
+    @reduce apply
+        Lists::reduce call
+    end
+    @reverse apply
+        Lists::reverse call
+    end
+    @concat apply
+        Lists::concat call
+    end
+    @first apply
+        Lists::first call
+    end
+    @last apply
+        Lists::last call
+    end
+    @tail apply
+        Lists::tail call
+    end
+    @count apply
+        Lists::count call
+    end
+    @isEmpty apply
+        Lists::isEmpty call
+    end
+    @includes apply
+        Lists::includes call
+    end
+    @any apply
+        Lists::any call
+    end
+    @all apply
+        Lists::all call
+    end
+    @shift apply
+        Lists::shift call
+    end
+    @popLast apply
+        Lists::popLast call
+    end
+    @insert apply
+        Lists::insert call
+    end
+
 end

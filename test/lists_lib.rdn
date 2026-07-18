@@ -16,24 +16,24 @@ positive defun
     0 >
 end
 
-(1 2 3) copy call print "\n" print
-(1 2 3) doubler collect call print "\n" print
-(1 2 3 4) aboveTwo filter call print "\n" print
-(1 2 3 4) 0 sum2 reduce call print "\n" print
-(1 2 3) reverse call print "\n" print
-(1 2) (3 4) concat call print "\n" print
-(9 8 7) first call print "\n" print
-(9 8 7) last call print "\n" print
-(9 8 7) tail call print "\n" print
-() isEmpty call print "\n" print
-(1) isEmpty call print "\n" print
-(1 2 3) 2 includes call print "\n" print
-(1 2 3) 9 includes call print "\n" print
-(1 2 3) positive any call print "\n" print
-(1 2 3) positive all call print "\n" print
+(1 2 3) Lists::copy call print "\n" print
+(1 2 3) doubler Lists::collect call print "\n" print
+(1 2 3 4) aboveTwo Lists::filter call print "\n" print
+(1 2 3 4) 0 sum2 Lists::reduce call print "\n" print
+(1 2 3) Lists::reverse call print "\n" print
+(1 2) (3 4) Lists::concat call print "\n" print
+(9 8 7) Lists::first call print "\n" print
+(9 8 7) Lists::last call print "\n" print
+(9 8 7) Lists::tail call print "\n" print
+() Lists::isEmpty call print "\n" print
+(1) Lists::isEmpty call print "\n" print
+(1 2 3) 2 Lists::includes call print "\n" print
+(1 2 3) 9 Lists::includes call print "\n" print
+(1 2 3) positive Lists::any call print "\n" print
+(1 2 3) positive Lists::all call print "\n" print
 
 (10 20 30) numbers let
-numbers shift call print "\n" print
+numbers Lists::shift call print "\n" print
 numbers print "\n" print
-numbers popLast call print "\n" print
+numbers Lists::popLast call print "\n" print
 numbers print

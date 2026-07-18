@@ -140,7 +140,7 @@ findFlagIndex defun
 end
 
 positionals defun
-    __flag_positionals copy call
+    __flag_positionals Lists::@copy
 end
 
 programName defun
@@ -150,20 +150,20 @@ end
 executeOn defun
     args let
     () __flag_positionals set
-    args copy call work let
+    args Lists::@copy work let
 
     work len 0 > if
-        work shift call stringValue call __flag_program set
+        work Lists::@shift stringValue call __flag_program set
     else
         null __flag_program set
     end
 
     work len 0 > loop
-        work shift call stringValue call current let
+        work Lists::@shift stringValue call current let
 
         current "--" = if
             work len 0 > loop
-                __flag_positionals work shift call stringValue call append
+                __flag_positionals work Lists::@shift stringValue call append
                 work len 0 >
             end
         else
@@ -172,7 +172,7 @@ executeOn defun
                 __flag_specs specIndex index spec let
                 spec 2 index if
                     work len 0 > if
-                        work shift call stringValue call spec 4 index call
+                        work Lists::@shift stringValue call spec 4 index call
                     else
                         "missing value for " current append fail call
                     end
@@ -191,7 +191,7 @@ executeOn defun
         work len 0 >
     end
 
-    __flag_positionals copy call
+    __flag_positionals Lists::@copy
 end
 
 execute defun

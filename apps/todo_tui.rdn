@@ -47,7 +47,7 @@ printTaskGroup defun
     items let
     title let
     title @println
-    items isEmpty call if
+    items Lists::isEmpty call if
         "  (empty)" @println
     else
         0 i let
