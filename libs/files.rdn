@@ -36,36 +36,71 @@ THE SOFTWARE.
 
 Files module
     File module
+
         [*
-        *   NOTE: fd-desc is a global public variable you cannot use File module as type or instance
-        *   if you opened other file fd-desc will overwritten so make sure that you close file before you open it
-        *   this is a first version of the module and i will make it better in the future
-        *   the current solution is buffering the content for each file and write them sync
+        *   fileptr are passed in params if it's null it will use the local file-ptr of the module
+        *   in case you don't need to open multiple files
         * *]
-        null fd-desc let
 
-        fopen ( Str [* filename *] Str [* mode *]) () defun
-            openFileHandle call Files::File::fd-desc set
+        null fd-ptr let
+        nativestdin  call stdin  const
+        nativestdout call stdout const
+        nativestderr call stderr const
+
+        fopen ( Str [* filename *] Str [* mode *]) (Any) defun
+            openFileHandle call Files::File::fd-ptr set
+            Files::File::fd-ptr
         end
 
-        fread (Int [* byte count *]) (Str) defun
-            Files::File::fd-desc null = if
-                "no file descriptor are opened" error
+        fread (Any [*fileptr*] Int [* byte count *]) (Str) defun
+
+            swap
+            [*int ptr*]
+            dup
+            [*int ptr*]
+            null = [*int ptr bool*] if
+                
+                Files::File::fd-ptr null = if
+                    "non of file descriptor or given fileptr are opened" error
+                else
+                    pop
+                    Files::File::fd-ptr swap readFromFileHandle call
+                end
+            else
+                swap readFromFileHandle call
             end
-            Files::File::fd-desc swap readFromFileHandle call
+
         end
 
-        fwrite (Str) (Bool) defun
-            Files::File::fd-desc null = if
-                "no file descriptor are opened" error
+        fwrite (Any Str) (Bool) defun
+
+            swap
+            [*str ptr*]
+            dup
+            [*str ptr*]
+            null = [*str ptr bool*] if
+                Files::File::fd-ptr null = if
+                    "non file descriptor and given fileptr param are opened" error
+                else
+                    pop
+                    Files::File::fd-ptr swap writeFromFileHandle call
+                end
+            else
+                swap writeFromFileHandle call
             end
-            writeFromFileHandle call
         end
 
-        fclose () (Bool) defun
-            Files::File::fd-desc 
-            closeHandle call ok let
-            null Files::File::fd-desc set
+        fclose (Any) (Bool) defun
+            true ok let
+            dup null != if
+                closeHandle call ok set
+            end
+            Files::File::fd-ptr null != if
+                Files::File::fd-ptr 
+                closeHandle call ok set
+                null Files::File::fd-ptr set
+            end
+
             ok
         end
     end
