@@ -80,6 +80,18 @@ static bool openfd(RDNApi* api) {
     return api->push_integer(api, (long)(intptr_t)fdrdn);
 }
 
+static bool my_stdin(RDNApi* api) {
+    return api->push_integer(api, (long)(intptr_t)stdin);
+}
+
+static bool my_stdout(RDNApi* api) {
+    return api->push_integer(api, (long)(intptr_t)stdout);
+}
+
+static bool my_stderr(RDNApi* api) {
+    return api->push_integer(api, (long)(intptr_t)stderr);
+}
+
 /*
  *  fds 10 read call
  * */
@@ -515,5 +527,18 @@ bool rdn_module_init(RDNModule *module) {
     if (!module->register_function(module, "appendText", appendText)) {
         return false;
     }
+
+    if (!module->register_function(module, "nativestderr", my_stderr)) {
+        return false;
+    }
+
+    if (!module->register_function(module, "nativestdout", my_stdout)) {
+        return false;
+    }
+
+    if (!module->register_function(module, "nativestdin", my_stdin)) {
+        return false;
+    }
+
     return true;
 }
