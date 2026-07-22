@@ -1,0 +1,6 @@
+"Io" load
+
+"im %" (23) Io::@fmt
+print
+
+"im %" (23) Io::@printfn

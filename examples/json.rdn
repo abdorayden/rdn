@@ -1,0 +1,9 @@
+"Files" load
+"Json" load
+"Core" load
+
+"./examples/person.json"
+@read-text jsn-str let
+
+jsn-str str
+Json::parse call Json::stringify call print

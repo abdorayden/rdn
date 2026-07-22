@@ -1,0 +1,34 @@
+"Core" load
+
+"hey % i got % %%" ("rayden" 100) format call print
+"\n" print
+"?.c" "a.c" match print 
+ "\n" print
+"Bint" load
+"123" "456" @badd call print "\n" print
+"5" 60 @bshl call print "\n" print
+
+Foo.test defun
+    "hello test\n" print
+end
+
+use-foo apply
+    test defun
+        Foo.test call
+    end
+end
+
+use-foo
+test call
+
+_ defun
+    "_\n" print
+end
+
+_ call
+
+Bar::bz defun
+    "bar.baz\n" print
+end
+
+Bar::bz call
