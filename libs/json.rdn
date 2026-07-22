@@ -40,7 +40,7 @@ Exports:
 
 "Core" load
 "Typecheck" load
-"../nativelibs/json" __sharedlib_ext str append loadnative
+"../nativelibs/json" __sharedlib_ext @str append loadnative
 
 Json module
     parse (Str) (List) defun

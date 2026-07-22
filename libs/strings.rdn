@@ -43,7 +43,7 @@ Examples:
 
 "Core" load
 "Typecheck" load
-[*"../nativelibs/strings" __sharedlib_ext str append loadnative*]
+[*"../nativelibs/strings" __sharedlib_ext @str append loadnative*]
 "../nativelibs/strings" loadnative
 
 Strings module
@@ -52,18 +52,18 @@ Strings module
         by let
         second let
         first let
-        first str
-        by str
+        first @str
+        by @str
         append
-        second str
+        second @str
         append
     end
 
     concat (Str Str) (Str) defun
         second let
         first let
-        first str
-        second str
+        first @str
+        second @str
         append
     end
 

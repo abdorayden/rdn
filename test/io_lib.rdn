@@ -1,5 +1,5 @@
 "../libs/io.rdn" load
 
-"hello" @println
+"hello" Io::@println
 
-"im %" ("rayden") @printfn
+"im %" ("rayden") Io::@printfn

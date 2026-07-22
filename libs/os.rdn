@@ -41,7 +41,7 @@ Exports:
 
 "Typecheck" load
 "Core" load
-"../nativelibs/syscall" __sharedlib_ext str append loadnative
+"../nativelibs/syscall" __sharedlib_ext @str append loadnative
 
 Os module
 
@@ -52,7 +52,7 @@ Os module
     reset
 
     platform () (Str) defun
-        __sharedlib_ext str ext let
+        __sharedlib_ext @str ext let
         ext ".dll" @eq if 
             WINDOWS
         else ext ".dylib" @eq if

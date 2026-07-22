@@ -24,7 +24,7 @@ THE SOFTWARE.
 *]
 
 "Core" load
-"../nativelibs/coroutines" __sharedlib_ext str append loadnative
+"../nativelibs/coroutines" __sharedlib_ext @str append loadnative
 
 [*
 
@@ -81,16 +81,16 @@ Couroutines module
         end
     end
 
-end
+    @co_create apply
+        Couroutines::co_create call
+    end
 
-@co_create apply
-    Couroutines::co_create call
-end
+    @resume apply
+        Couroutines::resume call
+    end
 
-@resume apply
-    Couroutines::resume call
-end
+    @co_status apply
+        Couroutines::co_status call
+    end
 
-@co_status apply
-    Couroutines::co_status call
 end

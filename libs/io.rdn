@@ -44,7 +44,7 @@ Io module
     end
 
     prompt (Str) (Str) defun
-        str print
+        @str print
         Io::read-line call
     end
 
@@ -52,26 +52,25 @@ Io module
         readAllInput call
     end
 
-end
+    @readln apply
+        Io::read-line call
+    end
 
-@readln apply
-    Io::read-line call
-end
+    @printf apply
+        format call print
+    end
 
-@printf apply
-    format call print
-end
+    @printfn apply
+        Io::@printf "\n" print
+    end
 
-@printfn apply
-    @printf "\n" print
-end
+    @println apply
+        print
+        "\n" print
+    end
 
-@println apply
-    print
-    "\n" print
-end
+    @fmt apply
+        format call
+    end
 
-@fmt apply
-    format call
 end
-

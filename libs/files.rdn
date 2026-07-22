@@ -25,7 +25,7 @@ THE SOFTWARE.
 *]
 
 "Core" load
-"../nativelibs/files" __sharedlib_ext str append loadnative
+"../nativelibs/files" __sharedlib_ext @str append loadnative
 "Typecheck" load
 
 [*
@@ -128,19 +128,20 @@ Files module
     append-text (Str [* file path *] Str [* string content *]) (Bool [* if it's okay or not *]) defun
         appendText call
     end
+
+    @read-lines apply Files::read-lines call end
+    @write-lines apply Files::write-lines call end
+    @append-lines apply Files::append-lines call end
+    @read-text apply Files::read-text call end
+    @write-text apply Files::write-text call end
+    @append-text apply Files::append-text call end
+
+    [*safe*]
+    @safe-read-lines apply Files::read-lines scall end
+    @safe-write-lines apply Files::write-lines scall end
+    @safe-append-lines apply Files::append-lines scall end
+    @safe-read-text apply Files::read-text scall end
+    @safe-write-text apply Files::write-text scall end
+    @safe-append-text apply Files::append-text scall end
+
 end
-
-@read-lines apply Files::read-lines call end
-@write-lines apply Files::write-lines call end
-@append-lines apply Files::append-lines call end
-@read-text apply Files::read-text call end
-@write-text apply Files::write-text call end
-@append-text apply Files::append-text call end
-
-[*safe*]
-@safe-read-lines apply Files::read-lines scall end
-@safe-write-lines apply Files::write-lines scall end
-@safe-append-lines apply Files::append-lines scall end
-@safe-read-text apply Files::read-text scall end
-@safe-write-text apply Files::write-text scall end
-@safe-append-text apply Files::append-text scall end

@@ -25,7 +25,7 @@ THE SOFTWARE.
 
 "Core" load
 "Typecheck" load
-"../nativelibs/bint" __sharedlib_ext str append loadnative
+"../nativelibs/bint" __sharedlib_ext @str append loadnative
 
 [*
 Big integer module for Raden.
@@ -82,10 +82,8 @@ Examples:
  *]
 __ensure_bint defun
     dup
-    type "string" != if
-        to_string
-        swap
-        pop
+    @is_str? @not if
+        @str
     end
 end
 
@@ -241,49 +239,50 @@ Bint module
         swap
         _bint_shr call
     end
+
+    @badd apply Bint::add call end
+    @bsub apply Bint::sub call end
+    @bmul apply Bint::mul call end
+    @bdiv apply Bint::div call end
+    @bmod apply Bint::mod call end
+    @bpow apply Bint::pow call end
+    @bneg apply Bint::neg call end
+    @babs apply Bint::abs call end
+    @bcmp apply Bint::cmp call end
+    @beq  apply Bint::eq  call end
+    @blt  apply Bint::lt  call end
+    @bgt  apply Bint::gt  call end
+    @ble  apply Bint::le  call end
+    @bge  apply Bint::ge  call end
+    @band apply Bint::and call end
+    @bor  apply Bint::or  call end
+    @bxor apply Bint::xor call end
+    @bnot apply Bint::not call end
+    @bshl apply Bint::shl call end
+    @bshr apply Bint::shr call end
+
+    [*
+    *   for safety checking the stack and return value if match the sig
+    * *]
+    @safe-badd apply Bint::add scall end
+    @safe-bsub apply Bint::sub scall end
+    @safe-bmul apply Bint::mul scall end
+    @safe-bdiv apply Bint::div scall end
+    @safe-bmod apply Bint::mod scall end
+    @safe-bpow apply Bint::pow scall end
+    @safe-bneg apply Bint::neg scall end
+    @safe-babs apply Bint::abs scall end
+    @safe-bcmp apply Bint::cmp scall end
+    @safe-beq  apply Bint::eq  scall end
+    @safe-blt  apply Bint::lt  scall end
+    @safe-bgt  apply Bint::gt  scall end
+    @safe-ble  apply Bint::le  scall end
+    @safe-bge  apply Bint::ge  scall end
+    @safe-band apply Bint::and scall end
+    @safe-bor  apply Bint::or  scall end
+    @safe-bxor apply Bint::xor scall end
+    @safe-bnot apply Bint::not scall end
+    @safe-bshl apply Bint::shl scall end
+    @safe-bshr apply Bint::shr scall end
+
 end
-
-@badd apply Bint::add call end
-@bsub apply Bint::sub call end
-@bmul apply Bint::mul call end
-@bdiv apply Bint::div call end
-@bmod apply Bint::mod call end
-@bpow apply Bint::pow call end
-@bneg apply Bint::neg call end
-@babs apply Bint::abs call end
-@bcmp apply Bint::cmp call end
-@beq  apply Bint::eq  call end
-@blt  apply Bint::lt  call end
-@bgt  apply Bint::gt  call end
-@ble  apply Bint::le  call end
-@bge  apply Bint::ge  call end
-@band apply Bint::and call end
-@bor  apply Bint::or  call end
-@bxor apply Bint::xor call end
-@bnot apply Bint::not call end
-@bshl apply Bint::shl call end
-@bshr apply Bint::shr call end
-
-[*
-*   for safety checking the stack and return value if match the sig
-* *]
-@safe-badd apply Bint::add scall end
-@safe-bsub apply Bint::sub scall end
-@safe-bmul apply Bint::mul scall end
-@safe-bdiv apply Bint::div scall end
-@safe-bmod apply Bint::mod scall end
-@safe-bpow apply Bint::pow scall end
-@safe-bneg apply Bint::neg scall end
-@safe-babs apply Bint::abs scall end
-@safe-bcmp apply Bint::cmp scall end
-@safe-beq  apply Bint::eq  scall end
-@safe-blt  apply Bint::lt  scall end
-@safe-bgt  apply Bint::gt  scall end
-@safe-ble  apply Bint::le  scall end
-@safe-bge  apply Bint::ge  scall end
-@safe-band apply Bint::and scall end
-@safe-bor  apply Bint::or  scall end
-@safe-bxor apply Bint::xor scall end
-@safe-bnot apply Bint::not scall end
-@safe-bshl apply Bint::shl scall end
-@safe-bshr apply Bint::shr scall end

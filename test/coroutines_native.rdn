@@ -13,11 +13,11 @@ counter defun
     end
 end
 
-0 counter @co_create coro let
+0 counter Couroutines::@co_create coro let
 
-coro @co_status print "\n" print
-coro @resume swap print "\n" print print "\n" print
-coro @co_status print "\n" print
-coro @resume swap print "\n" print print "\n" print
-coro @resume swap print "\n" print print "\n" print
-coro @co_status print
+coro Couroutines::@co_status print "\n" print
+coro Couroutines::@resume swap print "\n" print print "\n" print
+coro Couroutines::@co_status print "\n" print
+coro Couroutines::@resume swap print "\n" print print "\n" print
+coro Couroutines::@resume swap print "\n" print print "\n" print
+coro Couroutines::@co_status print

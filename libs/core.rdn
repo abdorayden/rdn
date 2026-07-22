@@ -60,15 +60,15 @@ true not print
 @and apply &  end
 @or  apply |  end
 
-is_null? apply type "null" @eq end
-is_int? apply type "integer" @eq end
-is_float? apply type "double" @eq end
-is_bool? apply type "boolean" @eq end
-is_list? apply type "list" @eq end
-is_str? apply type "string" @eq end
-nil apply null end
-str apply to_string swap pop end
-empty? apply len 0 = end
+@is_null? apply type "null" @eq end
+@is_int? apply type "integer" @eq end
+@is_float? apply type "double" @eq end
+@is_bool? apply type "boolean" @eq end
+@is_list? apply type "list" @eq end
+@is_str? apply type "string" @eq end
+@nil apply null end
+@str apply to_string swap pop end
+@empty? apply len 0 = end
 
 [* Numeric helpers *]
 @inc  apply 1 + end [* increment by 1 *]

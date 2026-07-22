@@ -28,27 +28,27 @@ stringValue defun
 end
 
 printBanner defun
-    "\nRaden Todo TUI" @println
-    "----------------" @println
+    "\nRaden Todo TUI" Io::@println
+    "----------------" Io::@println
 end
 
 printHelp defun
-    "commands:" @println
-    "  help   show this help" @println
-    "  list   show pending and done tasks" @println
-    "  add    add a new pending task" @println
-    "  done   move a pending task to done by exact title" @println
-    "  undo   move a done task back to pending by exact title" @println
-    "  clear  remove all done tasks" @println
-    "  quit   exit the app" @println
+    "commands:" Io::@println
+    "  help   show this help" Io::@println
+    "  list   show pending and done tasks" Io::@println
+    "  add    add a new pending task" Io::@println
+    "  done   move a pending task to done by exact title" Io::@println
+    "  undo   move a done task back to pending by exact title" Io::@println
+    "  clear  remove all done tasks" Io::@println
+    "  quit   exit the app" Io::@println
 end
 
 printTaskGroup defun
     items let
     title let
-    title @println
+    title Io::@println
     items Lists::isEmpty call if
-        "  (empty)" @println
+        "  (empty)" Io::@println
     else
         0 i let
         items len list-length let
@@ -56,7 +56,7 @@ printTaskGroup defun
             "  " print
             i 1 + print
             ". " print
-            items i index @println
+            items i index Io::@println
             i 1 + i set
             i list-length <
         end
@@ -109,10 +109,10 @@ addTask defun
     else
         title len 0 > if
             __todo_pending title stringValue call append
-            "added task." @println
+            "added task." Io::@println
             true
         else
-            "empty task ignored." @println
+            "empty task ignored." Io::@println
             false
         end
     end
@@ -125,11 +125,11 @@ markDone defun
         ret
     end
     title stringValue call __todo_pending __todo_done moveTaskByTitle call if
-        "marked done." @println
+        "marked done." Io::@println
         true
         ret
     end
-    "pending task not found." @println
+    "pending task not found." Io::@println
     false
 end
 
@@ -139,10 +139,10 @@ undoDone defun
         false
     else
         title stringValue call __todo_done __todo_pending moveTaskByTitle call if
-            "moved back to pending." @println
+            "moved back to pending." Io::@println
             true
         else
-            "done task not found." @println
+            "done task not found." Io::@println
             false
         end
     end
@@ -150,7 +150,7 @@ end
 
 clearDone defun
     () __todo_done set
-    "cleared done tasks." @println
+    "cleared done tasks." Io::@println
 end
 
 runTodoTui defun
@@ -187,7 +187,7 @@ runTodoTui defun
                                     command "quit" = command "q" = | if
                                         false running set
                                     else
-                                        "unknown command. type 'help'." @println
+                                        "unknown command. type 'help'." Io::@println
                                     end
                                 end
                             end
@@ -199,5 +199,5 @@ runTodoTui defun
         running
     end
 
-    "\nbye." @println
+    "\nbye." Io::@println
 end
