@@ -47,7 +47,7 @@ Json module
         parseJson call
     end
 
-    stringify defun
+    stringify (List) (Str) defun
         stringifyJson call
     end
 

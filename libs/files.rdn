@@ -38,6 +38,18 @@ Files module
     File module
 
         [*
+         *  FileTyping is an internal module of File module that holds types of fopen,fwrite,... functions of File module
+         *  it's accesable for other modules but it used for clear and clean signature as documented functions
+         * *]
+        FileTyping module
+            [*
+             *  NullAbleFILEPTR is an alias constants for Any because it can be null 
+             *  also it can be a ptr of FILE stream
+             * *]
+            Any NullAbleFILEPTR const
+        end
+
+        [*
         *   fileptr are passed in params if it's null it will use the local file-ptr of the module
         *   in case you don't need to open multiple files
         * *]
@@ -47,12 +59,12 @@ Files module
         nativestdout call stdout const
         nativestderr call stderr const
 
-        fopen ( Str [* filename *] Str [* mode *]) (Any) defun
+        fopen ( Str [* filename *] Str [* mode *]) (Files::File::FileTyping::NullAbleFILEPTR) defun
             openFileHandle call Files::File::fd-ptr set
             Files::File::fd-ptr
         end
 
-        fread (Any [*fileptr*] Int [* byte count *]) (Str) defun
+        fread (Files::File::FileTyping::NullAbleFILEPTR [*fileptr*] Int [* byte count *]) (Str) defun
 
             swap
             [*int ptr*]
@@ -72,7 +84,7 @@ Files module
 
         end
 
-        fwrite (Any Str) (Bool) defun
+        fwrite (Files::File::FileTyping::NullAbleFILEPTR Str) (Bool) defun
 
             swap
             [*str ptr*]
@@ -90,7 +102,7 @@ Files module
             end
         end
 
-        fclose (Any) (Bool) defun
+        fclose (Files::File::FileTyping::NullAbleFILEPTR) (Bool) defun
             true ok let
             dup null != if
                 closeHandle call ok set

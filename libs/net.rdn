@@ -42,12 +42,17 @@ Net module
 
     Socket module
 
+        SocketTypeProto module
+            Str ProtocoleType const
+            Int SockFD const
+        end
+
         "tcp"  TCP_PROT  const
         "udp"  UDP_PROT  const
         "icmp" ICMP_PROT const
         "raw"  RAW_PROT  const
 
-        new (Str [* example: Net::Socket::TCP_PROT*]) (Int) defun
+        new (Net::Socket::SocketTypeProto::ProtocoleType [* example: Net::Socket::TCP_PROT*]) (Net::Socket::SocketTypeProto::SockFD) defun
             socket_new call
         end
 
