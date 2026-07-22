@@ -1434,6 +1434,24 @@ static bool apply_match(RDNState *stack, Vars *vars) {
     return push_value(stack, create_boolean_value(result));
 }
 
+static bool apply_debug(RDNState *stack) {
+    char *buffer = copy_string("[");
+    size_t length = 1;
+    buffer[0] = '\0';
+    length = 0;
+
+    for (size_t i = 0; i < stack->count; i++) {
+        Value *v = stack->items[i];
+        if (i > 0) append_text(&buffer, &length, " ");
+        append_value_repr(&buffer, &length, v);
+    }
+    append_text(&buffer, &length, "]");
+
+    diagnostic_note_current("stack [%zu]: %s", stack->count, buffer);
+    free(buffer);
+    return true;
+}
+
 static bool apply_print(RDNState *stack, Vars *vars) {
     Value *value = NULL;
 
@@ -3607,6 +3625,13 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
             continue;
         } else if (is_token(token, "print")) {
             if (!apply_print(stack, vars)) {
+                free(token);
+                return false;
+            }
+            free(token);
+            continue;
+        } else if (is_token(token, "dbg") || is_token(token, "???")) {
+            if (!apply_debug(stack)) {
                 free(token);
                 return false;
             }
