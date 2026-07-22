@@ -1,7 +1,25 @@
 [* 
 net.rdn
+
 Copyright (c) 2023-2026 Ray Den
-SPDX-License-Identifier: MIT
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
 
 Purpose:
 Cross-platform network-adjacent helpers over the native net module.
@@ -16,16 +34,102 @@ Exports:
 - decodeUrl : text -> decoded text
 *]
 
-"../nativelibs/net" __sharedlib_ext to_string swap pop append loadnative
+"Core" load
+"Typecheck" load
+"../nativelibs/net" __sharedlib_ext @str append loadnative
 
-host defun
-    hostName call
-end
+Net module
 
-encodeUrl defun
-    urlEncode call
-end
+    Socket module
 
-decodeUrl defun
-    urlDecode call
+        "tcp"  TCP_PROT  const
+        "udp"  UDP_PROT  const
+        "icmp" ICMP_PROT const
+        "raw"  RAW_PROT  const
+
+        new (Str [* example: Net::Socket::TCP_PROT*]) (Int) defun
+            socket_new call
+        end
+
+        connect (Int Str Int) (Bool) defun
+            socket_connect call
+        end
+
+        bind (Int Str Int) (Bool) defun
+            socket_bind call
+        end
+
+        listen (Int Int) (Bool) defun
+            socket_listen call
+        end
+
+        accept (Int) (Int Str Int) defun
+            socket_accept call
+        end
+
+        send (Int Str) (Int) defun
+            socket_send call
+        end
+
+        recv (Int Int) (Str) defun
+            socket_recv call
+        end
+
+        sendto (Int Str Str Int) (Int) defun
+            socket_sendto call
+        end
+
+        recvfrom (Int Int) (Str Str Int) defun
+            socket_recvfrom call
+        end
+
+        close (Int) (Bool) defun
+            socket_close call
+        end
+
+        setnonblock (Int Bool) (Bool) defun
+            socket_setnonblock call
+        end
+
+        setnodelay (Int Bool) (Bool) defun
+            socket_setnodelay call
+        end
+
+        setbroadcast (Int Bool) (Bool) defun
+            socket_setbroadcast call
+        end
+
+        getprotocol (Int) (Str) defun
+            socket_getprotocol call
+        end
+
+    end
+
+    Http module
+    end
+
+    host () (Str) defun
+        hostName call
+    end
+
+    encode-url (Str) (Str) defun
+        urlEncode call
+    end
+
+    decode-url (Str) (Str) defun
+        urlDecode call
+    end
+
+    @decode-url apply
+        Net::decode-url call
+    end
+
+    @encode-url apply
+        Net::encode-url call
+    end
+
+    @host apply
+        Net::host call
+    end
+
 end
