@@ -11,7 +11,15 @@ Module::app2
 Module::mac1
 Module::mac2
 
-Module open
+Module::vr      open
+Module::func1   open
+Module::func2   open
+Module::app1    open
+Module::app2    open
+Module::mac1 open
+Module::mac2 open
+
+[*Module open *]
 
 20 vr set
 vr print

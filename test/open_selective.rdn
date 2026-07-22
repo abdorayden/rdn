@@ -1,0 +1,13 @@
+MyMod module
+    func1 defun
+        "func1\n" print
+    end
+    func2 defun
+        "func2\n" print
+    end
+    42 vr let
+end
+
+MyMod::func1 open
+
+func1 call
