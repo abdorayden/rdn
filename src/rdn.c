@@ -36,6 +36,13 @@ static char *g_module_var_prefix = NULL;
 static RLList(char*) g_modules = {0};
 static LoadPathStack g_loaded_files = {0};
 
+static bool is_module_name(const char *name) {
+    for (size_t i = 0; i < g_modules.count; i++) {
+        if (strcmp(name, g_modules.items[i]) == 0) return true;
+    }
+    return false;
+}
+
 bool loaded_files_contains(const char *path){
     for(size_t i = 0 ; i < g_loaded_files.count ; ++i) {
         if (strcmp(path, g_loaded_files.items[i]) == 0) {
@@ -2570,26 +2577,10 @@ static bool apply_module(RDNState *stack, Vars *vars, Funcs *funcs, char **curso
     }
 }
 
-static bool apply_open(RDNState *stack, Vars *vars, Funcs *funcs, char **cursor) {
-    (void)cursor;
-    Value *name = NULL;
-    size_t index = 0;
-    size_t prefix_len = 0;
+static bool apply_open_full_module(Value *name, Vars *vars, Funcs *funcs) {
+    size_t prefix_len = strlen(name->as.string);
 
-    if (stack->count < 1) {
-        return diagnostic_error_current("open requires module name");
-    }
-
-    name = ray_pop(stack);
-    if (name->type != VALUE_AS_VAR) {
-        diagnostic_error_current("open requires module name");
-        ray_append(stack, name);
-        return false;
-    }
-
-    prefix_len = strlen(name->as.string);
-
-    for (index = 0; index < funcs->count; index++) {
+    for (size_t index = 0; index < funcs->count; index++) {
         Funcs_t *entry = funcs->items[index];
         size_t func_name_len = strlen(entry->func_name);
 
@@ -2603,7 +2594,6 @@ static bool apply_open(RDNState *stack, Vars *vars, Funcs *funcs, char **cursor)
             if (existing == NULL) {
                 Funcs_t *alias_entry = malloc(sizeof(Funcs_t));
                 if (alias_entry == NULL) {
-                    free_value(name);
                     return diagnostic_error_current("failed to allocate module function alias");
                 }
                 memcpy(alias_entry, entry, sizeof(Funcs_t));
@@ -2617,7 +2607,7 @@ static bool apply_open(RDNState *stack, Vars *vars, Funcs *funcs, char **cursor)
         }
     }
 
-    for (index = 0; index < vars->count; index++) {
+    for (size_t index = 0; index < vars->count; index++) {
         Vars_t *entry = vars->items[index];
         if (entry->is_scope_marker) continue;
         if (entry->var_name == NULL) continue;
@@ -2633,17 +2623,126 @@ static bool apply_open(RDNState *stack, Vars *vars, Funcs *funcs, char **cursor)
             if (existing == NULL) {
                 Value *copy = clone_value(entry->var_value);
                 if (copy == NULL) {
-                    free_value(name);
                     return diagnostic_error_current("failed to clone module variable value");
                 }
                 Vars_t *alias_entry = create_var_entry(alias, copy, entry->is_const);
                 if (alias_entry == NULL) {
                     free_value(copy);
-                    free_value(name);
                     return diagnostic_error_current("failed to allocate module variable alias");
                 }
                 ray_append(vars, alias_entry);
             }
+        }
+    }
+
+    return true;
+}
+
+static bool apply_open_selective(Value *name, Vars *vars, Funcs *funcs) {
+    const char *full_name = name->as.string;
+    const char *last_colon = strrchr(full_name, ':');
+
+    size_t split = (size_t)(last_colon - 1 - full_name);
+    char module_part[1024];
+    size_t module_len = split < sizeof(module_part) ? split : sizeof(module_part) - 1;
+    memcpy(module_part, full_name, module_len);
+    module_part[module_len] = '\0';
+
+    const char *member = last_colon + 1;
+
+    if (!is_module_name(module_part)) {
+        return diagnostic_error_current("unknown module '%s'", module_part);
+    }
+
+    size_t full_name_len = strlen(full_name);
+    bool found = false;
+
+    for (size_t index = 0; index < funcs->count; index++) {
+        Funcs_t *entry = funcs->items[index];
+        if (strlen(entry->func_name) == full_name_len &&
+            strcmp(entry->func_name, full_name) == 0) {
+            Funcs_t *existing = find_func_entry(funcs, member);
+            if (existing == NULL) {
+                Funcs_t *alias_entry = malloc(sizeof(Funcs_t));
+                if (alias_entry == NULL) {
+                    return diagnostic_error_current("failed to allocate function alias");
+                }
+                memcpy(alias_entry, entry, sizeof(Funcs_t));
+                alias_entry->func_name = copy_string(member);
+                if (func_entry_has_body(alias_entry)) {
+                    alias_entry->as.func_body = copy_string(entry->as.func_body);
+                }
+                alias_entry->source_path = copy_string(entry->source_path);
+                ray_append(funcs, alias_entry);
+            }
+            found = true;
+            break;
+        }
+    }
+
+    for (size_t index = 0; index < vars->count; index++) {
+        Vars_t *entry = vars->items[index];
+        if (entry->is_scope_marker) continue;
+        if (entry->var_name == NULL) continue;
+        if (strlen(entry->var_name) == full_name_len &&
+            strcmp(entry->var_name, full_name) == 0) {
+            Vars_t *existing = find_var_entry(vars, member);
+            if (existing == NULL) {
+                Value *copy = clone_value(entry->var_value);
+                if (copy == NULL) {
+                    return diagnostic_error_current("failed to clone variable value");
+                }
+                Vars_t *alias_entry = create_var_entry(member, copy, entry->is_const);
+                if (alias_entry == NULL) {
+                    free_value(copy);
+                    return diagnostic_error_current("failed to allocate variable alias");
+                }
+                ray_append(vars, alias_entry);
+            }
+            found = true;
+            break;
+        }
+    }
+
+    if (!found) {
+        return diagnostic_error_current("no function or variable '%s' in module '%s'", member, module_part);
+    }
+
+    return true;
+}
+
+static bool apply_open(RDNState *stack, Vars *vars, Funcs *funcs, char **cursor) {
+    (void)cursor;
+    Value *name = NULL;
+
+    if (stack->count < 1) {
+        return diagnostic_error_current("open requires module name");
+    }
+
+    name = ray_pop(stack);
+    if (name->type != VALUE_AS_VAR) {
+        diagnostic_error_current("open requires module name");
+        ray_append(stack, name);
+        return false;
+    }
+
+    const char *last_colon = strrchr(name->as.string, ':');
+    bool has_double_colon = (last_colon != NULL && last_colon > name->as.string && *(last_colon - 1) == ':');
+
+    if (has_double_colon) {
+        if (!apply_open_selective(name, vars, funcs)) {
+            free_value(name);
+            return false;
+        }
+    } else {
+        if (!is_module_name(name->as.string)) {
+            diagnostic_error_current("unknown module '%s'", name->as.string);
+            free_value(name);
+            return false;
+        }
+        if (!apply_open_full_module(name, vars, funcs)) {
+            free_value(name);
+            return false;
         }
     }
 
