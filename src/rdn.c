@@ -2396,7 +2396,7 @@ static bool typecheck_signature_types_valid(const Value *types) {
 }
 
 static bool append_typecheck_signature(Vars *vars, const char *name, const Value *params, const Value *returns) {
-    Vars_t *state_entry = find_var_entry(vars, "State");
+    Vars_t *state_entry = find_var_entry(vars, "Typecheck::State");
     Value *signature = NULL;
     Value *name_value = NULL;
     Value *params_copy = NULL;

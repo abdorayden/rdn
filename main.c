@@ -2,11 +2,8 @@
 #include <string.h>
 #include <stdio.h>
 
-// TODO: create native cross platform libs for rdn with bindings
-// TODO: introduce big ints 
 // TODO: finish std native and nonative libs
 // TODO: optimize the code
-// TODO: make sure that is cross platform
 
 int main(int argc, char **argv) {
     for(int i = 0 ; i < argc ; ++i) {

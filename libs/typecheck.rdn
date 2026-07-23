@@ -1,110 +1,143 @@
+[* 
+Typecheck.rdn
+
+Copyright (c) 2023-2026 Ray Den
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+*]
+
 [*
-*   TODO: add sig function to get signature foo sig call -> (foo (Int Int) (Int))
 *   TODO: add sig for let keyword
 * *]
+
+"Core" load
+
+Typecheck module
      
-reset
-enum Int const
-enum Str const
-enum Bool const
-enum Real const
-enum List const
-enum Null const
+     OGTypes module
 
-enum Func const
-enum Any const
-reset
+        reset
+        enum Int const
+        enum Str const
+        enum Bool const
+        enum Real const
+        enum List const
+        enum Null const
 
-[*
-*   state will contains list of lists 
-*   those lists has this structure
-*   (
-*       func_name
-*       (int int) params
-*       (real null) returns
-*   )
-* *]
-() State const
+        enum Func const
+        enum Any const
+        reset
 
-[*
-*   Signed functions use normal defun with optional params and returns:
-*       add_ints (Int Int) (Int) defun
-*           +
-*       end
-* *]
+     end
 
-[*
-*   scall will call the function and check the return values if it's match the sig
-* *]
-scall apply
-    func let
-    func __func_name fname let
+    [*
+    *   state will contains list of lists 
+    *   those lists has this structure
+    *   (
+    *       func_name
+    *       (int int) params
+    *       (real null) returns
+    *   )
+    * *]
+    () State const
 
-    fname to_string swap pop __tc_find_sig call sig let
-    sig type "null" = if
-        "typecheck: missing function signature" error
-    end
+    [*
+    *   Signed functions use normal defun with optional params and returns:
+    *       add_ints (Int Int) (Int) defun
+    *           +
+    *       end
+    * *]
 
-    sig 1 index params let
-    sig 2 index returns let
+    [*
+    *   scall will call the function and check the return values if it's match the sig
+    * *]
+    scall apply
+        func let
+        func __func_name fname let
 
-    params __tc_check_stack_types call ! if
-        "typecheck: function arguments do not match signature" error
-    end
-
-    __stack_size params len - base-size let
-    func pcall if
-        __stack_size base-size - returns-found let
-        returns-found returns len != if
-            "typecheck: function returned wrong value count" error
+        fname @str Typecheck::__tc_find_sig call sig let
+        sig type "null" = if
+            "typecheck: missing function signature" error
         end
 
-        returns __tc_check_stack_types call ! if
-            "typecheck: function returns do not match signature" error
+        sig 1 index params let
+        sig 2 index returns let
+
+        params Typecheck::__tc_check_stack_types call ! if
+            "typecheck: function arguments do not match signature" error
         end
-    else
-        error
-    end
-end
 
-[*
-*   check will check the function sig before calling it
-* *]
-check apply
-    func let
-    func __func_name fname let
+        __stack_size params len - base-size let
+        func pcall if
+            __stack_size base-size - returns-found let
+            returns-found returns len != if
+                "typecheck: function returned wrong value count" error
+            end
 
-    fname to_string swap pop __tc_find_sig call sig let
-    sig type "null" = if
-        false
-    else
-        sig 1 index __tc_check_stack_types call
-    end
-end
-
-__tc_type_code defun
-    type t let
-
-    t "integer" = if
-        Int
-    else
-        t "string" = if
-            Str
+            returns Typecheck::__tc_check_stack_types call ! if
+                "typecheck: function returns do not match signature" error
+            end
         else
-            t "boolean" = if
-                Bool
+            error
+        end
+    end
+
+    [*
+    *   check will check the function sig before calling it
+    * *]
+    check apply
+        func let
+        func __func_name fname let
+
+        fname to_string swap pop Typecheck::__tc_find_sig call sig let
+        sig type "null" = if
+            false
+        else
+            sig 1 index Typecheck::__tc_check_stack_types call
+        end
+    end
+
+    __tc_type_code defun
+        type t let
+
+        t "integer" = if
+            Typecheck::OGTypes::Int
+        else
+            t "string" = if
+                Typecheck::OGTypes::Str
             else
-                t "double" = if
-                    Real
+                t "boolean" = if
+                    Typecheck::OGTypes::Bool
                 else
-                    t "list" = if
-                        List
+                    t "double" = if
+                        Typecheck::OGTypes::Real
                     else
-                        t "null" = if
-                            Null
+                        t "list" = if
+                            Typecheck::OGTypes::List
                         else
-                            t "function" = if
-                                Func
+                            t "null" = if
+                                Typecheck::OGTypes::Null
+                            else
+                                t "function" = if
+                                    Typecheck::OGTypes::Func
+                                end
                             end
                         end
                     end
@@ -112,99 +145,100 @@ __tc_type_code defun
             end
         end
     end
-end
 
-__tc_valid_type_code defun
-    code let
+    __tc_valid_type_code defun
+        code let
 
-    code Int = code Str = | code Bool = | code Real = | code List = | code Null = | code Func = | code Any = |
-end
-
-__tc_validate_types defun
-    types let
-
-    types type "list" != if
-        "typecheck: signature types must be a list" error
+        code Typecheck::OGTypes::Int = code Typecheck::OGTypes::Str = | code Typecheck::OGTypes::Bool = | code Typecheck::OGTypes::Real = | code Typecheck::OGTypes::List = | code Typecheck::OGTypes::Null = | code Typecheck::OGTypes::Func = | code Typecheck::OGTypes::Any = |
     end
 
-    true valid let
-    0 i let
-    i types len < valid & loop
-        types i index __tc_valid_type_code call ! if
-            false valid set
+    __tc_validate_types defun
+        types let
+
+        types type "list" != if
+            "typecheck: signature types must be a list" error
         end
 
-        i 1 + i set
-        i types len < valid &
-    end
-
-    valid ! if
-        "typecheck: signature contains an unknown type" error
-    end
-end
-
-__tc_find_sig defun
-    fname let
-
-    -1 found-index let
-    State len 1 - i let
-    i 0 >= found-index -1 = & loop
-        State i index sig let
-        sig 0 index fname = if
-            i found-index set
-        end
-
-        i 1 - i set
-        i 0 >= found-index -1 = &
-    end
-
-    found-index -1 = if
-        null
-    else
-        State found-index index
-    end
-end
-
-__tc_check_stack_types defun
-    expected-types let
-    expected-types len needed let
-
-    __stack_size needed < if
-        false
-    else
-        () popped let
-        true ok let
-        needed 1 - i let
-
-        i 0 >= ok & loop
-            expected-types i index expected let
-            top-value let
-
-            top-value __tc_type_code call actual let
-            actual Func = if
-                popped top-value append
-            else
-                top-value dup
-                popped swap append
-                pop
+        true valid let
+        0 i let
+        i types len < valid & loop
+            types i index Typecheck::__tc_valid_type_code call ! if
+                false valid set
             end
 
-            expected Any != actual expected != & if
-                false ok set
+            i 1 + i set
+            i types len < valid &
+        end
+
+        valid ! if
+            "typecheck: signature contains an unknown type" error
+        end
+    end
+
+    __tc_find_sig defun
+        fname let
+
+        -1 found-index let
+        Typecheck::State len 1 - i let
+        i 0 >= found-index -1 = & loop
+            Typecheck::State i index sig let
+            sig 0 index fname = if
+                i found-index set
             end
 
             i 1 - i set
-            i 0 >= ok &
+            i 0 >= found-index -1 = &
         end
 
-        popped len 1 - j let
-        j 0 >= loop
-            popped j index
-
-            j 1 - j set
-            j 0 >=
+        found-index -1 = if
+            null
+        else
+            Typecheck::State found-index index
         end
-
-        ok
     end
+
+    __tc_check_stack_types defun
+        expected-types let
+        expected-types len needed let
+
+        __stack_size needed < if
+            false
+        else
+            () popped let
+            true ok let
+            needed 1 - i let
+
+            i 0 >= ok & loop
+                expected-types i index expected let
+                top-value let
+
+                top-value Typecheck::__tc_type_code call actual let
+                actual Func = if
+                    popped top-value append
+                else
+                    top-value dup
+                    popped swap append
+                    pop
+                end
+
+                expected Any != actual expected != & if
+                    false ok set
+                end
+
+                i 1 - i set
+                i 0 >= ok &
+            end
+
+            popped len 1 - j let
+            j 0 >= loop
+                popped j index
+
+                j 1 - j set
+                j 0 >=
+            end
+
+            ok
+        end
+    end
+
 end
