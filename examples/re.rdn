@@ -1,15 +1,18 @@
 "Regex" load
 "Io" load
 
+Regex::search open
+Regex::search-all open
+
 [*"*.c" "main.c" Regex::match-str call @println *]
 [*"*.c" "hey i have my main.c file" Regex::match-str call @println *]
 
 "The order numbers are 4582, 9102, and 3341."
 "*,"
-Regex::search call
+search call
 Io::@println
 
 "The order numbers are 4582, 9102, and 3341."
 "*,"
-Regex::search-all call
+search-all call
 Io::@println

@@ -20,22 +20,46 @@ Exports:
 
 "../nativelibs/path" __sharedlib_ext to_string swap pop append loadnative
 
-join defun
-    joinPath call
-end
+Path module
 
-basename defun
-    baseName call
-end
+    join defun
+        joinPath call
+    end
 
-dirname defun
-    dirName call
-end
+    basename defun
+        baseName call
+    end
 
-extname defun
-    extName call
-end
+    dirname defun
+        dirName call
+    end
 
-absolute defun
-    isAbsolutePath call
+    extname defun
+        extName call
+    end
+
+    absolute defun
+        isAbsolutePath call
+    end
+
+    @join defun
+        Path::join call
+    end
+
+    @basename defun
+        Path::basename call
+    end
+
+    @dirname defun
+        Path::dirname call
+    end
+
+    @extname defun
+        Path::extname call
+    end
+
+    @absolute defun
+        Path::absolute call
+    end
+
 end
