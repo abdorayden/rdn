@@ -40,6 +40,10 @@ Exports:
 
 "Core" load
 "Typecheck" load
+
+Typecheck open
+Typecheck::OGTypes open
+
 "../nativelibs/json" __sharedlib_ext @str append loadnative
 
 Json module

@@ -1,5 +1,8 @@
 "../libs/typecheck.rdn" load
 
+Typecheck::OGTypes open
+Typecheck open
+
 add_ints (Int Int) (Int) defun
     +
 end

@@ -43,6 +43,10 @@ Examples:
 
 "Core" load
 "Typecheck" load
+
+Typecheck open
+Typecheck::OGTypes open
+
 [*"../nativelibs/strings" __sharedlib_ext @str append loadnative*]
 "../nativelibs/strings" loadnative
 

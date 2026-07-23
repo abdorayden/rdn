@@ -72,6 +72,9 @@ end
 
 "Typecheck" load
 
+Typecheck open
+Typecheck::OGTypes open
+
 Lists module
 
     each (List Func) () defun

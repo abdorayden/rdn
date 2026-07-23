@@ -24,9 +24,14 @@ THE SOFTWARE.
 
 *]
 
+"Typecheck" load
+
+Typecheck open
+Typecheck::OGTypes open
+
 "Core" load
 "../nativelibs/files" __sharedlib_ext @str append loadnative
-"Typecheck" load
+
 
 [*
 *   Files module 

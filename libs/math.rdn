@@ -34,6 +34,9 @@ Examples:
 "../nativelibs/math" __sharedlib_ext to_string swap pop append loadnative
 "Typecheck" load
 
+Typecheck open
+Typecheck::OGTypes open
+
 Math module
 
     2.7182818284590452354  E		const

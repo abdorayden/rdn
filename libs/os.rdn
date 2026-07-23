@@ -40,6 +40,10 @@ Exports:
 *]
 
 "Typecheck" load
+
+Typecheck open
+Typecheck::OGTypes open
+
 "Core" load
 "../nativelibs/syscall" __sharedlib_ext @str append loadnative
 

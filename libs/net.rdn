@@ -36,6 +36,10 @@ Exports:
 
 "Core" load
 "Typecheck" load
+
+Typecheck open
+Typecheck::OGTypes open
+
 "../nativelibs/net" __sharedlib_ext @str append loadnative
 
 Net module
