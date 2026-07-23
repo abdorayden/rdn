@@ -2478,16 +2478,38 @@ static bool apply_module(RDNState *stack, Vars *vars, Funcs *funcs, char **curso
         return false;
     }
 
-    for(size_t i = 0 ; i < g_modules.count ; ++i) {
-        if (strcmp(name->as.string, g_modules.items[i]) == 0) {
-            // module exists
-            diagnostic_error_current("module '%s' is already defined", name->as.string);
-            free_value(name);
-            return false;
+    {
+        char *qualified_name = NULL;
+        if (g_module_func_prefix != NULL) {
+            size_t prefix_len = strlen(g_module_func_prefix);
+            size_t name_len = strlen(name->as.string);
+            qualified_name = malloc(prefix_len + name_len + 1);
+            if (qualified_name == NULL) {
+                free_value(name);
+                return diagnostic_error_current("failed to allocate qualified module name");
+            }
+            memcpy(qualified_name, g_module_func_prefix, prefix_len);
+            memcpy(qualified_name + prefix_len, name->as.string, name_len + 1);
+            // strip trailing "::" from prefix part (the separator was already included)
+            size_t len = strlen(qualified_name);
+            if (len >= 2 && qualified_name[len - 1] == ':' && qualified_name[len - 2] == ':') {
+                qualified_name[len - 2] = '\0';
+            }
+        } else {
+            qualified_name = copy_string(name->as.string);
         }
-    }
 
-    ray_append(&g_modules, copy_string(name->as.string));
+        for(size_t i = 0 ; i < g_modules.count ; ++i) {
+            if (strcmp(qualified_name, g_modules.items[i]) == 0) {
+                diagnostic_error_current("module '%s' is already defined", qualified_name);
+                free(qualified_name);
+                free_value(name);
+                return false;
+            }
+        }
+
+        ray_append(&g_modules, qualified_name);
+    }
 
     diagnostic_compute_location(body_start, &source_line, &source_column, NULL, NULL);
 
@@ -2729,21 +2751,20 @@ static bool apply_open(RDNState *stack, Vars *vars, Funcs *funcs, char **cursor)
     const char *last_colon = strrchr(name->as.string, ':');
     bool has_double_colon = (last_colon != NULL && last_colon > name->as.string && *(last_colon - 1) == ':');
 
-    if (has_double_colon) {
+    if (is_module_name(name->as.string)) {
+        if (!apply_open_full_module(name, vars, funcs)) {
+            free_value(name);
+            return false;
+        }
+    } else if (has_double_colon) {
         if (!apply_open_selective(name, vars, funcs)) {
             free_value(name);
             return false;
         }
     } else {
-        if (!is_module_name(name->as.string)) {
-            diagnostic_error_current("unknown module '%s'", name->as.string);
-            free_value(name);
-            return false;
-        }
-        if (!apply_open_full_module(name, vars, funcs)) {
-            free_value(name);
-            return false;
-        }
+        diagnostic_error_current("unknown module '%s'", name->as.string);
+        free_value(name);
+        return false;
     }
 
     free_value(name);
