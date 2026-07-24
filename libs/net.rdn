@@ -35,6 +35,7 @@ Exports:
 *]
 
 "Core" load
+Core open
 "Typecheck" load
 
 Typecheck open

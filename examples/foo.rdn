@@ -1,4 +1,5 @@
 "Core" load
+Core open
 
 "hey % i got % %%" ("rayden" 100) format call print
 "\n" print

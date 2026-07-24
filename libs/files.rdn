@@ -30,6 +30,7 @@ Typecheck open
 Typecheck::OGTypes open
 
 "Core" load
+Core open
 "../nativelibs/files" __sharedlib_ext @str append loadnative
 
 

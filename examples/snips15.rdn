@@ -1,3 +1,4 @@
 "Core" load
+Core open
 
 false "test assert" assert

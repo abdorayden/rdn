@@ -26,6 +26,9 @@ THE SOFTWARE.
 "Core" load
 "Typecheck" load
 
+Core::@str open
+Core::@not open
+Core::@is_str? open
 Typecheck open
 Typecheck::OGTypes open
 

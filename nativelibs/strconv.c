@@ -156,16 +156,16 @@ static bool formatBool_native(RDNApi *api) {
 }
 
 bool rdn_module_init(RDNModule *module) {
-    if (!module->register_function(module, "atoi", atoi_native)) {
+    if (!module->register_function(module, "_atoi", atoi_native)) {
         return false;
     }
-    if (!module->register_function(module, "atof", atof_native)) {
+    if (!module->register_function(module, "_atof", atof_native)) {
         return false;
     }
     if (!module->register_function(module, "parseBool", parseBool_native)) {
         return false;
     }
-    if (!module->register_function(module, "itoa", itoa_native)) {
+    if (!module->register_function(module, "_itoa", itoa_native)) {
         return false;
     }
     if (!module->register_function(module, "formatBool", formatBool_native)) {

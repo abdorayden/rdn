@@ -1,6 +1,7 @@
 "Files" load
 "Json" load
 "Core" load
+Core open
 
 "./examples/person.json"
 @read-text jsn-str let

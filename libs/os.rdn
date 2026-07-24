@@ -45,6 +45,7 @@ Typecheck open
 Typecheck::OGTypes open
 
 "Core" load
+Core open
 "../nativelibs/syscall" __sharedlib_ext @str append loadnative
 
 Os module

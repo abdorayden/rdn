@@ -28,6 +28,7 @@ THE SOFTWARE.
 * *]
 
 "Core" load
+Core::@str open
 
 Typecheck module
      

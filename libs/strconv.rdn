@@ -24,4 +24,43 @@ Examples:
 true formatBool call print
 *]
 
+"Typecheck" load
 "../nativelibs/strconv" __sharedlib_ext to_string swap pop append loadnative
+
+Typecheck::OGTypes open
+
+Strconv module
+
+    atoi (Str) (Int) defun
+        _atoi call
+    end
+    atof (Str) (Real) defun
+        _atof call
+    end
+    parse-bool (Str) (Bool) defun
+        parseBool call
+    end
+    itoa (Int) (Str) defun
+        _itoa call
+    end
+    format-bool (Bool) (Str) defun
+        formatBool call
+    end
+
+    @atoi apply
+        Strconv::atoi call
+    end
+    @atof apply
+        Strconv::atof call
+    end
+    @parse-bool apply
+        Strconv::parse-bool call
+    end
+    @itoa apply
+        Strconv::itoa call
+    end
+    @format-bool apply
+        Strconv::format-bool call
+    end
+
+end

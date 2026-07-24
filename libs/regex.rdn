@@ -27,6 +27,7 @@ THE SOFTWARE.
 "Strings" load
 "Lists" load
 "Core" load [*for str*]
+Core open
 
 Regex module
 

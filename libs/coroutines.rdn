@@ -24,6 +24,7 @@ THE SOFTWARE.
 *]
 
 "Core" load
+Core open
 "../nativelibs/coroutines" __sharedlib_ext @str append loadnative
 
 [*
