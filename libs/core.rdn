@@ -43,189 +43,246 @@ true not print
 
 *]
 
-@not apply !  end
-@shl apply << end
-@shr apply >> end
-@add apply +  end
-@sub apply -  end
-@mul apply *  end
-@div apply /  end
-@eq  apply =  end
-@neq apply != end
-@le  apply <= end
-@ge  apply >= end
-@gt  apply >  end
-@lt  apply <  end
-@xor apply ^  end
-@and apply &  end
-@or  apply |  end
+Core module
 
-@is_null? apply type "null" @eq end
-@is_int? apply type "integer" @eq end
-@is_float? apply type "double" @eq end
-@is_bool? apply type "boolean" @eq end
-@is_list? apply type "list" @eq end
-@is_str? apply type "string" @eq end
-@nil apply null end
-@str apply to_string swap pop end
-@empty? apply len 0 = end
+    @not apply !  end
+    @shl apply << end
+    @shr apply >> end
+    @add apply +  end
+    @sub apply -  end
+    @mul apply *  end
+    @div apply /  end
+    @eq  apply =  end
+    @neq apply != end
+    @le  apply <= end
+    @ge  apply >= end
+    @gt  apply >  end
+    @lt  apply <  end
+    @xor apply ^  end
+    @and apply &  end
+    @or  apply |  end
 
-[* Numeric helpers *]
-@inc  apply 1 + end [* increment by 1 *]
-@dec  apply 1 - end [* increment by 1 *]
-@abs  apply dup 0 < if @neg end end [* absolute value *]
-@even apply 2 % 0 = end [* integer parity check *]
-@odd  apply even not end [* odd check *]
+    @is_null? apply type "null" Core::@eq end
+    @is_int? apply type "integer" Core::@eq end
+    @is_real? apply type "double" Core::@eq end
+    @is_bool? apply type "boolean" Core::@eq end
+    @is_list? apply type "list" Core::@eq end
+    @is_str? apply type "string" Core::@eq end
+    @nil apply null end
+    @str apply to_string swap pop end
+    @empty? apply len 0 = end
 
-[* Comparison / ordering *]
-min apply 
-    b let 
-    a let 
-    a b < if 
-        a 
-    else 
-        b 
-    end 
-end
+    [* Numeric helpers *]
+    @inc  apply 1 + end [* increment by 1 *]
+    @dec  apply 1 - end [* increment by 1 *]
+    @abs  apply dup 0 < if Core::@neg end end [* absolute value *]
+    @even apply 2 % 0 = end [* integer parity check *]
+    @odd  apply Core::@even Core::@not end [* odd check *]
 
-max apply 
-    b let 
-    a let 
-    a b > if 
-        a 
-    else 
-        b 
-    end 
-end
-
-between apply 
-    hi let 
-    lo let 
-    val let 
-    val lo >= val hi <= & 
-end
-
-clamp apply 
-    hi let 
-    lo let 
-    val let 
-    val lo < if 
-        lo 
-    end 
-    val hi > if 
-        hi 
-    else 
-        val 
-    end 
-end
-
-[* Functional / combinators *]
-
-[* Forward pipe: value fn -> fn(value) *]
-pipe apply fn let val let val fn call end
-[* Call fn on value for side effects, then return value *]
-tap apply fn let val let val fn call pop val end
-[* Ternary: cond true-val false-val -> selected *]
-select apply b let a let cond let cond if a else b end end
-[* Conditional transformation: when cond fn val -> val|fn(val) *]
-when apply fn let cond let val let cond if val fn call else val end end
-unless apply fn let cond let val let cond ! if val fn call else val end end
-[* Complement a predicate *]
-complement apply pred let val let val pred call not end
-
-[* Apply fn n times to initial val *]
-times apply
-    n let
-    fn let
-    val let
-    0 i let
-    i n < loop
-        val fn call val set
-        i 1 + i set
-        i n <
+    [* Comparison / ordering *]
+    min apply 
+        b let 
+        a let 
+        a b < if 
+            a 
+        else 
+            b 
+        end 
     end
-    val
-end
 
-[* Generate a list of integers from start to end-1 *]
-range apply
-    stop let
-    start let
-    start i let
-    (
-        i stop < loop
-            i
+    max apply 
+        b let 
+        a let 
+        a b > if 
+            a 
+        else 
+            b 
+        end 
+    end
+
+    between apply 
+        hi let 
+        lo let 
+        val let 
+        val lo >= val hi <= & 
+    end
+
+    clamp apply 
+        hi let 
+        lo let 
+        val let 
+        val lo < if 
+            lo 
+        end 
+        val hi > if 
+            hi 
+        else 
+            val 
+        end 
+    end
+
+    [* Functional / combinators *]
+
+    [* Forward pipe: value fn -> fn(value) *]
+    pipe apply fn let val let val fn call end
+    [* Call fn on value for side effects, then return value *]
+    tap apply fn let val let val fn call pop val end
+    [* Ternary: cond true-val false-val -> selected *]
+    select apply b let a let cond let cond if a else b end end
+    [* Conditional transformation: when cond fn val -> val|fn(val) *]
+    when apply fn let cond let val let cond if val fn call else val end end
+    unless apply fn let cond let val let cond ! if val fn call else val end end
+    [* Complement a predicate *]
+    complement apply pred let val let val pred call Core::@not end
+
+    [* Apply fn n times to initial val *]
+    times apply
+        n let
+        fn let
+        val let
+        0 i let
+        i n < loop
+            val fn call val set
             i 1 + i set
-            i stop <
+            i n <
         end
-    )
-end
-
-for apply
-    tha-list let
-    fn let [* should return nothing *]
-    0 i let
-    tha-list len length let
-    i length < loop
-
-        tha-list i index fn call
-
-        i 1 + i set
-        i length <
+        val
     end
-end
 
-drop demac pop end
+    [* Generate a list of integers from start to end-1 *]
+    range apply
+        stop let
+        start let
+        start i let
+        (
+            i stop < loop
+                i
+                i 1 + i set
+                i stop <
+            end
+        )
+    end
 
-over apply
-    top let
-    under-top let
-    under-top top under-top
-end
+    for apply
+        tha-list let
+        fn let [* should return nothing *]
+        0 i let
+        tha-list len length let
+        i length < loop
 
-rot apply
-    a let
-    b let
-    c let
-    a
-    b 
-    c 
-end
+            tha-list i index fn call
 
-[*(Str List) (Str) *]
-format defun
-   list let
-   str-fmt let
-   "" for_ret let
-   0 val_idx let
-   list len lst_len let
-   0 i let
-   str-fmt len n let
-   i n < loop
-       str-fmt i index "%" = if
-           i 1 + n < if
-               str-fmt i 1 + index "%" =
-           else
-               false
-           end
-           if
-               [* %% → literal % *]
-               for_ret "%" append
-               i 1 + i set
-           else
-               [* % → placeholder *]
-               val_idx lst_len < if
-                   for_ret list val_idx index append
-                   1 val_idx + val_idx set
+            i 1 + i set
+            i length <
+        end
+    end
+
+    drop demac pop end
+
+    over apply
+        top let
+        under-top let
+        under-top top under-top
+    end
+
+    rot apply
+        a let
+        b let
+        c let
+        a
+        b 
+        c 
+    end
+
+    [*(Str List) (Str) *]
+    format defun
+       list let
+       str-fmt let
+       "" for_ret let
+       0 val_idx let
+       list len lst_len let
+       0 i let
+       str-fmt len n let
+       i n < loop
+           str-fmt i index "%" = if
+               i 1 + n < if
+                   str-fmt i 1 + index "%" =
+               else
+                   false
                end
+               if
+                   [* %% → literal % *]
+                   for_ret "%" append
+                   i 1 + i set
+               else
+                   [* % → placeholder *]
+                   val_idx lst_len < if
+                       for_ret list val_idx index append
+                       1 val_idx + val_idx set
+                   end
+               end
+           else
+               for_ret str-fmt i index append
            end
-       else
-           for_ret str-fmt i index append
+           i 1 + i set
+           i n <
        end
-       i 1 + i set
-       i n <
-   end
-   for_ret
+       for_ret
+    end
+
+    use demac open end
+
+    __condr apply
+        right Core::@is_str? if 
+            right len 0 >
+        else right Core::@is_int? if 
+                right 0 >
+        else right Core::@is_real? if 
+                right 0.0 >
+        else right Core::@is_bool? if 
+                right
+        else right Core::@is_null? if 
+                false
+        else right Core::@is_list? if 
+                right len 0 >
+        end end end end end end
+    end
+
+    __condl apply
+        left Core::@is_str? if 
+            left len 0 >
+        else left Core::@is_int? if 
+                left 0 >
+        else left Core::@is_real? if 
+                left 0.0 >
+        else left Core::@is_bool? if 
+                left
+        else left Core::@is_null? if 
+                false
+        else left Core::@is_list? if 
+                left len 0 >
+        end end end end end end
+    end
+
+    @@or apply
+        right let
+        left let
+
+        __condr
+        __condl
+        Core::@or
+
+    end
+
+    @@and apply
+        right let
+        left let
+
+        __condr
+        __condl
+        Core::@and
+
+    end
+
 end
 
-use demac open end
