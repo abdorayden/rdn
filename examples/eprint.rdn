@@ -1,0 +1,3 @@
+"Io" load
+
+"hello %" ("rayden") Io::@eprintfn
