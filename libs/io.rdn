@@ -24,12 +24,16 @@ THE SOFTWARE.
 *]
 
 "Typecheck" load
+"../nativelibs/io" __sharedlib_ext to_string swap pop append loadnative
+"Core" load
+"Files" load
 
 Typecheck open
 Typecheck::OGTypes open
+Core::format open
+Files::File::stderr open
+Files::File::fwrite open
 
-"../nativelibs/io" __sharedlib_ext to_string swap pop append loadnative
-"Core" load
 
 [*
 Purpose:
@@ -58,6 +62,22 @@ Io module
 
     @readln apply
         Io::read-line call
+    end
+
+    @eprint apply
+        stderr swap fwrite call pop
+    end
+
+    @eprintln apply
+        Io::@eprint "\n" Io::@eprint
+    end
+
+    @eprintf apply
+        format call Io::@eprint
+    end
+
+    @eprintfn apply
+        Io::@eprintf "\n" Io::@eprint
     end
 
     @printf apply
