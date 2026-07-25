@@ -24,16 +24,17 @@ THE SOFTWARE.
 *]
 
 "Typecheck" load
-"../nativelibs/io" __sharedlib_ext to_string swap pop append loadnative
 "Core" load
 "Files" load
 
 Typecheck open
 Typecheck::OGTypes open
 Core::format open
+Core::@str open
 Files::File::stderr open
 Files::File::fwrite open
 
+"../nativelibs/io" __sharedlib_ext @str append loadnative
 
 [*
 Purpose:
