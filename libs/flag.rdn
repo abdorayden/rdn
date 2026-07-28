@@ -27,12 +27,12 @@ Examples:
 
 setName defun
   value let
-  value println call
+  value Io::@println call
 end
 
 setVerbose defun
   ignored let
-  "verbose enabled" println call
+  "verbose enabled" Io::@println call
 end
 
 "-n" "--name" true "set the program name" setName addFlag call
@@ -42,6 +42,9 @@ end
 
 "Lists" load
 "Io" load
+"Core" load
+
+Core::@str open
 
 () __flag_specs let
 () __flag_positionals let
@@ -50,13 +53,8 @@ null __flag_program let
 fail defun
     message let
     "flag error: " print
-    message println call
+    message Io::@eprintln
     1 exit
-end
-
-stringValue defun
-    to_string
-    swap pop
 end
 
 looksLikeFlag defun
@@ -73,7 +71,7 @@ printHelp defun
     __flag_program print
     " [options] [args...]" print
     "\n" print
-    "flags:" println call
+    "flags:" Io::@println call
 
     0 i let
     __flag_specs len spec-count let
@@ -87,7 +85,7 @@ printHelp defun
             " <value>" print
         end
         " : " print
-        spec 3 index println call
+        spec 3 index Io::@println call
         i 1 + i set
         i spec-count <
     end
@@ -153,17 +151,17 @@ executeOn defun
     args Lists::@copy work let
 
     work len 0 > if
-        work Lists::@shift stringValue call __flag_program set
+        work Lists::@shift @str __flag_program set
     else
         null __flag_program set
     end
 
     work len 0 > loop
-        work Lists::@shift stringValue call current let
+        work Lists::@shift @str current let
 
         current "--" = if
             work len 0 > loop
-                __flag_positionals work Lists::@shift stringValue call append
+                __flag_positionals work Lists::@shift @str append
                 work len 0 >
             end
         else
@@ -172,7 +170,7 @@ executeOn defun
                 __flag_specs specIndex index spec let
                 spec 2 index if
                     work len 0 > if
-                        work Lists::@shift stringValue call spec 4 index call
+                        work Lists::@shift @str spec 4 index call
                     else
                         "missing value for " current append fail call
                     end
@@ -183,7 +181,7 @@ executeOn defun
                 current looksLikeFlag call if
                     "unknown flag " current append fail call
                 else
-                    __flag_positionals current stringValue call append
+                    __flag_positionals current @str append
                 end
             end
         end
