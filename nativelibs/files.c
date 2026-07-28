@@ -26,6 +26,7 @@
  * "/tmp/demo.txt" slurp call print
  */
 
+#include <stddef.h>
 #define _POSIX_C_SOURCE 200809L
 
 #include "../include/rdn_native.h"
@@ -496,7 +497,88 @@ static bool appendText(RDNApi *api) {
     return write_text_common(api, "ab");
 }
 
+static bool seekfile(RDNApi *api) {
+    if (api->stack_size(api) < 3) {
+        return api->raise_error(api , "seek accept 3 values on the stack");
+    }
+
+    long mode;
+    long how_many_bytes;
+    long fstream_as_long = 0;
+    FILE* fstream = NULL;
+
+    if (!api->to_integer(api ,-1, &mode)) {
+        return api->raise_error(api , "seek accept integer seek type at top of the stack");
+    }
+
+    if (mode != SEEK_CUR || mode != SEEK_END || mode != SEEK_SET) {
+        return api->raise_error(api , "seek mode are not SET or END or CUR wtff");
+    }
+
+    if (!api->to_integer(api ,-2, &how_many_bytes)) {
+        return api->raise_error(api , "seek accept integer seek type at top of the stack");
+    }
+
+    if (!api->to_integer(api ,-3, &fstream_as_long)) {
+        return api->raise_error(api , "seek accept integer seek type at top of the stack");
+    }
+    fstream = (FILE *)(intptr_t)fstream_as_long;
+
+    if (fseek(fstream, how_many_bytes, mode) == -1) {
+        return api->raise_error(api , strerror(errno));
+    }
+    
+    return true;
+}
+
+static bool file_error(RDNApi* api) {
+
+    if (api->stack_size(api) < 1) {
+        return api->raise_error(api , "fis-error requires param file stream");
+    }
+
+    long fstream_as_long = 0;
+    FILE* fstream = NULL;
+
+    if (!api->to_integer(api ,-1, &fstream_as_long)) {
+        return api->raise_error(api , "seek accept integer seek type at top of the stack");
+    }
+    fstream = (FILE *)(intptr_t)fstream_as_long;
+
+    api->push_boolean(api , ferror(fstream) != 0);
+
+    return true;
+}
+
+static bool get_byte(RDNApi* api) {
+    if (api->stack_size(api) < 1) {
+        return api->raise_error(api , "fget-byte requires param file stream");
+    }
+
+    long fstream_as_long = 0;
+    FILE* fstream = NULL;
+
+    if (!api->to_integer(api ,-1, &fstream_as_long)) {
+        return api->raise_error(api , "seek accept integer seek type at top of the stack");
+    }
+    fstream = (FILE *)(intptr_t)fstream_as_long;
+
+    api->push_integer(api , fgetc(fstream));
+
+    return true;
+}
+
 bool rdn_module_init(RDNModule *module) {
+
+    if (!module->register_function(module, "get_byte", get_byte)) {
+        return false;
+    }
+    if (!module->register_function(module, "file_error", file_error)) {
+        return false;
+    }
+    if (!module->register_function(module, "seek_file", seekfile)) {
+        return false;
+    }
     if (!module->register_function(module, "openFileHandle", openfd)) {
         return false;
     }

@@ -25,12 +25,12 @@ THE SOFTWARE.
 *]
 
 "Typecheck" load
+"Core" load
 
 Typecheck open
 Typecheck::OGTypes open
-
-"Core" load
 Core open
+
 "../nativelibs/files" __sharedlib_ext @str append loadnative
 
 
@@ -53,6 +53,9 @@ Files module
              *  also it can be a ptr of FILE stream
              * *]
             Any NullAbleFILEPTR const
+
+            Int SeekMode const
+            Int Byte const
         end
 
         [*
@@ -61,9 +64,23 @@ Files module
         * *]
 
         null fd-ptr let
+
+        [*
+        *   standard system fils stream 
+        *   stdin
+        *   stdout
+        *   stderr
+        * *]
         nativestdin  call stdin  const
         nativestdout call stdout const
         nativestderr call stderr const
+        -1 EOF const
+
+        Seek module
+            0	SET	const [* Seek from beginning of file.  *]
+            1	CUR	const [* Seek from current position.  *]
+            2	END	const [* Seek from end of file.  *]
+        end
 
         fopen ( Str [* filename *] Str [* mode *]) (Files::File::FileTyping::NullAbleFILEPTR) defun
             openFileHandle call Files::File::fd-ptr set
@@ -79,7 +96,7 @@ Files module
             null = [*int ptr bool*] if
                 
                 Files::File::fd-ptr null = if
-                    "non of file descriptor or given fileptr are opened" error
+                    "non of file descriptor or given fileptr are available both of them are null" error
                 else
                     pop
                     Files::File::fd-ptr swap readFromFileHandle call
@@ -98,7 +115,7 @@ Files module
             [*str ptr*]
             null = [*str ptr bool*] if
                 Files::File::fd-ptr null = if
-                    "non file descriptor and given fileptr param are opened" error
+                    "non file descriptor and given fileptr param are available both of them are null" error
                 else
                     pop
                     Files::File::fd-ptr swap writeFromFileHandle call
@@ -121,6 +138,86 @@ Files module
 
             ok
         end
+
+        fseek (
+            Files::File::FileTyping::NullAbleFILEPTR 
+            Int [*as position*]
+            Files::File::FileTyping::SeekMode [* Files::File::Seek::SET*]
+            ) () defun
+
+            mode let
+            pos let
+            stream let
+
+            stream null = if 
+                Files::File::fd-ptr null != if
+                    Files::File::fd-ptr
+                    mode
+                    pos
+                    seek_file call
+                else
+                    "non file descriptor and given fileptr param are available both of them are null" error
+                end
+            else
+                stream
+                pos
+                mode
+                seek_file call
+            end
+
+        end
+
+        fis-error (Files::File::FileTyping::NullAbleFILEPTR) (Bool) defun
+
+            dup null = if
+                pop [*get rid of it*]
+                Files::File::fd-ptr null != if
+                    Files::File::fd-ptr
+                    file_error call
+                else
+                    "non file descriptor and given fileptr param are available both of them are null" error
+                end
+            else
+                file_error call
+            end
+
+        end
+
+        [*returns byte of the current pointer of the stream*]
+        fget-byte (Files::File::FileTyping::NullAbleFILEPTR) (Files::File::FileTyping::Byte) defun 
+
+            dup null = if
+                pop [*get rid of it*]
+                Files::File::fd-ptr null != if
+                    Files::File::fd-ptr
+                    get_byte call
+                else
+                    "non file descriptor and given fileptr param are available both of them are null" error
+                end
+            else
+                get_byte call
+            end
+        end
+
+        feof (Files::File::FileTyping::NullAbleFILEPTR) (Bool) defun
+
+            __check_eof demac
+                Files::File::fget-byte call Files::File::EOF =
+            end
+
+            dup null = if
+                pop [*get rid of it*]
+                Files::File::fd-ptr null != if
+                    Files::File::fd-ptr
+                    __check_eof
+                else
+                    "non file descriptor and given fileptr param are available both of them are null" error
+                end
+            else
+                __check_eof
+            end
+        end
+
     end
 
     read-lines (Str [* file path *]) (List [* list of lines *]) defun
