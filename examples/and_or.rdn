@@ -1,0 +1,14 @@
+"Core" load
+Core open
+
+"Io" load
+Io open
+
+"hey" false @@or @println
+"" false @@or @println
+(1 2 3) "" @@or @println
+(1 2 3) 0 @@and @println
+
+"hey" false @@and @println
+"" false @@and @println
+(1 2 3) "" @@and @println

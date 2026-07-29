@@ -1,0 +1,15 @@
+"Flag" load
+
+setName defun
+  value let
+  value Io::@println call
+end
+
+setVerbose defun
+  ignored let
+  "verbose enabled" Io::@println call
+end
+
+"-n" "--name" true "set the program name" setName addFlag call
+"-v" "--verbose" false "enable verbose mode" setVerbose addFlag call
+("demo" "-n" "raden" "-v" "file1" "--" "--raw") executeOn call print
