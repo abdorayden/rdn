@@ -146,7 +146,6 @@ static Funcs_t *create_func_entry(const char *name, char *body, const char *sour
 static Funcs_t *create_native_func_entry(const char *name, RDNNativeFunction native_function, void *native_library_handle);
 static void free_var_entry(Vars_t *entry);
 static void free_vars(Vars *vars);
-static void free_func_entry(Funcs_t *entry);
 static void free_funcs(Funcs *funcs);
 static bool vars_push_scope(Vars *vars);
 static void vars_pop_scope(Vars *vars);
@@ -212,7 +211,6 @@ static bool materialize_scope_references(RDNState *stack, Vars *vars);
 // to_string builtin function convert value from the top stack to string without remove it
 static bool apply_to_string(RDNState *stack, Vars *vars);
 static bool skip_comment(char **cursor);
-static bool append_char(char **buffer, size_t *length, size_t *capacity, char ch);
 static bool read_string_token(char **cursor, char **out_token);
 static bool read_plain_token(char **cursor, char **out_token);
 static bool next_token(char **cursor, char **out_token, bool *out_is_string);
@@ -289,7 +287,6 @@ static bool native_api_list_index(RDNApi *api, long list_index, long item_index)
 static bool native_api_list_remove(RDNApi *api, long list_index, long item_index);
 static bool native_api_raise_error(RDNApi *api, const char *message);
 static NativeModuleReg *create_native_module_reg(const char *name, RDNNativeFunction function);
-static void free_native_module_reg(NativeModuleReg *reg);
 static void free_native_module_regs(NativeModuleRegs *regs);
 static bool native_module_register_function(RDNModule *module, const char *name, RDNNativeFunction function);
 static bool native_module_set_error(RDNModule *module, const char *message);

@@ -22,7 +22,36 @@
 #include "../include/rdn_native.h"
 #include "stack.h"
 #include "../include/rdn.h"
+#define ARENA_REGION_DEFAULT_CAPACITY (1024*1024) // 1M uintptr_t units = 8MB data per region
+#define ARENA_IMPLEMENTATION
+#include "arena.h"
 
+// All dynamic array memory uses the arena
+#undef ray_reserve
+#define ray_reserve(da, expected_capacity) \
+    do { \
+        if ((expected_capacity) > (da)->capacity) { \
+            size_t old_cap = (da)->capacity; \
+            if ((da)->capacity == 0) { \
+                (da)->capacity = RAY_INIT_CAP; \
+            } \
+            while ((expected_capacity) > (da)->capacity) { \
+                (da)->capacity *= 2; \
+            } \
+            (da)->items = arena_realloc(&g_arena, (da)->items, \
+                old_cap * sizeof(*(da)->items), \
+                (da)->capacity * sizeof(*(da)->items)); \
+        } \
+    } while (0)
+
+#undef ray_clear
+#define ray_clear(da) do { (da)->count = 0; } while(0)
+
+// All allocations use the arena; the OS reclaims everything on exit.
+// No individual free() calls are needed for arena memory.
+#define free(x) ((void)(x))
+
+static Arena g_arena = {0};
 static const char *g_current_source_path = NULL;
 static DiagnosticContext g_diagnostic_context = {0};
 static LoadPathStack g_load_path_stack = {0};
@@ -57,18 +86,10 @@ void add_loaded_file(const char *path) {
 }
 
 void free_loaded_files() {
-    while (g_loaded_files.count > 0) {
-        free(ray_pop(&g_loaded_files));
-    }
-    ray_clear(&g_loaded_files);
     g_loaded_files.count = 0;
 }
 
 static void free_modules(void) {
-    while (g_modules.count > 0) {
-        free(ray_pop(&g_modules));
-    }
-    ray_clear(&g_modules);
     g_modules.count = 0;
 }
 
@@ -94,15 +115,7 @@ static const char *path_last_separator(const char *path);
 static char *get_install_prefix(void);
 
 static char *copy_string(const char *text) {
-    size_t length = strlen(text) + 1;
-    char *copy = malloc(length);
-
-    if (copy == NULL) {
-        return NULL;
-    }
-
-    memcpy(copy, text, length);
-    return copy;
+    return arena_strdup(&g_arena, text);
 }
 
 static void diagnostic_set_source(const char *path, const char *source, size_t base_line, size_t base_column) {
@@ -240,60 +253,35 @@ static bool diagnostic_note_current(const char *fmt, ...) {
 }
 
 static Value *create_null_value(void) {
-    Value *value = malloc(sizeof(*value));
-
-    if (value == NULL) {
-        return NULL;
-    }
-
+    Value *value = arena_alloc(&g_arena, sizeof(*value));
     value->type = VALUE_NULL;
     value->as.integer = 0;
     return value;
 }
 
 static Value *create_integer_value(long integer) {
-    Value *value = malloc(sizeof(*value));
-
-    if (value == NULL) {
-        return NULL;
-    }
-
+    Value *value = arena_alloc(&g_arena, sizeof(*value));
     value->type = VALUE_INTEGER;
     value->as.integer = integer;
     return value;
 }
 
 static Value *create_double_value(double number) {
-    Value *value = malloc(sizeof(*value));
-
-    if (value == NULL) {
-        return NULL;
-    }
-
+    Value *value = arena_alloc(&g_arena, sizeof(*value));
     value->type = VALUE_DOUBLE;
     value->as.number = number;
     return value;
 }
 
 static Value *create_boolean_value(bool boolean) {
-    Value *value = malloc(sizeof(*value));
-    if (value == NULL) {
-        return NULL;
-    }
-
+    Value *value = arena_alloc(&g_arena, sizeof(*value));
     value->type = VALUE_BOOLEAN;
     value->as.boolean = boolean;
     return value;
 }
 
 static Value *create_string_value_owned(char *string) {
-    Value *value = malloc(sizeof(*value));
-
-    if (value == NULL) {
-        free(string);
-        return NULL;
-    }
-
+    Value *value = arena_alloc(&g_arena, sizeof(*value));
     value->type = VALUE_STRING;
     value->as.string = string;
     return value;
@@ -310,12 +298,7 @@ static Value *create_string_value_copy(const char *string) {
 }
 
 static Value *create_list_value(void) {
-    Value *value = malloc(sizeof(*value));
-
-    if (value == NULL) {
-        return NULL;
-    }
-
+    Value *value = arena_alloc(&g_arena, sizeof(*value));
     value->type = VALUE_LIST;
     value->as.list.items = NULL;
     value->as.list.count = 0;
@@ -324,19 +307,9 @@ static Value *create_list_value(void) {
 }
 
 static Value *create_var_name_value(const char *name) {
-    Value *value = malloc(sizeof(*value));
-
-    if (value == NULL) {
-        return NULL;
-    }
-
+    Value *value = arena_alloc(&g_arena, sizeof(*value));
     value->type = VALUE_AS_VAR;
     value->as.string = copy_string(name);
-    if (value->as.string == NULL) {
-        free(value);
-        return NULL;
-    }
-
     return value;
 }
 
@@ -382,12 +355,7 @@ static Value *clone_value(const Value *value) {
 }
 
 static Vars_t *create_scope_marker(void) {
-    Vars_t *entry = malloc(sizeof(*entry));
-
-    if (entry == NULL) {
-        return NULL;
-    }
-
+    Vars_t *entry = arena_alloc(&g_arena, sizeof(*entry));
     entry->var_name = NULL;
     entry->var_value = NULL;
     entry->is_scope_marker = true;
@@ -396,18 +364,8 @@ static Vars_t *create_scope_marker(void) {
 }
 
 static Vars_t *create_var_entry(const char *name, Value *value, bool is_const) {
-    Vars_t *entry = malloc(sizeof(*entry));
-
-    if (entry == NULL) {
-        return NULL;
-    }
-
+    Vars_t *entry = arena_alloc(&g_arena, sizeof(*entry));
     entry->var_name = copy_string(name);
-    if (entry->var_name == NULL) {
-        free(entry);
-        return NULL;
-    }
-
     entry->var_value = value;
     entry->is_scope_marker = false;
     entry->is_const = is_const;
@@ -415,29 +373,11 @@ static Vars_t *create_var_entry(const char *name, Value *value, bool is_const) {
 }
 
 static Funcs_t *create_func_entry(const char *name, char *body, const char *source_path, size_t source_line, size_t source_column) {
-    Funcs_t *entry = malloc(sizeof(*entry));
-
-    if (entry == NULL) {
-        free(body);
-        return NULL;
-    }
-
+    Funcs_t *entry = arena_alloc(&g_arena, sizeof(*entry));
     entry->func_name = copy_string(name);
-    if (entry->func_name == NULL) {
-        free(body);
-        free(entry);
-        return NULL;
-    }
-
     entry->type = FUNC_SCRIPT;
     entry->as.func_body = body;
     entry->source_path = copy_string(source_path == NULL ? "<repl>" : source_path);
-    if (entry->source_path == NULL) {
-        free(entry->func_name);
-        free(body);
-        free(entry);
-        return NULL;
-    }
     entry->source_line = source_line;
     entry->source_column = source_column;
     entry->native_library_handle = NULL;
@@ -445,18 +385,8 @@ static Funcs_t *create_func_entry(const char *name, char *body, const char *sour
 }
 
 static Funcs_t *create_native_func_entry(const char *name, RDNNativeFunction native_function, void *native_library_handle) {
-    Funcs_t *entry = malloc(sizeof(*entry));
-
-    if (entry == NULL) {
-        return NULL;
-    }
-
+    Funcs_t *entry = arena_alloc(&g_arena, sizeof(*entry));
     entry->func_name = copy_string(name);
-    if (entry->func_name == NULL) {
-        free(entry);
-        return NULL;
-    }
-
     entry->type = FUNC_NATIVE;
     entry->as.native_function = native_function;
     entry->source_path = NULL;
@@ -467,58 +397,29 @@ static Funcs_t *create_native_func_entry(const char *name, RDNNativeFunction nat
 }
 
 static void free_var_entry(Vars_t *entry) {
-    if (entry == NULL) {
-        return;
-    }
-
-    free(entry->var_name);
-    free_value(entry->var_value);
-    free(entry);
+    (void)entry;
 }
 
 static void free_vars(Vars *vars) {
-    while (vars->count > 0) {
-        free_var_entry(ray_pop(vars));
-    }
-
-    ray_clear(vars);
-}
-
-static void free_func_entry(Funcs_t *entry) {
-    if (entry == NULL) {
-        return;
-    }
-
-    free(entry->func_name);
-    if (func_entry_has_body(entry)) {
-        free(entry->as.func_body);
-    }
-    free(entry->source_path);
-    free(entry);
+    vars->count = 0;
 }
 
 static void free_funcs(Funcs *funcs) {
-    while (funcs->count > 0) {
-        Funcs_t *entry = ray_pop(funcs);
-        void *library_handle = entry->native_library_handle;
-        bool seen = false;
-
-        if (library_handle != NULL) {
-            for (size_t index = 0; index < funcs->count; index++) {
-                if (funcs->items[index]->native_library_handle == library_handle) {
+    // Only close native library handles — entries are arena-managed
+    for (size_t i = 0; i < funcs->count; i++) {
+        void *handle = funcs->items[i]->native_library_handle;
+        if (handle != NULL) {
+            bool seen = false;
+            for (size_t j = i + 1; j < funcs->count; j++) {
+                if (funcs->items[j]->native_library_handle == handle) {
                     seen = true;
                     break;
                 }
             }
-        }
-
-        free_func_entry(entry);
-        if (library_handle != NULL && !seen) {
-            native_library_close(library_handle);
+            if (!seen) native_library_close(handle);
         }
     }
-
-    ray_clear(funcs);
+    funcs->count = 0;
 }
 
 static void *native_library_open(const char *path) {
@@ -666,17 +567,9 @@ static bool funcs_define(Funcs *funcs, const char *name, char *body, const char 
     Funcs_t *entry = find_func_entry(funcs, name);
 
     if (entry != NULL) {
-        if (func_entry_has_body(entry)) {
-            free(entry->as.func_body);
-        }
         entry->type = FUNC_SCRIPT;
         entry->as.func_body = body;
-        free(entry->source_path);
         entry->source_path = copy_string(source_path == NULL ? "<repl>" : source_path);
-        if (entry->source_path == NULL) {
-            free(body);
-            return diagnostic_error_current("failed to allocate function source path");
-        }
         entry->source_line = source_line;
         entry->source_column = source_column;
         entry->native_library_handle = NULL;
@@ -696,17 +589,9 @@ static bool funcs_define_apply(Funcs *funcs, const char *name, char *body, const
     Funcs_t *entry = find_func_entry(funcs, name);
 
     if (entry != NULL) {
-        if (func_entry_has_body(entry)) {
-            free(entry->as.func_body);
-        }
         entry->type = FUNC_APPLY;
         entry->as.func_body = body;
-        free(entry->source_path);
         entry->source_path = copy_string(source_path == NULL ? "<repl>" : source_path);
-        if (entry->source_path == NULL) {
-            free(body);
-            return diagnostic_error_current("failed to allocate function source path");
-        }
         entry->source_line = source_line;
         entry->source_column = source_column;
         entry->native_library_handle = NULL;
@@ -727,17 +612,9 @@ static bool funcs_define_demac(Funcs *funcs, const char *name, char *body, const
     Funcs_t *entry = find_func_entry(funcs, name);
 
     if (entry != NULL) {
-        if (func_entry_has_body(entry)) {
-            free(entry->as.func_body);
-        }
         entry->type = FUNC_DEMAC;
         entry->as.func_body = body;
-        free(entry->source_path);
         entry->source_path = copy_string(source_path == NULL ? "<repl>" : source_path);
-        if (entry->source_path == NULL) {
-            free(body);
-            return diagnostic_error_current("failed to allocate macro source path");
-        }
         entry->source_line = source_line;
         entry->source_column = source_column;
         entry->native_library_handle = NULL;
@@ -850,30 +727,11 @@ static bool vars_const(Vars *vars, const char *name, const Value *value) {
 }
 
 static void free_value(Value *value) {
-    size_t index = 0;
-
-    if (value == NULL) {
-        return;
-    }
-
-    if (value->type == VALUE_STRING || value->type == VALUE_AS_VAR) {
-        free(value->as.string);
-    } else if (value->type == VALUE_LIST) {
-        for (index = 0; index < value->as.list.count; index++) {
-            free_value(value->as.list.items[index]);
-        }
-        free(value->as.list.items);
-    }
-
-    free(value);
+    (void)value;
 }
 
 static void free_stack_values(RDNState *stack) {
-    while (!(ray_is_empty(stack))) {
-        free_value(ray_pop(stack));
-    }
-
-    ray_clear(stack);
+    stack->count = 0;
 }
 
 static bool push_value(RDNState *stack, Value *value) {
@@ -1455,7 +1313,6 @@ static bool apply_debug(RDNState *stack) {
     append_text(&buffer, &length, "]");
 
     diagnostic_note_current("stack [%zu]: %s", stack->count, buffer);
-    free(buffer);
     return true;
 }
 
@@ -1689,12 +1546,12 @@ static bool apply_to_string(RDNState *stack, Vars *vars) {
             }
         }break;
         case VALUE_DOUBLE:{
-            char *forStore = malloc(16);
+            char *forStore = arena_alloc(&g_arena, 16);
             snprintf(forStore, 16, "%lf", value->as.number);
             converted = create_string_value_owned(forStore);
         }break;
         case VALUE_INTEGER:{
-            char *forStore = malloc(16);
+            char *forStore = arena_alloc(&g_arena, 16);
             snprintf(forStore, 16, "%ld", value->as.integer);
             converted = create_string_value_owned(forStore);
         }break;
@@ -1749,22 +1606,15 @@ static bool append_string_repr(char **target_string, const Value *value) {
 
     length = strlen(buffer);
     if (!append_value_repr(&buffer, &length, value)) {
-        free(buffer);
         return false;
     }
 
-    free(*target_string);
     *target_string = buffer;
     return true;
 }
 
 static Value *create_string_char_value(char ch) {
-    char *buffer = malloc(2);
-
-    if (buffer == NULL) {
-        return NULL;
-    }
-
+    char *buffer = arena_alloc(&g_arena, 2);
     buffer[0] = ch;
     buffer[1] = '\0';
     return create_string_value_owned(buffer);
@@ -2155,7 +2005,7 @@ static bool apply_load(RDNState *stack, Vars *vars, Funcs *funcs){
 
     size_t plen = strlen(path);
     if (plen < 4 || strcmp(path + plen - 4, ".rdn") != 0){
-        char* buffer = malloc(plen + 5);
+        char* buffer = arena_alloc(&g_arena, plen + 5);
         snprintf(buffer, plen + 5, "%s.rdn", path);
         path_copy = copy_string(buffer);
         free(buffer);
@@ -2266,7 +2116,7 @@ static bool apply_loadnative(RDNState *stack, Vars *vars, Funcs *funcs) {
     if (path_length >= shared_ext_length && strcmp(path + path_length - shared_ext_length, shared_ext) == 0) {
         path_copy = copy_string(path);
     } else {
-        char *buffer = malloc(path_length + shared_ext_length + 1);
+        char *buffer = arena_alloc(&g_arena, path_length + shared_ext_length + 1);
 
         if (buffer != NULL) {
             snprintf(buffer, path_length + shared_ext_length + 1, "%s%s", path, shared_ext);
@@ -2431,7 +2281,7 @@ static char *build_nested_module_prefix(const char *previous_prefix, const char 
     size_t base_len = previous_len > suffix_len ? previous_len - suffix_len : 0;
     size_t name_len = strlen(name);
     size_t total_len = base_len + (previous_prefix != NULL ? 2 : 0) + name_len + suffix_len + 1;
-    char *prefix = malloc(total_len);
+    char *prefix = arena_alloc(&g_arena, total_len);
 
     if (prefix == NULL) {
         return NULL;
@@ -2483,7 +2333,7 @@ static bool apply_module(RDNState *stack, Vars *vars, Funcs *funcs, char **curso
         if (g_module_func_prefix != NULL) {
             size_t prefix_len = strlen(g_module_func_prefix);
             size_t name_len = strlen(name->as.string);
-            qualified_name = malloc(prefix_len + name_len + 1);
+            qualified_name = arena_alloc(&g_arena, prefix_len + name_len + 1);
             if (qualified_name == NULL) {
                 free_value(name);
                 return diagnostic_error_current("failed to allocate qualified module name");
@@ -2529,7 +2379,6 @@ static bool apply_module(RDNState *stack, Vars *vars, Funcs *funcs, char **curso
 
         if (!is_string && is_token(token, "demac")) {
             if (!skip_demac(&scan)) {
-                free(token);
                 free_value(name);
                 return false;
             }
@@ -2540,10 +2389,9 @@ static bool apply_module(RDNState *stack, Vars *vars, Funcs *funcs, char **curso
             depth--;
             if (depth == 0) {
                 size_t body_length = (size_t)(token_start - body_start);
-                body = malloc(body_length + 1);
+                body = arena_alloc(&g_arena, body_length + 1);
                 if (body == NULL) {
                     diagnostic_error_at(token_start, "failed to allocate module body");
-                    free(token);
                     free_value(name);
                     return false;
                 }
@@ -2561,7 +2409,6 @@ static bool apply_module(RDNState *stack, Vars *vars, Funcs *funcs, char **curso
                         free(new_func_prefix);
                         free(new_var_prefix);
                         diagnostic_error_at(token_start, "failed to allocate module prefix");
-                        free(token);
                         free_value(name);
                         free(body);
                         return false;
@@ -2571,7 +2418,6 @@ static bool apply_module(RDNState *stack, Vars *vars, Funcs *funcs, char **curso
                     g_module_var_prefix = new_var_prefix;
 
                     if (!evaluate_source(stack, vars, funcs, body)) {
-                        free(token);
                         free_value(name);
                         free(body);
                         free(g_module_func_prefix);
@@ -2587,7 +2433,6 @@ static bool apply_module(RDNState *stack, Vars *vars, Funcs *funcs, char **curso
                     g_module_var_prefix = previous_var_prefix;
                 }
 
-                free(token);
                 free_value(name);
                 free(body);
                 *cursor = scan;
@@ -2595,7 +2440,6 @@ static bool apply_module(RDNState *stack, Vars *vars, Funcs *funcs, char **curso
             }
         }
 
-        free(token);
     }
 }
 
@@ -2614,7 +2458,7 @@ static bool apply_open_full_module(Value *name, Vars *vars, Funcs *funcs) {
             Funcs_t *existing = find_func_entry(funcs, alias);
 
             if (existing == NULL) {
-                Funcs_t *alias_entry = malloc(sizeof(Funcs_t));
+                Funcs_t *alias_entry = arena_alloc(&g_arena, sizeof(Funcs_t));
                 if (alias_entry == NULL) {
                     return diagnostic_error_current("failed to allocate module function alias");
                 }
@@ -2685,7 +2529,7 @@ static bool apply_open_selective(Value *name, Vars *vars, Funcs *funcs) {
             strcmp(entry->func_name, full_name) == 0) {
             Funcs_t *existing = find_func_entry(funcs, member);
             if (existing == NULL) {
-                Funcs_t *alias_entry = malloc(sizeof(Funcs_t));
+                Funcs_t *alias_entry = arena_alloc(&g_arena, sizeof(Funcs_t));
                 if (alias_entry == NULL) {
                     return diagnostic_error_current("failed to allocate function alias");
                 }
@@ -2812,7 +2656,7 @@ static bool apply_defun(RDNState *stack, Vars *vars, Funcs *funcs, char **cursor
     if (g_module_func_prefix != NULL) {
         size_t name_len = strlen(name->as.string);
         size_t prefix_len = strlen(g_module_func_prefix);
-        char *prefixed = malloc(prefix_len + name_len + 1);
+        char *prefixed = arena_alloc(&g_arena, prefix_len + name_len + 1);
         if (prefixed == NULL) {
             free_value(name);
             return diagnostic_error_current("failed to allocate module-prefixed function name");
@@ -2853,7 +2697,6 @@ static bool apply_defun(RDNState *stack, Vars *vars, Funcs *funcs, char **cursor
 
         if (!is_string && is_token(token, "demac")) {
             if (!skip_demac(&scan)) {
-                free(token);
                 free_value(name);
                 free_value(params);
                 free_value(returns);
@@ -2866,10 +2709,9 @@ static bool apply_defun(RDNState *stack, Vars *vars, Funcs *funcs, char **cursor
             depth--;
             if (depth == 0) {
                 size_t body_length = (size_t)(token_start - body_start);
-                body = malloc(body_length + 1);
+                body = arena_alloc(&g_arena, body_length + 1);
                 if (body == NULL) {
                     diagnostic_error_at(token_start, "failed to allocate function body");
-                    free(token);
                     free_value(name);
                     free_value(params);
                     free_value(returns);
@@ -2880,7 +2722,6 @@ static bool apply_defun(RDNState *stack, Vars *vars, Funcs *funcs, char **cursor
                 body[body_length] = '\0';
 
                 if (!funcs_define(funcs, name->as.string, body, g_current_source_path, source_line, source_column)) {
-                    free(token);
                     free_value(name);
                     free_value(params);
                     free_value(returns);
@@ -2888,14 +2729,12 @@ static bool apply_defun(RDNState *stack, Vars *vars, Funcs *funcs, char **cursor
                 }
 
                 if (signed_defun && !append_typecheck_signature(vars, name->as.string, params, returns)) {
-                    free(token);
                     free_value(name);
                     free_value(params);
                     free_value(returns);
                     return false;
                 }
 
-                free(token);
                 free_value(name);
                 free_value(params);
                 free_value(returns);
@@ -2904,7 +2743,6 @@ static bool apply_defun(RDNState *stack, Vars *vars, Funcs *funcs, char **cursor
             }
         }
 
-        free(token);
     }
 }
 
@@ -2933,7 +2771,7 @@ static bool apply_apply(RDNState *stack, Funcs *funcs, char **cursor) {
     if (g_module_func_prefix != NULL) {
         size_t name_len = strlen(name->as.string);
         size_t prefix_len = strlen(g_module_func_prefix);
-        char *prefixed = malloc(prefix_len + name_len + 1);
+        char *prefixed = arena_alloc(&g_arena, prefix_len + name_len + 1);
         if (prefixed == NULL) {
             free_value(name);
             return diagnostic_error_current("failed to allocate module-prefixed apply name");
@@ -2962,7 +2800,6 @@ static bool apply_apply(RDNState *stack, Funcs *funcs, char **cursor) {
 
         if (!is_string && is_token(token, "demac")) {
             if (!skip_demac(&scan)) {
-                free(token);
                 free_value(name);
                 return false;
             }
@@ -2973,10 +2810,9 @@ static bool apply_apply(RDNState *stack, Funcs *funcs, char **cursor) {
             depth--;
             if (depth == 0) {
                 size_t body_length = (size_t)(token_start - body_start);
-                body = malloc(body_length + 1);
+                body = arena_alloc(&g_arena, body_length + 1);
                 if (body == NULL) {
                     diagnostic_error_at(token_start, "failed to allocate apply body");
-                    free(token);
                     free_value(name);
                     return false;
                 }
@@ -2985,19 +2821,16 @@ static bool apply_apply(RDNState *stack, Funcs *funcs, char **cursor) {
                 body[body_length] = '\0';
 
                 if (!funcs_define_apply(funcs, name->as.string, body, g_current_source_path, source_line, source_column)) {
-                    free(token);
                     free_value(name);
                     return false;
                 }
 
-                free(token);
                 free_value(name);
                 *cursor = scan;
                 return true;
             }
         }
 
-        free(token);
     }
 }
 
@@ -3025,7 +2858,7 @@ static bool apply_demac(RDNState *stack, Funcs *funcs, char **cursor) {
     if (g_module_func_prefix != NULL) {
         size_t name_len = strlen(name->as.string);
         size_t prefix_len = strlen(g_module_func_prefix);
-        char *prefixed = malloc(prefix_len + name_len + 1);
+        char *prefixed = arena_alloc(&g_arena, prefix_len + name_len + 1);
         if (prefixed == NULL) {
             free_value(name);
             return diagnostic_error_current("failed to allocate module-prefixed demac name");
@@ -3054,10 +2887,9 @@ static bool apply_demac(RDNState *stack, Funcs *funcs, char **cursor) {
 
         if (!is_string && is_token(token, "end")) {
             size_t body_length = (size_t)(token_start - body_start);
-            body = malloc(body_length + 1);
+            body = arena_alloc(&g_arena, body_length + 1);
             if (body == NULL) {
                 diagnostic_error_at(token_start, "failed to allocate macro body");
-                free(token);
                 free_value(name);
                 return false;
             }
@@ -3066,25 +2898,22 @@ static bool apply_demac(RDNState *stack, Funcs *funcs, char **cursor) {
             body[body_length] = '\0';
 
             if (!funcs_define_demac(funcs, name->as.string, body, g_current_source_path, source_line, source_column)) {
-                free(token);
                 free_value(name);
                 return false;
             }
 
-            free(token);
             free_value(name);
             *cursor = scan;
             return true;
         }
 
-        free(token);
     }
 }
 
 static bool expand_demac(Funcs_t *entry, char **cursor) {
     size_t body_length = strlen(entry->as.func_body);
     size_t rest_length = strlen(*cursor);
-    char *expanded = malloc(body_length + rest_length + 1);
+    char *expanded = arena_alloc(&g_arena, body_length + rest_length + 1);
 
     if (expanded == NULL) {
         return diagnostic_error_current("failed to allocate macro expansion");
@@ -3099,11 +2928,7 @@ static bool expand_demac(Funcs_t *entry, char **cursor) {
 }
 
 static void free_macro_expansion_stack(MacroExpansionStack *expansions) {
-    while (expansions->count > 0) {
-        free(ray_pop(expansions));
-    }
-
-    ray_clear(expansions);
+    expansions->count = 0;
 }
 
 static void free_macro_expansions(void) {
@@ -3407,85 +3232,51 @@ static bool skip_comment(char **cursor) {
     return diagnostic_error_at(comment_start, "unterminated comment");
 }
 
-static bool append_char(char **buffer, size_t *length, size_t *capacity, char ch) {
-    char *grown = NULL;
+static bool read_string_token(char **cursor, char **out_token) {
+    const char *start = *cursor + 1;
+    size_t len = 0;
+    const char *scan = start;
 
-    if (*length + 1 >= *capacity) {
-        size_t new_capacity = (*capacity == 0) ? 16 : (*capacity * 2);
-        grown = realloc(*buffer, new_capacity);
-        if (grown == NULL) {
-            return false;
+    // First pass: measure the decoded length
+    while (*scan != '\0' && *scan != '"') {
+        if (*scan == '\\') {
+            scan++;
+            if (*scan == '\0') break;
         }
-        *buffer = grown;
-        *capacity = new_capacity;
+        scan++;
+        len++;
+    }
+    if (*scan != '"') {
+        diagnostic_error_at(*cursor, "unterminated string literal");
+        return false;
     }
 
-    (*buffer)[(*length)++] = ch;
-    return true;
-}
+    // Allocate exact buffer from arena
+    char *buffer = arena_alloc(&g_arena, len + 1);
+    if (buffer == NULL) return false;
 
-static bool read_string_token(char **cursor, char **out_token) {
-    const char *string_start = *cursor;
-    char *buffer = NULL;
-    size_t length = 0;
-    size_t capacity = 0;
-    char escaped = '\0';
-
+    // Second pass: fill the buffer
     (*cursor)++;
-
-    while (**cursor != '\0') {
-        if (**cursor == '"') {
-            (*cursor)++;
-            if (!append_char(&buffer, &length, &capacity, '\0')) {
-                free(buffer);
-                return false;
-            }
-            *out_token = buffer;
-            return true;
-        }
-
+    size_t i = 0;
+    while (**cursor != '"') {
         if (**cursor == '\\') {
             (*cursor)++;
-            if (**cursor == '\0') {
-                break;
+            switch (**cursor) {
+                case 'n': buffer[i++] = '\n'; break;
+                case 't': buffer[i++] = '\t'; break;
+                case 'r': buffer[i++] = '\r'; break;
+                case 'e': buffer[i++] = '\x1b'; break;
+                default:  buffer[i++] = **cursor; break;
             }
-
-            if (**cursor == 'n') {
-                escaped = '\n';
-            } else if (**cursor == 't') {
-                escaped = '\t';
-            } else if (**cursor == 'r') {
-                escaped = '\r';
-            } else if (**cursor == '\\') {
-                escaped = '\\';
-            } else if (**cursor == '"') {
-                escaped = '"';
-            } else if (**cursor == 'e') {
-                escaped = '\x1b';
-            } else {
-                escaped = **cursor;
-            }
-
-            if (!append_char(&buffer, &length, &capacity, escaped)) {
-                free(buffer);
-                return false;
-            }
-
-            (*cursor)++;
-            continue;
+        } else {
+            buffer[i++] = **cursor;
         }
-
-        if (!append_char(&buffer, &length, &capacity, **cursor)) {
-            free(buffer);
-            return false;
-        }
-
         (*cursor)++;
     }
-
-    diagnostic_error_at(string_start, "unterminated string literal");
-    free(buffer);
-    return false;
+    buffer[i] = '\0';
+    (*cursor)++;
+    *out_token = buffer;
+    return true;
 }
 
 static bool read_plain_token(char **cursor, char **out_token) {
@@ -3494,10 +3285,7 @@ static bool read_plain_token(char **cursor, char **out_token) {
     char *token = NULL;
 
     if (**cursor == '(' || **cursor == ')') {
-        token = malloc(2);
-        if (token == NULL) {
-            return false;
-        }
+        token = arena_alloc(&g_arena, 2);
         token[0] = **cursor;
         token[1] = '\0';
         (*cursor)++;
@@ -3515,11 +3303,7 @@ static bool read_plain_token(char **cursor, char **out_token) {
         length++;
     }
 
-    token = malloc(length + 1);
-    if (token == NULL) {
-        return false;
-    }
-
+    token = arena_alloc(&g_arena, length + 1);
     memcpy(token, start, length);
     token[length] = '\0';
     *cursor += length;
@@ -3630,14 +3414,12 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
         }
 
         if (!is_string && is_token(token, ")")) {
-            free(token);
             return true;
         }
 
         if (!is_string && is_token(token, "(")) {
             Value *list_value = NULL;
 
-            free(token);
             list_value = parse_list_literal(cursor, vars, funcs);
             if (list_value == NULL) {
                 return false;
@@ -3645,15 +3427,12 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
             ray_append(stack, list_value);
             continue;
         } else if (is_token(token, "else")) {
-            free(token);
             return diagnostic_error_current("unexpected else");
         } else if (is_token(token, "end")) {
-            free(token);
             return diagnostic_error_current("unexpected end");
         } else if (is_token(token, "if")) {
             BlockStop stop_reason = BLOCK_STOP_EOF;
 
-            free(token);
             if (!apply_if(stack, vars, funcs, cursor, &stop_reason)) {
                 return false;
             }
@@ -3670,7 +3449,6 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
         } else if (is_token(token, "loop")) {
             BlockStop stop_reason = BLOCK_STOP_EOF;
 
-            free(token);
             if (!apply_loop(stack, vars, funcs, cursor, &stop_reason)) {
                 return false;
             }
@@ -3679,240 +3457,178 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
             }
             continue;
         } else if (is_token(token, "defun")) {
-            free(token);
             if (!apply_defun(stack, vars, funcs, cursor)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "module")) {
-            free(token);
             if (!apply_module(stack, vars, funcs, cursor)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "open")) {
-            free(token);
             if (!apply_open(stack, vars, funcs, cursor)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "apply")) {
-            free(token);
             if (!apply_apply(stack, funcs, cursor)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "demac")) {
-            free(token);
             if (!apply_demac(stack, funcs, cursor)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "call")) {
-            free(token);
             if (!apply_call(stack, vars, funcs)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "pcall")) {
-            free(token);
             if (!apply_pcall(stack, vars, funcs)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "break")) {
-            free(token);
             return diagnostic_error_current("unexpected break");
         } else if (is_token(token, "continue")) {
-            free(token);
             return diagnostic_error_current("unexpected continue");
         } else if (is_token(token, "ret")) {
-            free(token);
             return diagnostic_error_current("unexpected ret");
         } else if (is_value_token(token, is_string)) {
             if (!push_token_value(stack, token, is_string)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_operator_token(token)) {
             if (!apply_binary_operator(stack, vars, token)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "print")) {
             if (!apply_print(stack, vars)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "dbg") || is_token(token, "???")) {
             if (!apply_debug(stack)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "type")) {
             if (!apply_type(stack, vars, funcs)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "__func_name")) {
             if (!apply_func_name(stack, funcs)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "__stack_size")) {
             if (!apply_stack_size(stack)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "exit")) {
             int ret = 0;
 
             if (!apply_exit(stack, vars, &ret)) {
-                free(token);
                 return false;
             }
-            free(token);
             free_stack_values(stack);
             exit(ret);
         } else if (is_token(token, "pop")) {
             if (!apply_pop(stack)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "swap")) {
             if (!apply_swap(stack)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "dup")) {
             if (!apply_dup(stack, vars)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "let")) {
             if (!apply_let(stack, vars)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "set")) {
             if (!apply_set(stack, vars)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "enum")) {
             if (!apply_enum(stack, vars, false)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "reset")) {
             if (!apply_enum(stack, vars, true)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "const")) {
             if (!apply_const(stack, vars)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "to_string")) {
             if (!apply_to_string(stack, vars)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "append")) {
             if (!apply_append(stack, vars)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "remove")) {
             if (!apply_remove(stack, vars)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "index")) {
             if (!apply_index(stack, vars)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "len")) {
             if (!apply_len(stack, vars)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "match")) {
             if (!apply_match(stack, vars)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "add_load_path")) {
             if (!apply_add_load_path(stack, vars)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "add_native_path")) {
             if (!apply_add_native_path(stack, vars)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "load")) {
             if (!apply_load(stack, vars, funcs)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "loadnative")) {
             if (!apply_loadnative(stack, vars, funcs)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_identifier_token(token)) {
             Value *resolved = NULL;
@@ -3928,14 +3644,11 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
                 resolved = clone_value(var_entry->var_value);
             } else if ((func_entry = find_func_entry(funcs, token)) != NULL && func_entry->type == FUNC_DEMAC) {
                 if (!expand_demac(func_entry, cursor)) {
-                    free(token);
                     return false;
                 }
-                free(token);
                 continue;
             } else if (func_entry != NULL && func_entry->type == FUNC_APPLY) {
                 bool ok = execute_named_entry(stack, vars, funcs, func_entry, "applying body", func_entry->func_name);
-                free(token);
                 if (!ok) {
                     return false;
                 }
@@ -3945,14 +3658,11 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
             }
 
             if (!push_value(stack, resolved)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else {
             bool ok = diagnostic_error_current("unknown token: %s", token);
-            free(token);
             return ok;
         }
     }
@@ -4043,28 +3753,53 @@ static bool is_identifier_token(const char *token) {
 }
 
 static bool identifier_is_name_target(char *cursor) {
-    char *next = NULL;
-    bool is_string = false;
+    // Skip whitespace, commas, and comments
+    while (*cursor != '\0') {
+        if (isspace((unsigned char)*cursor) || *cursor == ',') {
+            cursor++;
+            continue;
+        }
+        if (cursor[0] == '[' && cursor[1] == '*') {
+            cursor += 2;
+            while (*cursor != '\0') {
+                if (cursor[0] == '*' && cursor[1] == ']') {
+                    cursor += 2;
+                    break;
+                }
+                cursor++;
+            }
+            continue;
+        }
+        break;
+    }
 
-    if (!next_token(&cursor, &next, &is_string)) {
+    if (*cursor == '\0' || *cursor == '"') {
         return false;
     }
 
-    if (next == NULL) {
-        return false;
+    // Measure the next token length
+    const char *start = cursor;
+    size_t len = 0;
+    if (*cursor == '(' || *cursor == ')') {
+        len = 1;
+    } else {
+        while (cursor[len] != '\0' && !isspace((unsigned char)cursor[len]) &&
+               cursor[len] != ',' && cursor[len] != '(' && cursor[len] != ')') {
+            if (cursor[len] == '[' && cursor[len + 1] == '*') break;
+            len++;
+        }
     }
 
-    if (!is_string &&
-        (is_token(next, "let") || is_token(next, "set") || is_token(next, "const") ||
-         is_token(next, "defun") || is_token(next, "apply") || is_token(next, "call") || is_token(next, "unlet") || is_token(next, "demac") ||
-         is_token(next, "module") || is_token(next, "open")
-         )) {
-        free(next);
-        return true;
-    }
+    // Check if it's a name-target keyword
+    #define IS_KEYWORD(n, s) (len == n && memcmp(start, s, n) == 0)
+    bool is_target = IS_KEYWORD(3, "let") || IS_KEYWORD(3, "set") ||
+                     IS_KEYWORD(5, "const") || IS_KEYWORD(5, "defun") ||
+                     IS_KEYWORD(5, "apply") || IS_KEYWORD(4, "call") ||
+                     IS_KEYWORD(5, "unlet") || IS_KEYWORD(5, "demac") ||
+                     IS_KEYWORD(6, "module") || IS_KEYWORD(4, "open");
+    #undef IS_KEYWORD
 
-    free(next);
-    return false;
+    return is_target;
 }
 
 static bool apply_error(RDNState *stack, Vars *vars) {
@@ -4257,7 +3992,7 @@ static bool apply_let(RDNState *stack, Vars *vars) {
     if (g_module_var_prefix != NULL) {
         size_t name_len = strlen(name->as.string);
         size_t prefix_len = strlen(g_module_var_prefix);
-        char *prefixed = malloc(prefix_len + name_len + 1);
+        char *prefixed = arena_alloc(&g_arena, prefix_len + name_len + 1);
         if (prefixed == NULL) {
             free_value(name);
             free_value(value);
@@ -4353,7 +4088,7 @@ static bool apply_const(RDNState *stack, Vars *vars) {
     if (g_module_var_prefix != NULL) {
         size_t name_len = strlen(name->as.string);
         size_t prefix_len = strlen(g_module_var_prefix);
-        char *prefixed = malloc(prefix_len + name_len + 1);
+        char *prefixed = arena_alloc(&g_arena, prefix_len + name_len + 1);
         if (prefixed == NULL) {
             free_value(name);
             free_value(value);
@@ -4594,25 +4329,21 @@ static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **curs
 
         if (!is_string && is_token(token, "(")) {
             Value *list_value = parse_list_literal(cursor, vars, funcs);
-            free(token);
             if (list_value == NULL) {
                 return false;
             }
             ray_append(stack, list_value);
             continue;
         } else if (is_token(token, "else")) {
-            free(token);
             if (!allow_else) {
                 return diagnostic_error_current("unexpected else");
             }
             *stop_reason = BLOCK_STOP_ELSE;
             return true;
         } else if (is_token(token, "end")) {
-            free(token);
             *stop_reason = BLOCK_STOP_END;
             return true;
         } else if (is_token(token, "if")) {
-            free(token);
             if (!apply_if(stack, vars, funcs, cursor, stop_reason)) {
                 return false;
             }
@@ -4621,7 +4352,6 @@ static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **curs
             }
             continue;
         } else if (is_token(token, "loop")) {
-            free(token);
             if (!apply_loop(stack, vars, funcs, cursor, stop_reason)) {
                 return false;
             }
@@ -4630,284 +4360,210 @@ static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **curs
             }
             continue;
         } else if (is_token(token, "defun")) {
-            free(token);
             if (!apply_defun(stack, vars, funcs, cursor)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "module")) {
-            free(token);
             if (!apply_module(stack, vars, funcs, cursor)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "open")) {
-            free(token);
             if (!apply_open(stack, vars, funcs, cursor)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "apply")) {
-            free(token);
             if (!apply_apply(stack, funcs, cursor)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "demac")) {
-            free(token);
             if (!apply_demac(stack, funcs, cursor)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "call")) {
-            free(token);
             if (!apply_call(stack, vars, funcs)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "pcall")) {
-            free(token);
             if (!apply_pcall(stack, vars, funcs)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "break")) {
-            free(token);
             *stop_reason = BLOCK_STOP_BREAK;
             return true;
         } else if (is_token(token, "continue")) {
-            free(token);
             *stop_reason = BLOCK_STOP_CONTINUE;
             return true;
         } else if (is_token(token, "ret")) {
-            free(token);
             *stop_reason = BLOCK_STOP_RETURN;
             return true;
         } else if (is_value_token(token, is_string)) {
             if (!push_token_value(stack, token, is_string)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_operator_token(token)) {
             if (!apply_binary_operator(stack, vars, token)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "print")) {
             if (!apply_print(stack, vars)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "type")) {
             if (!apply_type(stack, vars, funcs)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "__func_name")) {
             if (!apply_func_name(stack, funcs)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "__stack_size")) {
             if (!apply_stack_size(stack)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "exit")){
             int ret = 0;
             if (!apply_exit(stack, vars, &ret)) {
-                free(token);
                 return false;
             }
-            free(token);
             free_stack_values(stack);
             exit(ret);
         } else if (is_token(token, "pop")) {
             if (!apply_pop(stack)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "swap")) {
             if (!apply_swap(stack)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "dup")) {
             if (!apply_dup(stack, vars)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "let")) {
             if (!apply_let(stack, vars)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         }else if (is_token(token, "assert")) {
             if (!apply_assert(stack, vars)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "unlet")) {
             if (!apply_unlet(stack, vars)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "do_string")) {
             if (!apply_do_string(stack, vars , funcs)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "do_file")) {
             if (!apply_do_file(stack, vars , funcs)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "__line_col")) {
             if (!apply_line_col(stack)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "__file")) {
             if (!apply_file_name(stack)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "error")) {
             if (!apply_error(stack, vars)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "set")) {
             if (!apply_set(stack, vars)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "enum")) {
             if (!apply_enum(stack, vars , false)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "reset")) {
             if (!apply_enum(stack, vars , true)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "const")) {
             if (!apply_const(stack, vars)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "to_string")) {
             if (!apply_to_string(stack, vars)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "append")) {
             if (!apply_append(stack, vars)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "remove")) {
             if (!apply_remove(stack, vars)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "index")) {
             if (!apply_index(stack, vars)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "len")) {
             if (!apply_len(stack, vars)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "match")) {
             if (!apply_match(stack, vars)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "add_load_path")) {
             if (!apply_add_load_path(stack, vars)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "add_native_path")) {
             if (!apply_add_native_path(stack, vars)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         }else if(is_token(token, "load")) {
             if (!apply_load(stack, vars, funcs)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_token(token, "loadnative")) {
             if (!apply_loadnative(stack, vars, funcs)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         } else if (is_identifier_token(token)) {
             Value *resolved = NULL;
@@ -4923,14 +4579,11 @@ static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **curs
                 resolved = clone_value(var_entry->var_value);
             } else if ((func_entry = find_func_entry(funcs, token)) != NULL && func_entry->type == FUNC_DEMAC) {
                 if (!expand_demac(func_entry, cursor)) {
-                    free(token);
                     return false;
                 }
-                free(token);
                 continue;
             } else if (func_entry != NULL && func_entry->type == FUNC_APPLY) {
                 bool ok = execute_named_entry(stack, vars, funcs, func_entry, "applying body", func_entry->func_name);
-                free(token);
                 if (!ok) {
                     return false;
                 }
@@ -4940,14 +4593,11 @@ static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **curs
             }
 
             if (!push_value(stack, resolved)) {
-                free(token);
                 return false;
             }
-            free(token);
             continue;
         }else {
             diagnostic_error_current("unknown token: %s", token);
-            free(token);
             return false;
         }
     }
@@ -5006,11 +4656,9 @@ static bool skip_demac(char **cursor) {
         }
 
         if (!is_string && is_token(token, "end")) {
-            free(token);
             return true;
         }
 
-        free(token);
     }
 }
 
@@ -5029,7 +4677,6 @@ static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else) {
         }
 
         if (is_token(token, "else")) {
-            free(token);
             if (!allow_else) {
                 return diagnostic_error_current("unexpected else");
             }
@@ -5038,13 +4685,11 @@ static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else) {
         }
 
         if (is_token(token, "end")) {
-            free(token);
             *stop_reason = BLOCK_STOP_END;
             return true;
         }
 
         if (is_token(token, "if")) {
-            free(token);
             if (!skip_if(cursor)) {
                 return false;
             }
@@ -5052,7 +4697,6 @@ static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else) {
         }
 
         if (is_token(token, "demac")) {
-            free(token);
             if (!skip_demac(cursor)) {
                 return false;
             }
@@ -5060,7 +4704,6 @@ static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else) {
         }
 
         if (is_token(token, "loop") || is_token(token, "defun") || is_token(token, "apply") || is_token(token, "module")) {
-            free(token);
             if (!skip_loop(cursor)) {
                 return false;
             }
@@ -5068,11 +4711,9 @@ static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else) {
         }
 
         if (is_token(token, "break") || is_token(token, "continue") || is_token(token, "open")) {
-            free(token);
             continue;
         }
 
-        free(token);
     }
 }
 
@@ -5181,7 +4822,7 @@ static char *read_file(const char *path) {
         return NULL;
     }
 
-    buffer = malloc((size_t)length + 1);
+    buffer = arena_alloc(&g_arena, (size_t)length + 1);
     if (buffer == NULL) {
         diagnostic_error_current("failed to allocate file buffer");
         fclose(file);
@@ -5275,7 +4916,7 @@ static char *resolve_path_from_current_source(const char *path) {
 
     dir_length = (size_t)(slash - g_current_source_path + 1);
     path_length = strlen(path);
-    resolved = malloc(dir_length + path_length + 1);
+    resolved = arena_alloc(&g_arena, dir_length + path_length + 1);
     if (resolved == NULL) {
         return NULL;
     }
@@ -5299,7 +4940,7 @@ static char *join_paths(const char *base, const char *path) {
     path_length = strlen(path);
     need_sep = base_length > 0 && !path_is_separator_char(base[base_length - 1]);
 
-    joined = malloc(base_length + path_length + (need_sep ? 2 : 1));
+    joined = arena_alloc(&g_arena, base_length + path_length + (need_sep ? 2 : 1));
     if (joined == NULL) {
         return NULL;
     }
@@ -5395,7 +5036,7 @@ static char *canonicalize_existing_path(const char *path) {
     }
 
     length = strlen(path);
-    normalized = malloc(length + 2);
+    normalized = arena_alloc(&g_arena, length + 2);
     if (normalized == NULL) {
         return NULL;
     }
@@ -5520,11 +5161,7 @@ static void pop_load_path(void) {
 }
 
 static void free_search_path_stack(SearchPathStack *paths) {
-    while (paths->count > 0) {
-        free(ray_pop(paths));
-    }
-
-    ray_clear(paths);
+    paths->count = 0;
 }
 
 static bool search_path_stack_contains(const SearchPathStack *paths, const char *path) {
@@ -5577,7 +5214,7 @@ static char *get_install_prefix(void) {
     }
 
     module_length = (size_t)(separator - module_path);
-    prefix = malloc(module_length + suffix_length + 1);
+    prefix = arena_alloc(&g_arena, module_length + suffix_length + 1);
     if (prefix == NULL) {
         return NULL;
     }
@@ -5613,23 +5250,13 @@ static bool reset_search_paths(void) {
     script_prefix = join_paths(install_prefix, "libs");
     native_prefix = join_paths(install_prefix, "nativelibs");
     if (script_prefix == NULL || native_prefix == NULL) {
-        free(script_prefix);
-        free(native_prefix);
-        free(install_prefix);
         return false;
     }
 
     if (!push_search_path(&g_script_search_paths, script_prefix) ||
         !push_search_path(&g_native_search_paths, native_prefix)) {
-        free(script_prefix);
-        free(native_prefix);
-        free(install_prefix);
         return false;
     }
-
-    free(script_prefix);
-    free(native_prefix);
-    free(install_prefix);
 
     return true;
 }
@@ -5941,37 +5568,14 @@ static bool native_api_raise_error(RDNApi *api, const char *message) {
 }
 
 static NativeModuleReg *create_native_module_reg(const char *name, RDNNativeFunction function) {
-    NativeModuleReg *reg = malloc(sizeof(*reg));
-
-    if (reg == NULL) {
-        return NULL;
-    }
-
+    NativeModuleReg *reg = arena_alloc(&g_arena, sizeof(*reg));
     reg->name = copy_string(name);
-    if (reg->name == NULL) {
-        free(reg);
-        return NULL;
-    }
-
     reg->function = function;
     return reg;
 }
 
-static void free_native_module_reg(NativeModuleReg *reg) {
-    if (reg == NULL) {
-        return;
-    }
-
-    free(reg->name);
-    free(reg);
-}
-
 static void free_native_module_regs(NativeModuleRegs *regs) {
-    while (regs->count > 0) {
-        free_native_module_reg(ray_pop(regs));
-    }
-
-    ray_clear(regs);
+    regs->count = 0;
 }
 
 static bool native_module_register_function(RDNModule *module, const char *name, RDNNativeFunction function) {
@@ -6014,12 +5618,13 @@ static bool native_module_set_error(RDNModule *module, const char *message) {
 
 static bool append_text(char **buffer, size_t *length, const char *text) {
     size_t text_length = strlen(text);
-    char *grown = realloc(*buffer, *length + text_length + 1);
+    char *grown = arena_alloc(&g_arena, *length + text_length + 1);
 
     if (grown == NULL) {
         return false;
     }
 
+    memcpy(grown, *buffer, *length);
     memcpy(grown + *length, text, text_length + 1);
     *buffer = grown;
     *length += text_length;
@@ -6050,7 +5655,6 @@ static bool source_has_complete_blocks(const char *source, const Funcs *funcs, b
         }
 
         if (!is_string && is_token(token, "demac")) {
-            free(token);
             while (true) {
                 if (!next_token(&cursor, &token, &is_string)) {
                     free_macro_expansion_stack(&expansions);
@@ -6068,7 +5672,6 @@ static bool source_has_complete_blocks(const char *source, const Funcs *funcs, b
                     break;
                 }
 
-                free(token);
             }
             } else if (!is_string && (is_token(token, "if") || is_token(token, "loop") || is_token(token, "defun") ||
                                   is_token(token, "apply") || is_token(token, "module"))) {
@@ -6077,14 +5680,12 @@ static bool source_has_complete_blocks(const char *source, const Funcs *funcs, b
             depth--;
             if (depth < 0) {
                 diagnostic_error_current("unexpected end");
-                free(token);
                 g_diagnostic_context = previous_context;
                 free_macro_expansion_stack(&expansions);
                 return false;
             }
         } else if (!is_string && is_token(token, "else") && depth == 0) {
             diagnostic_error_current("unexpected else");
-            free(token);
             g_diagnostic_context = previous_context;
             free_macro_expansion_stack(&expansions);
             return false;
@@ -6095,10 +5696,9 @@ static bool source_has_complete_blocks(const char *source, const Funcs *funcs, b
                 if (!next_token(&cursor, &token, &is_string) || !is_token(token, "demac"))  {
                     size_t body_length = strlen(entry->as.func_body);
                     size_t rest_length = strlen(cursor);
-                    char *expanded = malloc(body_length + rest_length + 1);
+                    char *expanded = arena_alloc(&g_arena, body_length + rest_length + 1);
 
                     if (expanded == NULL) {
-                        free(token);
                         g_diagnostic_context = previous_context;
                         free_macro_expansion_stack(&expansions);
                         return false;
@@ -6112,7 +5712,6 @@ static bool source_has_complete_blocks(const char *source, const Funcs *funcs, b
             }
         }
 
-        free(token);
     }
 }
 

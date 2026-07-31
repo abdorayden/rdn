@@ -113,22 +113,8 @@ static Value *native_make_boolean_value(bool boolean) {
 }
 
 static void native_free_value(Value *value) {
-    size_t index = 0;
-
-    if (value == NULL) {
-        return;
-    }
-
-    if (value->type == VALUE_STRING || value->type == VALUE_AS_VAR) {
-        free(value->as.string);
-    } else if (value->type == VALUE_LIST) {
-        for (index = 0; index < value->as.list.count; index++) {
-            native_free_value(value->as.list.items[index]);
-        }
-        free(value->as.list.items);
-    }
-
-    free(value);
+    // No-op: all Values are arena-managed. The OS reclaims on exit.
+    (void)value;
 }
 
 static bool coroutine_resolve_target(RDNApi *api, Value *value, Value **out_target) {
