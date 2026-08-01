@@ -1,0 +1,61 @@
+[* 
+queue.rdn
+
+Copyright (c) 2023-2026 Ray Den
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+*]
+
+"Typecheck" load
+"Lists" load
+
+Typecheck open
+Typecheck::OGTypes open
+Lists::@shift open
+Lists::@isEmpty open
+
+Queue module
+    QueueTypes module
+        List TQueue const
+    end
+
+    new () (Queue::QueueTypes::TQueue) defun
+        ()
+    end
+
+    push (Queue::QueueTypes::TQueue Any) () defun
+        append
+    end
+
+    peek (Queue::QueueTypes::TQueue) (Any) defun
+        0 index
+    end
+
+    poop (Queue::QueueTypes::TQueue) (Any) defun
+        [*
+        *   i know i know just pop name is reserved that's why i can't name it pop
+        * *]
+        @shift
+    end
+
+    is-empty? (Queue::QueueTypes::TQueue) (Bool) defun
+        @isEmpty
+    end
+end
