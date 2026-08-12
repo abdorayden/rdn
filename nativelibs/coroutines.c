@@ -17,13 +17,6 @@ typedef enum ValueType {
 
 typedef struct Value Value;
 
-typedef struct Vars_t {
-    char *var_name;
-    Value *var_value;
-    bool is_scope_marker;
-    bool is_const;
-} Vars_t;
-
 struct Value {
     ValueType type;
     union {
@@ -36,11 +29,9 @@ struct Value {
 };
 
 typedef RLStack(Value *) RDNState;
-typedef RLList(Vars_t *) Vars;
 
 typedef struct NativeCallState {
     RDNState *stack;
-    Vars *vars;
     char *error_message;
 } NativeCallState;
 
@@ -66,24 +57,6 @@ static Value *native_stack_value(RDNState *stack, long index) {
     }
 
     return stack->items[resolved_index];
-}
-
-static Vars_t *native_find_var_entry(const Vars *vars, const char *name) {
-    size_t index = 0;
-
-    if (vars == NULL || name == NULL) {
-        return NULL;
-    }
-
-    for (index = 0; index < vars->count; index++) {
-        Vars_t *entry = vars->items[index];
-
-        if (entry != NULL && entry->var_name != NULL && strcmp(entry->var_name, name) == 0) {
-            return entry;
-        }
-    }
-
-    return NULL;
 }
 
 static Value *native_make_list_value(void) {
@@ -118,8 +91,7 @@ static void native_free_value(Value *value) {
 }
 
 static bool coroutine_resolve_target(RDNApi *api, Value *value, Value **out_target) {
-    NativeCallState *state = native_call_state(api);
-    Vars_t *entry = NULL;
+    Value *entry = NULL;
 
     if (out_target == NULL) {
         return api->raise_error(api, "internal coroutine error");
@@ -132,16 +104,16 @@ static bool coroutine_resolve_target(RDNApi *api, Value *value, Value **out_targ
     }
 
     if (value->type == VALUE_AS_VAR) {
-        entry = native_find_var_entry(state->vars, value->as.string);
+        entry = api->resolve_variable(api, value->as.string);
         if (entry == NULL) {
             return api->raise_error(api, "unknown coroutine variable");
         }
 
-        if (entry->var_value == NULL || entry->var_value->type != VALUE_LIST) {
+        if (entry->type != VALUE_LIST) {
             return api->raise_error(api, "coroutine target must be a list");
         }
 
-        *out_target = entry->var_value;
+        *out_target = entry;
         return true;
     }
 

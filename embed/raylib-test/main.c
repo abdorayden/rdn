@@ -102,41 +102,41 @@ bool rdn_set_target_fps(RDNApi* api) {
 int main(void)
 {
     RDNState stack = {0};
-    Vars vars = {0};
-    Funcs funcs = {0};
+    Vars vars = {.hasheq = ht_cstr_hasheq};
+    Funcs funcs = {.hasheq = ht_cstr_hasheq};
 
-    ray_append(&funcs, create_native_func_entry("init-window", 
-                rdn_init_window, NULL));
-
-
-    ray_append(&funcs, create_native_func_entry("close-window", 
-                rdn_close_window, NULL));
+    funcs_define_native(&funcs, "init-window", 
+                rdn_init_window, NULL);
 
 
-    ray_append(&funcs, create_native_func_entry("window-should-close", 
-                rdn_window_should_close, NULL));
-
-    ray_append(&funcs, create_native_func_entry("begin-drawing", 
-                rdn_begin_drawing, NULL));
-
-    ray_append(&funcs, create_native_func_entry("End-drawing", 
-                rdn_end_drawing, NULL));
+    funcs_define_native(&funcs, "close-window", 
+                rdn_close_window, NULL);
 
 
-    ray_append(&funcs, create_native_func_entry("clear-background", 
-                rdn_clear_bg, NULL));
+    funcs_define_native(&funcs, "window-should-close", 
+                rdn_window_should_close, NULL);
 
-    ray_append(&funcs, create_native_func_entry("draw-rect", 
-                rdn_draw_rect, NULL));
+    funcs_define_native(&funcs, "begin-drawing", 
+                rdn_begin_drawing, NULL);
 
-    ray_append(&funcs, create_native_func_entry("get-screen-width", 
-                rdn_get_width, NULL));
+    funcs_define_native(&funcs, "End-drawing", 
+                rdn_end_drawing, NULL);
 
-    ray_append(&funcs, create_native_func_entry("get-screen-height", 
-                rdn_get_height, NULL));
 
-    ray_append(&funcs, create_native_func_entry("set-target-fps", 
-                rdn_set_target_fps, NULL));
+    funcs_define_native(&funcs, "clear-background", 
+                rdn_clear_bg, NULL);
+
+    funcs_define_native(&funcs, "draw-rect", 
+                rdn_draw_rect, NULL);
+
+    funcs_define_native(&funcs, "get-screen-width", 
+                rdn_get_width, NULL);
+
+    funcs_define_native(&funcs, "get-screen-height", 
+                rdn_get_height, NULL);
+
+    funcs_define_native(&funcs, "set-target-fps", 
+                rdn_set_target_fps, NULL);
 
     char* src = read_file("main.rdn");
     evaluate_source(&stack, &vars, &funcs, src);

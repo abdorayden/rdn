@@ -65,6 +65,33 @@ static char *g_module_var_prefix = NULL;
 static RLList(char*) g_modules = {0};
 static LoadPathStack g_loaded_files = {0};
 
+// Scope tracking for the hash-table-backed Vars. A hash table is unordered,
+// so it cannot store interleaved scope markers the way the old linear array
+// did. Instead each binding records which scope owns it (`scope_id`), and a
+// global frame stack remembers which names were bound in each scope so that
+// popping a scope can restore the shadowed bindings.
+typedef struct {
+    size_t scope_id;
+    RLList(char *) names;
+} ScopeFrame;
+static RLList(ScopeFrame) g_scope_stack = {0};
+static size_t g_next_scope_id = 1;
+
+static size_t vars_current_scope_id(void) {
+    if (g_scope_stack.count == 0) {
+        return 0;
+    }
+    return g_scope_stack.items[g_scope_stack.count - 1].scope_id;
+}
+
+static void vars_record_scope_name(const char *name) {
+    if (g_scope_stack.count == 0) {
+        return;
+    }
+    ScopeFrame *frame = &g_scope_stack.items[g_scope_stack.count - 1];
+    ray_append(&frame->names, copy_string(name));
+}
+
 static bool is_module_name(const char *name) {
     for (size_t i = 0; i < g_modules.count; i++) {
         if (strcmp(name, g_modules.items[i]) == 0) return true;
@@ -354,72 +381,71 @@ static Value *clone_value(const Value *value) {
     }
 }
 
-static Vars_t *create_scope_marker(void) {
-    Vars_t *entry = arena_alloc(&g_arena, sizeof(*entry));
-    entry->var_name = NULL;
-    entry->var_value = NULL;
-    entry->is_scope_marker = true;
-    entry->is_const = false;
-    return entry;
-}
-
 static Vars_t *create_var_entry(const char *name, Value *value, bool is_const) {
+    (void)name;
     Vars_t *entry = arena_alloc(&g_arena, sizeof(*entry));
-    entry->var_name = copy_string(name);
+    *entry = (Vars_t){0};
     entry->var_value = value;
     entry->is_scope_marker = false;
     entry->is_const = is_const;
+    entry->module_name = g_module_var_prefix != NULL ? copy_string(g_module_var_prefix) : NULL;
+    entry->prev = NULL;
+    entry->scope_id = vars_current_scope_id();
     return entry;
 }
 
 static Funcs_t *create_func_entry(const char *name, char *body, const char *source_path, size_t source_line, size_t source_column) {
+    (void)name;
     Funcs_t *entry = arena_alloc(&g_arena, sizeof(*entry));
-    entry->func_name = copy_string(name);
+    *entry = (Funcs_t){0};
     entry->type = FUNC_SCRIPT;
     entry->as.func_body = body;
     entry->source_path = copy_string(source_path == NULL ? "<repl>" : source_path);
     entry->source_line = source_line;
     entry->source_column = source_column;
     entry->native_library_handle = NULL;
+    entry->module_name = g_module_func_prefix != NULL ? copy_string(g_module_func_prefix) : NULL;
     return entry;
 }
 
 static Funcs_t *create_native_func_entry(const char *name, RDNNativeFunction native_function, void *native_library_handle) {
+    (void)name;
     Funcs_t *entry = arena_alloc(&g_arena, sizeof(*entry));
-    entry->func_name = copy_string(name);
+    *entry = (Funcs_t){0};
     entry->type = FUNC_NATIVE;
     entry->as.native_function = native_function;
     entry->source_path = NULL;
     entry->source_line = 0;
     entry->source_column = 0;
     entry->native_library_handle = native_library_handle;
+    entry->module_name = g_module_func_prefix != NULL ? copy_string(g_module_func_prefix) : NULL;
     return entry;
 }
 
-static void free_var_entry(Vars_t *entry) {
-    (void)entry;
-}
-
 static void free_vars(Vars *vars) {
-    vars->count = 0;
+    ht_free(vars);
 }
 
 static void free_funcs(Funcs *funcs) {
-    // Only close native library handles — entries are arena-managed
-    for (size_t i = 0; i < funcs->count; i++) {
-        void *handle = funcs->items[i]->native_library_handle;
-        if (handle != NULL) {
-            bool seen = false;
-            for (size_t j = i + 1; j < funcs->count; j++) {
-                if (funcs->items[j]->native_library_handle == handle) {
-                    seen = true;
-                    break;
-                }
+    // Only close native library handles. Entry payloads and keys are
+    // arena-managed; ht_free() only releases the malloc'd slot buffer.
+    RLList(void*) handles = {0};
+    ht_foreach(entry, funcs) {
+        void *handle = entry->native_library_handle;
+        if (handle == NULL) continue;
+        bool seen = false;
+        for (size_t i = 0; i < handles.count; i++) {
+            if (handles.items[i] == handle) {
+                seen = true;
+                break;
             }
-            if (!seen) native_library_close(handle);
+        }
+        if (!seen) {
+            native_library_close(handle);
+            ray_append(&handles, handle);
         }
     }
-    funcs->count = 0;
+    ht_free(funcs);
 }
 
 static void *native_library_open(const char *path) {
@@ -487,76 +513,51 @@ static const char *native_library_last_error(void) {
 }
 
 static bool vars_push_scope(Vars *vars) {
-    Vars_t *marker = create_scope_marker();
-
-    if (marker == NULL) {
-        return diagnostic_error_current("failed to allocate scope marker");
-    }
-
-    ray_append(vars, marker);
+    (void)vars;
+    ScopeFrame frame = {0};
+    frame.scope_id = g_next_scope_id++;
+    ray_append(&g_scope_stack, frame);
     return true;
 }
 
 static void vars_pop_scope(Vars *vars) {
-    while (vars->count > 0) {
-        Vars_t *entry = ray_pop(vars);
-        bool is_marker = entry->is_scope_marker;
+    if (g_scope_stack.count == 0) {
+        return;
+    }
 
-        free_var_entry(entry);
-        if (is_marker) {
-            return;
+    ScopeFrame *frame = &g_scope_stack.items[g_scope_stack.count - 1];
+    for (size_t i = 0; i < frame->names.count; i++) {
+        Vars_t *top = ht_find(vars, frame->names.items[i]);
+        if (top == NULL) {
+            continue;
+        }
+        if (top->scope_id != frame->scope_id) {
+            continue;
+        }
+        if (top->prev != NULL) {
+            *top = *top->prev;
+        } else {
+            ht_delete(vars, top);
         }
     }
+
+    g_scope_stack.count--;
 }
 
 static Vars_t *find_var_entry(const Vars *vars, const char *name) {
-    size_t index = vars->count;
-
-    while (index > 0) {
-        Vars_t *entry = vars->items[--index];
-
-        if (entry->is_scope_marker) {
-            continue;
-        }
-
-        if (strcmp(entry->var_name, name) == 0) {
-            return entry;
-        }
-    }
-
-    return NULL;
+    return ht_find((Vars *)vars, (char *)name);
 }
 
 static Vars_t *find_current_scope_var_entry(const Vars *vars, const char *name) {
-    size_t index = vars->count;
-
-    while (index > 0) {
-        Vars_t *entry = vars->items[--index];
-
-        if (entry->is_scope_marker) {
-            break;
-        }
-
-        if (strcmp(entry->var_name, name) == 0) {
-            return entry;
-        }
+    Vars_t *entry = ht_find((Vars *)vars, (char *)name);
+    if (entry == NULL || entry->scope_id != vars_current_scope_id()) {
+        return NULL;
     }
-
-    return NULL;
+    return entry;
 }
 
 static Funcs_t *find_func_entry(const Funcs *funcs, const char *name) {
-    size_t index = funcs->count;
-
-    while (index > 0) {
-        Funcs_t *entry = funcs->items[--index];
-
-        if (strcmp(entry->func_name, name) == 0) {
-            return entry;
-        }
-    }
-
-    return NULL;
+    return ht_find((Funcs *)funcs, (char *)name);
 }
 
 static bool func_entry_has_body(const Funcs_t *entry) {
@@ -581,7 +582,7 @@ static bool funcs_define(Funcs *funcs, const char *name, char *body, const char 
         return diagnostic_error_current("failed to allocate function entry");
     }
 
-    ray_append(funcs, entry);
+    *ht_put(funcs, (char *)copy_string(name)) = *entry;
     return true;
 }
 
@@ -604,7 +605,7 @@ static bool funcs_define_apply(Funcs *funcs, const char *name, char *body, const
     }
 
     entry->type = FUNC_APPLY;
-    ray_append(funcs, entry);
+    *ht_put(funcs, (char *)copy_string(name)) = *entry;
     return true;
 }
 
@@ -627,7 +628,7 @@ static bool funcs_define_demac(Funcs *funcs, const char *name, char *body, const
     }
 
     entry->type = FUNC_DEMAC;
-    ray_append(funcs, entry);
+    *ht_put(funcs, (char *)copy_string(name)) = *entry;
     return true;
 }
 
@@ -650,43 +651,50 @@ static bool funcs_define_native(Funcs *funcs, const char *name, RDNNativeFunctio
         return false;
     }
 
-    ray_append(funcs, entry);
+    *ht_put(funcs, (char *)copy_string(name)) = *entry;
     return true;
 }
 
 static bool vars_let(Vars *vars, const char *name, const Value *value) {
-    Vars_t *entry = find_current_scope_var_entry(vars, name);
+    Vars_t *top = find_var_entry(vars, name);
     Value *copy = clone_value(value);
 
     if (copy == NULL) {
         return diagnostic_error_current("failed to clone variable value");
     }
 
-    if (entry != NULL) {
-        if (entry->is_const) {
+    if (top != NULL && top->scope_id == vars_current_scope_id()) {
+        if (top->is_const) {
             free_value(copy);
             return diagnostic_error_current("cannot change constant '%s'", name);
         }
-        free_value(entry->var_value);
-        entry->var_value = copy;
+        top->var_value = copy;
         return true;
     }
 
-    entry = create_var_entry(name, copy, false);
-    if (entry == NULL) {
-        free_value(copy);
-        return diagnostic_error_current("failed to allocate variable entry");
+    {
+        Vars_t *binding = create_var_entry(name, copy, false);
+        if (binding == NULL) {
+            free_value(copy);
+            return diagnostic_error_current("failed to allocate variable entry");
+        }
+        if (top != NULL) {
+            binding->prev = arena_alloc(&g_arena, sizeof(*top));
+            if (binding->prev != NULL) {
+                *binding->prev = *top;
+            }
+        }
+        *ht_put(vars, (char *)copy_string(name)) = *binding;
+        vars_record_scope_name(name);
     }
-
-    ray_append(vars, entry);
     return true;
 }
 
 static bool vars_set(Vars *vars, const char *name, const Value *value) {
-    Vars_t *entry = find_var_entry(vars, name);
+    Vars_t *top = find_var_entry(vars, name);
     Value *copy = clone_value(value);
 
-    if (entry == NULL) {
+    if (top == NULL) {
         return diagnostic_error_current("unknown variable '%s'", name);
     }
 
@@ -694,35 +702,43 @@ static bool vars_set(Vars *vars, const char *name, const Value *value) {
         return diagnostic_error_current("failed to clone variable value");
     }
 
-    if (entry->is_const) {
+    if (top->is_const) {
         free_value(copy);
         return diagnostic_error_current("cannot change constant '%s'", name);
     }
 
-    free_value(entry->var_value);
-    entry->var_value = copy;
+    top->var_value = copy;
     return true;
 }
 
 static bool vars_const(Vars *vars, const char *name, const Value *value) {
-    Vars_t *entry = find_current_scope_var_entry(vars, name);
+    Vars_t *top = find_var_entry(vars, name);
     Value *copy = clone_value(value);
-
-    if (entry != NULL) {
-        return diagnostic_error_current("'%s' already exists in current scope", name);
-    }
 
     if (copy == NULL) {
         return diagnostic_error_current("failed to clone constant value");
     }
 
-    entry = create_var_entry(name, copy, true);
-    if (entry == NULL) {
+    if (top != NULL && top->scope_id == vars_current_scope_id()) {
         free_value(copy);
-        return diagnostic_error_current("failed to allocate constant entry");
+        return diagnostic_error_current("'%s' already exists in current scope", name);
     }
 
-    ray_append(vars, entry);
+    {
+        Vars_t *binding = create_var_entry(name, copy, true);
+        if (binding == NULL) {
+            free_value(copy);
+            return diagnostic_error_current("failed to allocate constant entry");
+        }
+        if (top != NULL) {
+            binding->prev = arena_alloc(&g_arena, sizeof(*top));
+            if (binding->prev != NULL) {
+                *binding->prev = *top;
+            }
+        }
+        *ht_put(vars, (char *)copy_string(name)) = *binding;
+        vars_record_scope_name(name);
+    }
     return true;
 }
 
@@ -1383,7 +1399,7 @@ static bool apply_func_name(RDNState *stack, Funcs *funcs){
         return false;
     }
 
-    result = create_string_value_copy(entry->func_name);
+    result = create_string_value_copy(fn->as.string);
     free_value(fn);
     return push_value(stack, result);
 }
@@ -2443,62 +2459,82 @@ static bool apply_module(RDNState *stack, Vars *vars, Funcs *funcs, char **curso
     }
 }
 
+typedef struct {
+    char *name;
+    Funcs_t payload;
+} FuncAlias;
+typedef struct {
+    char *name;
+    Vars_t payload;
+} VarAlias;
+
 static bool apply_open_full_module(Value *name, Vars *vars, Funcs *funcs) {
     size_t prefix_len = strlen(name->as.string);
+    RLList(FuncAlias) func_aliases = {0};
+    RLList(VarAlias) var_aliases = {0};
 
-    for (size_t index = 0; index < funcs->count; index++) {
-        Funcs_t *entry = funcs->items[index];
-        size_t func_name_len = strlen(entry->func_name);
+    ht_foreach(entry, funcs) {
+        const char *func_name = ht_key(funcs, entry);
+        size_t func_name_len = strlen(func_name);
 
         if (func_name_len > prefix_len + 2 &&
-            entry->func_name[prefix_len] == ':' &&
-            entry->func_name[prefix_len + 1] == ':' &&
-            strncmp(entry->func_name, name->as.string, prefix_len) == 0) {
-            const char *alias = entry->func_name + prefix_len + 2;
-            Funcs_t *existing = find_func_entry(funcs, alias);
+            func_name[prefix_len] == ':' &&
+            func_name[prefix_len + 1] == ':' &&
+            strncmp(func_name, name->as.string, prefix_len) == 0) {
+            const char *alias = func_name + prefix_len + 2;
 
-            if (existing == NULL) {
-                Funcs_t *alias_entry = arena_alloc(&g_arena, sizeof(Funcs_t));
-                if (alias_entry == NULL) {
-                    return diagnostic_error_current("failed to allocate module function alias");
-                }
-                memcpy(alias_entry, entry, sizeof(Funcs_t));
-                alias_entry->func_name = copy_string(alias);
-                if (func_entry_has_body(alias_entry)) {
-                    alias_entry->as.func_body = copy_string(entry->as.func_body);
-                }
-                alias_entry->source_path = copy_string(entry->source_path);
-                ray_append(funcs, alias_entry);
+            if (find_func_entry(funcs, alias) != NULL) {
+                continue;
             }
+
+            FuncAlias item = {0};
+            item.name = copy_string(alias);
+            item.payload = *entry;
+            if (func_entry_has_body(entry)) {
+                item.payload.as.func_body = copy_string(entry->as.func_body);
+            }
+            item.payload.source_path = copy_string(entry->source_path);
+            ray_append(&func_aliases, item);
         }
     }
 
-    for (size_t index = 0; index < vars->count; index++) {
-        Vars_t *entry = vars->items[index];
-        if (entry->is_scope_marker) continue;
-        if (entry->var_name == NULL) continue;
+    ht_foreach(entry, vars) {
+        const char *var_name = ht_key(vars, entry);
+        size_t var_name_len = strlen(var_name);
 
-        size_t var_name_len = strlen(entry->var_name);
         if (var_name_len > prefix_len + 2 &&
-            entry->var_name[prefix_len] == ':' &&
-            entry->var_name[prefix_len + 1] == ':' &&
-            strncmp(entry->var_name, name->as.string, prefix_len) == 0) {
-            const char *alias = entry->var_name + prefix_len + 2;
-            Vars_t *existing = find_var_entry(vars, alias);
+            var_name[prefix_len] == ':' &&
+            var_name[prefix_len + 1] == ':' &&
+            strncmp(var_name, name->as.string, prefix_len) == 0) {
+            const char *alias = var_name + prefix_len + 2;
 
-            if (existing == NULL) {
-                Value *copy = clone_value(entry->var_value);
-                if (copy == NULL) {
-                    return diagnostic_error_current("failed to clone module variable value");
-                }
-                Vars_t *alias_entry = create_var_entry(alias, copy, entry->is_const);
-                if (alias_entry == NULL) {
-                    free_value(copy);
-                    return diagnostic_error_current("failed to allocate module variable alias");
-                }
-                ray_append(vars, alias_entry);
+            if (find_var_entry(vars, alias) != NULL) {
+                continue;
             }
+
+            Value *copy = clone_value(entry->var_value);
+            if (copy == NULL) {
+                return diagnostic_error_current("failed to clone module variable value");
+            }
+
+            Vars_t *alias_entry = create_var_entry(alias, copy, entry->is_const);
+            if (alias_entry == NULL) {
+                free_value(copy);
+                return diagnostic_error_current("failed to allocate module variable alias");
+            }
+
+            VarAlias item = {0};
+            item.name = copy_string(alias);
+            item.payload = *alias_entry;
+            ray_append(&var_aliases, item);
         }
+    }
+
+    for (size_t i = 0; i < func_aliases.count; i++) {
+        *ht_put(funcs, func_aliases.items[i].name) = func_aliases.items[i].payload;
+    }
+    for (size_t i = 0; i < var_aliases.count; i++) {
+        *ht_put(vars, var_aliases.items[i].name) = var_aliases.items[i].payload;
     }
 
     return true;
@@ -2523,50 +2559,41 @@ static bool apply_open_selective(Value *name, Vars *vars, Funcs *funcs) {
     size_t full_name_len = strlen(full_name);
     bool found = false;
 
-    for (size_t index = 0; index < funcs->count; index++) {
-        Funcs_t *entry = funcs->items[index];
-        if (strlen(entry->func_name) == full_name_len &&
-            strcmp(entry->func_name, full_name) == 0) {
-            Funcs_t *existing = find_func_entry(funcs, member);
-            if (existing == NULL) {
-                Funcs_t *alias_entry = arena_alloc(&g_arena, sizeof(Funcs_t));
-                if (alias_entry == NULL) {
-                    return diagnostic_error_current("failed to allocate function alias");
+    ht_foreach(entry, funcs) {
+        const char *func_name = ht_key(funcs, entry);
+        if (strlen(func_name) == full_name_len && strcmp(func_name, full_name) == 0) {
+            if (find_func_entry(funcs, member) == NULL) {
+                Funcs_t payload = *entry;
+                if (func_entry_has_body(entry)) {
+                    payload.as.func_body = copy_string(entry->as.func_body);
                 }
-                memcpy(alias_entry, entry, sizeof(Funcs_t));
-                alias_entry->func_name = copy_string(member);
-                if (func_entry_has_body(alias_entry)) {
-                    alias_entry->as.func_body = copy_string(entry->as.func_body);
-                }
-                alias_entry->source_path = copy_string(entry->source_path);
-                ray_append(funcs, alias_entry);
+                payload.source_path = copy_string(entry->source_path);
+                *ht_put(funcs, copy_string(member)) = payload;
             }
             found = true;
             break;
         }
     }
 
-    for (size_t index = 0; index < vars->count; index++) {
-        Vars_t *entry = vars->items[index];
-        if (entry->is_scope_marker) continue;
-        if (entry->var_name == NULL) continue;
-        if (strlen(entry->var_name) == full_name_len &&
-            strcmp(entry->var_name, full_name) == 0) {
-            Vars_t *existing = find_var_entry(vars, member);
-            if (existing == NULL) {
-                Value *copy = clone_value(entry->var_value);
-                if (copy == NULL) {
-                    return diagnostic_error_current("failed to clone variable value");
+    if (!found) {
+        ht_foreach(entry, vars) {
+            const char *var_name = ht_key(vars, entry);
+            if (strlen(var_name) == full_name_len && strcmp(var_name, full_name) == 0) {
+                if (find_var_entry(vars, member) == NULL) {
+                    Value *copy = clone_value(entry->var_value);
+                    if (copy == NULL) {
+                        return diagnostic_error_current("failed to clone variable value");
+                    }
+                    Vars_t *alias_entry = create_var_entry(member, copy, entry->is_const);
+                    if (alias_entry == NULL) {
+                        free_value(copy);
+                        return diagnostic_error_current("failed to allocate variable alias");
+                    }
+                    *ht_put(vars, copy_string(member)) = *alias_entry;
                 }
-                Vars_t *alias_entry = create_var_entry(member, copy, entry->is_const);
-                if (alias_entry == NULL) {
-                    free_value(copy);
-                    return diagnostic_error_current("failed to allocate variable alias");
-                }
-                ray_append(vars, alias_entry);
+                found = true;
+                break;
             }
-            found = true;
-            break;
         }
     }
 
@@ -2958,6 +2985,7 @@ static bool execute_named_entry(RDNState *stack, Vars *vars, Funcs *funcs, Funcs
         api.to_boolean = native_api_to_boolean;
         api.to_string = native_api_to_string;
         api.to_identifier = native_api_to_identifier;
+        api.resolve_variable = native_api_resolve_variable;
         api.pop = native_api_pop;
         api.push_null = native_api_push_null;
         api.push_integer = native_api_push_integer;
@@ -3078,7 +3106,7 @@ static bool apply_pcall(RDNState *stack, Vars *vars, Funcs *funcs) {
     was_suppressed = g_diagnostics_suppressed;
     g_diagnostics_suppressed = true;
 
-    ok = execute_named_entry(stack, vars, funcs, entry, "calling function", entry->func_name);
+    ok = execute_named_entry(stack, vars, funcs, entry, "calling function", ht_key(funcs, entry));
 
     if (ok) {
         g_diagnostics_suppressed = was_suppressed;
@@ -3182,7 +3210,7 @@ static bool apply_call(RDNState *stack, Vars *vars, Funcs *funcs) {
         return false;
     }
 
-    ok = execute_named_entry(stack, vars, funcs, entry, "calling function", entry->func_name);
+    ok = execute_named_entry(stack, vars, funcs, entry, "calling function", ht_key(funcs, entry));
     free_value(resolved_name);
     free_value(name);
     return ok;
@@ -3648,7 +3676,7 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
                 }
                 continue;
             } else if (func_entry != NULL && func_entry->type == FUNC_APPLY) {
-                bool ok = execute_named_entry(stack, vars, funcs, func_entry, "applying body", func_entry->func_name);
+                bool ok = execute_named_entry(stack, vars, funcs, func_entry, "applying body", ht_key(funcs, func_entry));
                 if (!ok) {
                     return false;
                 }
@@ -3912,21 +3940,19 @@ static bool apply_unlet(RDNState *stack, Vars *vars) {
         return false;
     }
 
-    int idx_to_remove = -1;
-    for(size_t i = 0 ; i < vars->count ; ++i) {
-        if (strcmp(vars->items[i]->var_name, name->as.string) == 0) {
-            idx_to_remove = (int)i;
-            break;
-        }
-    }
+    Vars_t *entry = find_var_entry(vars, name->as.string);
 
-    if (idx_to_remove == -1) {
+    if (entry == NULL) {
         ray_append(stack, name);
         return diagnostic_error_current("unlet variable is not identified");
     }
 
-    free_var_entry(vars->items[idx_to_remove]);
-    ray_remove_idx(vars, idx_to_remove);
+    free_value(entry->var_value);
+    if (entry->prev != NULL) {
+        *entry = *entry->prev;
+    } else {
+        ht_delete(vars, entry);
+    }
     free_value(name);
     return true;
 }
@@ -4583,7 +4609,7 @@ static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **curs
                 }
                 continue;
             } else if (func_entry != NULL && func_entry->type == FUNC_APPLY) {
-                bool ok = execute_named_entry(stack, vars, funcs, func_entry, "applying body", func_entry->func_name);
+                bool ok = execute_named_entry(stack, vars, funcs, func_entry, "applying body", ht_key(funcs, func_entry));
                 if (!ok) {
                     return false;
                 }
@@ -4723,8 +4749,8 @@ static bool evaluate_source(RDNState *stack, Vars* vars, Funcs *funcs, char *sou
     DiagnosticContext previous_context = g_diagnostic_context;
 
     RDNState _stack = {0};
-    Vars _vars = {0};
-    Funcs _funcs = {0};
+    Vars _vars = {.hasheq = ht_cstr_hasheq};
+    Funcs _funcs = {.hasheq = ht_cstr_hasheq};
 
     diagnostic_set_source(g_current_source_path, source, 1, 1);
 
@@ -5437,6 +5463,22 @@ static const char *native_api_to_identifier(RDNApi *api, long index) {
     return value->as.string;
 }
 
+static void *native_api_resolve_variable(RDNApi *api, const char *name) {
+    NativeCallState *state = api->userdata;
+    Vars_t *entry = NULL;
+
+    if (name == NULL) {
+        return NULL;
+    }
+
+    entry = find_var_entry(state->vars, name);
+    if (entry == NULL) {
+        return NULL;
+    }
+
+    return entry->var_value;
+}
+
 static bool native_api_pop(RDNApi *api, size_t count) {
     NativeCallState *state = api->userdata;
 
@@ -5717,8 +5759,8 @@ static bool source_has_complete_blocks(const char *source, const Funcs *funcs, b
 
 static int run_repl(void) {
     RDNState stack = {0};
-    Vars vars = {0};
-    Funcs funcs = {0};
+    Vars vars = {.hasheq = ht_cstr_hasheq};
+    Funcs funcs = {.hasheq = ht_cstr_hasheq};
     char line[4096];
     char *source = NULL;
     size_t source_length = 0;
@@ -5824,21 +5866,16 @@ static const char *host_shared_library_extension(void) {
 }
 
 static void apply_host_environment(Vars *vars) {
-    Vars_t *host_os_var = NULL;
-    Vars_t *shared_lib_ext_var = NULL;
+    Value *host_os = create_string_value_copy(host_os_name());
+    Value *shared_lib_ext = create_string_value_copy(host_shared_library_extension());
 
-    host_os_var = create_var_entry("__host_os", create_string_value_copy(host_os_name()), true);
-    if (host_os_var != NULL) {
-        ray_append(vars, host_os_var);
+    if (host_os != NULL) {
+        vars_const(vars, "__host_os", host_os);
+        free_value(host_os);
     }
-
-    shared_lib_ext_var = create_var_entry(
-        "__sharedlib_ext",
-        create_string_value_copy(host_shared_library_extension()),
-        true
-    );
-    if (shared_lib_ext_var != NULL) {
-        ray_append(vars, shared_lib_ext_var);
+    if (shared_lib_ext != NULL) {
+        vars_const(vars, "__sharedlib_ext", shared_lib_ext);
+        free_value(shared_lib_ext);
     }
 }
 
@@ -5853,16 +5890,15 @@ static void apply_argv(Vars* vars , const char* path, int argc , char** argv) {
         ray_append(&argv_list->as.list, val);
     }
 
-    Vars_t* argv_var = create_var_entry("__argv", argv_list, false);
-    ray_append(vars, argv_var);
-
+    vars_let(vars, "__argv", argv_list);
+    free_value(argv_list);
 }
 
 int rdn_main(int argc , char** argv) {
     const char *path = NULL;
     RDNState stack = {0};
-    Vars vars = {0};
-    Funcs funcs = {0};
+    Vars vars = {.hasheq = ht_cstr_hasheq};
+    Funcs funcs = {.hasheq = ht_cstr_hasheq};
     int exit_code = EXIT_FAILURE;
 
     if (argc < 2) {

@@ -59,10 +59,10 @@ int main(void)
     // rdn_do_string("32 print");
 
     RDNState stack = {0};
-    Vars vars = {0};
-    Funcs funcs = {0};
-    ray_append(&funcs, create_func_entry("hey", "331 print",NULL , 1,1));
-    ray_append(&funcs, create_native_func_entry("foo", f, NULL));
+    Vars vars = {.hasheq = ht_cstr_hasheq};
+    Funcs funcs = {.hasheq = ht_cstr_hasheq};
+    funcs_define(&funcs, "hey", "331 print", NULL, 1, 1);
+    funcs_define_native(&funcs, "foo", f, NULL);
     evaluate_source(&stack, &vars, &funcs, "1");
     hello(&stack);
     // evaluate_source(&stack, &vars, &funcs, "hey call");

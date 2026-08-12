@@ -4,6 +4,7 @@
 
 // TODO: finish std native and nonative libs
 // TODO: optimize the code
+// TODO: macros doesn't allow nested blocks
 
 int main(int argc, char **argv) {
     for(int i = 0 ; i < argc ; ++i) {

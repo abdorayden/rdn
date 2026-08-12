@@ -118,6 +118,15 @@ struct RDNApi {
     const char *(*to_identifier)(RDNApi *api, long index);
 
     /*
+     * Resolve the value stored in a variable by name.
+     *
+     * Returns a pointer to the interpreter-owned value, or NULL when the
+     * variable is not defined. The pointer is owned by the interpreter and
+     * must not be freed or retained beyond the current native call.
+     */
+    void *(*resolve_variable)(RDNApi *api, const char *name);
+
+    /*
      * Pop `count` values from the top of the stack.
      */
     bool (*pop)(RDNApi *api, size_t count);

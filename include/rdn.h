@@ -12,6 +12,9 @@
 #define RDN_INSTALL_PREFIX "/usr/local/share/rdn"
 #endif
 
+#define HT_IMPLEMENTATION
+#include "../src/ht.h"
+
 typedef enum ValueType ValueType;
 typedef enum BlockStop BlockStop;
 typedef enum FuncType FuncType;
@@ -26,13 +29,6 @@ typedef struct DiagnosticContext DiagnosticContext;
 typedef RLList(char *) LoadPathStack;
 typedef RLList(char *) SearchPathStack;
 typedef RLList(char *) MacroExpansionStack;
-
-typedef RLStack(Value *) RDNState;
-typedef RLList(Vars_t*) Vars;
-typedef RLList(Funcs_t*) Funcs;
-typedef RLList(NativeModuleReg*) NativeModuleRegs;
-
-static void free_value(Value *value);
 
 enum ValueType{
     VALUE_NULL,
@@ -58,12 +54,20 @@ struct Value{
 };
 
 struct Vars_t {
-    char* var_name;
+    // char* var_name; now it's key of the hash table
     Value* var_value;
     bool is_scope_marker; // define the variable in scope
     bool is_const; // check if the variable is constant
 
     char* module_name; // this for the module that if the variable defined inside it
+
+    // Hash-table scoping support:
+    // `prev` is the previous binding of the same name (shadowed by this one).
+    // Restoring it when the owning scope is popped unshadows the outer binding.
+    Vars_t *prev;
+    // `scope_id` is the id of the scope that owns this binding. Bindings with
+    // scope_id == 0 live at the top level and are never popped.
+    size_t scope_id;
 };
 
 enum FuncType {
@@ -76,7 +80,7 @@ enum FuncType {
 struct Funcs_t {
     char* module_name; // this for the module that if the function defined inside it
  
-    char* func_name;
+    // char* func_name; now it's key of hash table
     FuncType type;
     union {
         char *func_body;
@@ -87,6 +91,13 @@ struct Funcs_t {
     size_t source_column;
     void *native_library_handle;
 };
+
+typedef RLStack(Value *) RDNState;
+typedef Ht(char*, Vars_t) Vars;
+typedef Ht(char*, Funcs_t) Funcs;
+typedef RLList(NativeModuleReg*) NativeModuleRegs;
+
+static void free_value(Value *value);
 
 struct NativeModuleReg {
     char *name;
@@ -140,11 +151,9 @@ static Value *create_string_value_copy(const char *string);
 static Value *create_list_value(void);
 static Value *create_var_name_value(const char *name);
 static Value *clone_value(const Value *value);
-static Vars_t *create_scope_marker(void);
 static Vars_t *create_var_entry(const char *name, Value *value, bool is_const);
 static Funcs_t *create_func_entry(const char *name, char *body, const char *source_path, size_t source_line, size_t source_column);
 static Funcs_t *create_native_func_entry(const char *name, RDNNativeFunction native_function, void *native_library_handle);
-static void free_var_entry(Vars_t *entry);
 static void free_vars(Vars *vars);
 static void free_funcs(Funcs *funcs);
 static bool vars_push_scope(Vars *vars);
@@ -274,6 +283,7 @@ static bool native_api_to_number(RDNApi *api, long index, double *out_value);
 static bool native_api_to_boolean(RDNApi *api, long index, bool *out_value);
 static const char *native_api_to_string(RDNApi *api, long index);
 static const char *native_api_to_identifier(RDNApi *api, long index);
+static void *native_api_resolve_variable(RDNApi *api, const char *name);
 static bool native_api_pop(RDNApi *api, size_t count);
 static bool native_api_push_null(RDNApi *api);
 static bool native_api_push_integer(RDNApi *api, long value);
