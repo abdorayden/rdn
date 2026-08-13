@@ -1,0 +1,159 @@
+[* 
+map.rdn
+
+Copyright (c) 2023-2026 Ray Den
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+*]
+
+"Typecheck" load
+"Core" load
+
+Typecheck open
+Typecheck::OGTypes open
+Core open
+
+"../nativelibs/map" __sharedlib_ext @str append loadnative
+
+Map module
+
+    MapTypes module
+        Any TMap const
+    end
+
+    [*
+    *   new function accept a list of types 
+    *   the types must be from OGTypes like Int Real Str
+    *   example:
+    *       (Str Int) Map::new call
+    * *]
+    new (List) (Map::MapTypes::TMap) defun
+        __m__map__new call
+    end
+
+    [*
+    *   put function accept map , key ,val
+    *   example:
+    *       handle "x" 1 Map::put call
+    * *]
+    put (Map::MapTypes::TMap Any Any) () defun
+        __m__map__put call
+    end
+
+    [*
+    *   get function accept map , key
+    *   example:
+    *       handle "x" Map::get call -> 1
+    * *]
+    get (Map::MapTypes::TMap Any) (Any) defun
+        __m__map__get call
+    end
+
+    [*
+    *   del function accept map , key
+    *   example:
+    *       handle "x" Map::del call
+    * *]
+    del (Map::MapTypes::TMap Any) () defun
+        __m__map__del call
+    end
+
+    [*
+    *   clear function accept map
+    *   example:
+    *       handle Map::clear call
+    * *]
+    clear (Map::MapTypes::TMap) () defun
+        __m__map__clear call
+    end
+
+    [*
+    *   size function accept map and return size of the map
+    *   example:
+    *       handle Map::size call -> 11
+    * *]
+    size (Map::MapTypes::TMap) (Int) defun
+        __m__map__size call
+    end
+
+    [*
+    *   keys function accept map and return list of the keys
+    *   example:
+    *       handle Map::keys call -> ("x" "v")
+    * *]
+    keys (Map::MapTypes::TMap) (List) defun
+        __m__map__keys call
+    end
+
+    [*
+    *   values function accept map and return list of the values
+    *   example:
+    *       handle Map::values call -> ("x" "v")
+    * *]
+    values (Map::MapTypes::TMap) (List) defun
+        __m__map__values call
+    end
+
+    [*
+    *   types function accept map and return list with length 2 contains types of the map
+    *   example:
+    *       handle Map::types call -> (Str Int)
+    * *]
+    types (Map::MapTypes::TMap) (List) defun
+        __m__map__types call
+    end
+
+    @new apply
+        Map::new call
+    end
+
+    @put apply
+        Map::put call
+    end
+
+    @get apply
+        Map::get call
+    end
+
+    @del apply
+        Map::del call
+    end
+
+    @clear apply
+        Map::clear call
+    end
+
+    @size apply
+        Map::size call
+    end
+
+    @keys apply
+        Map::keys call
+    end
+
+    @values apply
+        Map::values call
+    end
+
+    @types apply
+        Map::types call
+    end
+
+end

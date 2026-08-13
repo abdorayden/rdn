@@ -1,0 +1,51 @@
+"../libs/map.rdn" load
+
+[* typed string-key / int-value map *]
+(Str Int) Map::new call handle let
+
+handle "x" 1 Map::put call
+handle "y" 2 Map::put call
+handle "z" 3 Map::put call
+
+handle "x" Map::get call print "\n" print
+handle "y" Map::get call print "\n" print
+handle "z" Map::get call print "\n" print
+handle "missing" Map::get call print "\n" print
+
+handle Map::size call print "\n" print
+
+[* overwrite existing key, size stays the same *]
+handle "x" 99 Map::put call
+handle "x" Map::get call print "\n" print
+handle Map::size call print "\n" print
+
+[* keys and values are unordered, only their length is checked *]
+handle Map::keys call keys let
+keys len print "\n" print
+handle Map::values call values let
+values len print "\n" print
+
+handle Map::types call print "\n" print
+
+[* del *]
+handle "y" Map::del call
+handle Map::size call print "\n" print
+handle "y" Map::get call print "\n" print
+
+[* clear *]
+handle Map::clear call
+handle Map::size call print "\n" print
+
+[* integer-keyed map with string values *]
+(Int Str) Map::new call single let
+single 7 "seven" Map::put call
+single 7 Map::get call print "\n" print
+single Map::keys call print "\n" print
+single Map::values call print "\n" print
+single Map::types call print "\n" print
+
+[* typechecked calls through scall *]
+(Str Int) Map::new call safe let
+safe "a" 42 Map::put scall
+safe "a" Map::get scall print "\n" print
+safe Map::size scall print "\n" print

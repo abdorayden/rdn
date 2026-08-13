@@ -1,0 +1,4 @@
+"../libs/map.rdn" load
+
+(Int Int) Map::new call handle let
+handle "bad-key" 5 Map::put call

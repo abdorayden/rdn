@@ -1,0 +1,6 @@
+/home/rayden/prog/raden/libs/map.rdn:23:23: error: Map::put key type does not match map key type
+        __m__map__put call
+                      ^
+/home/rayden/prog/raden/test/map_lib_error.rdn:4:29: note: while calling function 'Map::put'
+handle "bad-key" 5 Map::put call
+                            ^

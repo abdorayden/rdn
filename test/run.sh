@@ -159,6 +159,15 @@ if ! "${CC:-gcc}" -Wall -Wextra -Werror -ggdb -std=c11 -fPIC -shared \
     exit 1
 fi
 
+printf "%sBuilding map native module...%s\n" "$BLUE" "$RESET"
+if ! "${CC:-gcc}" -Wall -Wextra -Werror -ggdb -std=c11 -fPIC -shared \
+    "$ROOT_DIR/nativelibs/map.c" \
+    -I"$ROOT_DIR" \
+    -o "$ROOT_DIR/nativelibs/map.$SHARED_EXT"; then
+    printf "%sMap native module build failed%s\n" "$RED" "$RESET"
+    exit 1
+fi
+
 for test_file in "$TEST_DIR"/*.rdn; do
     test_name="$(basename "$test_file" .rdn)"
     expected_out="$EXPECTED_DIR/$test_name.out"
