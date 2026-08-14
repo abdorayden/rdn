@@ -213,9 +213,12 @@ static bool closefd(RDNApi* api) {
 
     fdrdn = (FILE *)(intptr_t)handle;
 
-    fclose(fdrdn);
+    if (fdrdn) {
+        fclose(fdrdn);
+    }
 
-    if (!api->pop(api, 2)) {
+
+    if (!api->pop(api, 1)) {
         return false;
     }
 
