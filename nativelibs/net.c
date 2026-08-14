@@ -270,7 +270,7 @@ static bool resolve_host(const char *host, struct sockaddr_in *addr) {
         hints.ai_family = AF_INET;
         hints.ai_socktype = SOCK_STREAM;
         if (getaddrinfo(host, NULL, &hints, &result) == 0 && result) {
-            memcpy(&addr->sin_addr, &result->ai_addr, sizeof(struct sockaddr_in));
+            memcpy(addr, (struct sockaddr_in*)result->ai_addr, sizeof(struct sockaddr_in));
             freeaddrinfo(result);
             return 1;
         }
