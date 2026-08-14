@@ -395,4 +395,20 @@ Lists module
         Lists::insert call
     end
 
+    extends (List List) () defun
+        tha-items let
+        tha-list let
+        tha-items len i let
+        i 0 > loop
+            tha-list tha-items 0 index append
+            tha-items 0 remove
+            i 1 - i set
+            i 0 >
+        end
+    end
+
+    @extends apply
+        Lists::extends call
+    end
+
 end
