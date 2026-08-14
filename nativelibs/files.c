@@ -131,7 +131,7 @@ static bool readfd(RDNApi* api) {
         return api->raise_error(api, "readfd requires valid file handle");
     }
 
-    request = (size_t)byteread;
+    request = byteread;
     buffer = malloc(request + 1);
     if (buffer == NULL) {
         api->push_null(api);
