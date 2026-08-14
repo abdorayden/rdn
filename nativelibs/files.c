@@ -206,7 +206,7 @@ static bool closefd(RDNApi* api) {
     long handle = 0;
     FILE *fdrdn = NULL;
 
-    if (!api->to_integer(api, -2, &handle)) {
+    if (!api->to_integer(api, -1, &handle)) {
         api->push_boolean(api , false);
         return api->raise_error(api, "closeHandle requires file handle");
     }
