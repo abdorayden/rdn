@@ -112,9 +112,11 @@ Files module
             swap
             [*str ptr*]
             dup
-            [*str ptr*]
+            [*str ptr ptr*]
             null = [*str ptr bool*] if
+                [*str ptr*]
                 Files::File::fd-ptr null = if
+                    pop pop
                     "non file descriptor and given fileptr param are available both of them are null" error
                 else
                     pop
@@ -126,9 +128,14 @@ Files module
         end
 
         fclose (Files::File::FileTyping::NullAbleFILEPTR) (Bool) defun
+            [*ptr*]
             true ok let
-            dup null != if
+            
+            dup [*ptr bool*] null != if
+                [*ptr*]
                 closeHandle call ok set
+            else
+                pop
             end
             Files::File::fd-ptr null != if
                 Files::File::fd-ptr 

@@ -43,7 +43,7 @@
         (da)->items[(da)->count++] = (item);    \
     } while (0)
 
-#define ray_is_empty(da) (da)->count == 0
+#define ray_is_empty(da) ((da)->count == 0)
 
 #define ray_peek(da) (da)->items[(assert((da)->count > 0), (da)->count - 1)]
 

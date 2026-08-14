@@ -54,7 +54,7 @@ Math module
     0.70710678118654752440 SQRT1_2	const
 
     sqrt    (Real) (Real) defun sqrtOf     call end
-    pow     (Real) (Real) defun powerOf    call end
+    pow     (Real Real) (Real) defun powerOf    call end
     cos     (Real) (Real) defun cosOf      call end
     sin     (Real) (Real) defun sinOf      call end
     arc-sin (Real) (Real) defun asinOf     call end

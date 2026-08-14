@@ -3841,6 +3841,11 @@ static bool apply_error(RDNState *stack, Vars *vars) {
             free_value(name_or_val);
             return diagnostic_error_current("unknown variable in error keyword");
         }
+        if (var->var_value->type != VALUE_STRING) {
+            free_value(name_or_val);
+            return diagnostic_error_current("variable is not a string type");
+        }
+        
         const char *msg = var->var_value->as.string;
         free_value(name_or_val);
         return diagnostic_error_current("%s", msg);
