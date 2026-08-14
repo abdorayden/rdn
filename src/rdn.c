@@ -3845,13 +3845,13 @@ static bool apply_error(RDNState *stack, Vars *vars) {
         }
         const char *msg = var->var_value->as.string;
         free_value(name_or_val);
-        return diagnostic_error_current(msg);
+        return diagnostic_error_current("%s", msg);
     }
 
     if (name_or_val->type == VALUE_STRING) {
         char *msg = copy_string(name_or_val->as.string);
         free_value(name_or_val);
-        bool ok = diagnostic_error_current(msg == NULL ? "(unknown)" : msg);
+        bool ok = diagnostic_error_current("%s" , msg == NULL ? "(unknown)" : msg);
         free(msg);
         return ok;
     }
