@@ -72,7 +72,13 @@ static void bigint_grow(BigInt *a, size_t needed) {
     if (needed <= a->capacity) return;
     if (a->capacity == 0) a->capacity = 64;
     while (needed > a->capacity) a->capacity *= 2;
+    uint64_t* save = a->limbs;
     a->limbs = (uint64_t *)realloc(a->limbs, a->capacity * sizeof(uint64_t));
+    if (a->limbs == NULL) {
+        if (save) {
+            free(save);
+        }
+    }
 }
 
 static void bigint_free(BigInt *a) {
