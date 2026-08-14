@@ -34,6 +34,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include <limits.h>
+
 #include "../include/rdn_native.h"
 
 #include <ctype.h>
@@ -535,7 +537,14 @@ static bool socket_send(RDNApi *api) {
         return api->raise_error(api, "socket_send: invalid or closed socket");
     }
 
+#if defined(_WIN32)
+    if (data_len > INT_MAX) {
+        return api->raise_error(api, "socket_send: data too large");
+    }
     sent = send(rs->sock, data, (int)data_len, 0);
+#else
+    sent = send(rs->sock, data, data_len, 0);
+#endif
     if (sent == SOCKET_ERROR) {
         return api->raise_error(api, "socket_send: send failed");
     }
