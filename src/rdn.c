@@ -93,16 +93,20 @@ static void vars_record_scope_name(const char *name) {
 }
 
 static bool is_module_name(const char *name) {
-    for (size_t i = 0; i < g_modules.count; i++) {
-        if (strcmp(name, g_modules.items[i]) == 0) return true;
+    if (name != NULL) {
+        for (size_t i = 0; i < g_modules.count; i++) {
+            if (strcmp(name, g_modules.items[i]) == 0) return true;
+        }
     }
     return false;
 }
 
 bool loaded_files_contains(const char *path){
-    for(size_t i = 0 ; i < g_loaded_files.count ; ++i) {
-        if (strcmp(path, g_loaded_files.items[i]) == 0) {
-            return true;
+    if (path != NULL) {
+        for(size_t i = 0 ; i < g_loaded_files.count ; ++i) {
+            if (strcmp(path, g_loaded_files.items[i]) == 0) {
+                return true;
+            }
         }
     }
     return false;
@@ -1241,43 +1245,37 @@ static bool match_char_class(const char **pat, char ch) {
 }
 
 static bool match_pattern(const char *pat, const char *text) {
-    while (*pat != '\0') {
+    const char *star = NULL;
+    const char *mark = NULL;
+
+    while (*text) {
         if (*pat == '*') {
-            pat++;
-            if (*pat == '\0') {
-                return true;
-            }
-            while (*text != '\0') {
-                if (match_pattern(pat, text)) {
-                    return true;
-                }
-                text++;
-            }
-            return false;
+            star = pat++;
+            mark = text;
         } else if (*pat == '?') {
-            if (*text == '\0') {
-                return false;
-            }
-            pat++;
-            text++;
+            pat++; text++;
         } else if (*pat == '[') {
-            pat++;
-            if (*text == '\0') {
+            const char *cl = pat + 1;
+            if (match_char_class(&cl, *text)) {
+                pat = cl;
+                text++;
+            } else if (star) {
+                pat = star + 1;
+                text = ++mark;
+            } else {
                 return false;
             }
-            if (!match_char_class(&pat, *text)) {
-                return false;
-            }
-            text++;
+        } else if (*pat == *text) {
+            pat++; text++;
+        } else if (star) {
+            pat = star + 1;   // backtrack: retry '*' match one char later
+            text = ++mark;
         } else {
-            if (*text != *pat) {
-                return false;
-            }
-            pat++;
-            text++;
+            return false;
         }
     }
-    return *text == '\0';
+    while (*pat == '*') pat++;
+    return *pat == '\0';
 }
 
 static bool apply_match(RDNState *stack, Vars *vars) {
