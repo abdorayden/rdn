@@ -102,44 +102,42 @@ bool rdn_set_target_fps(RDNApi* api) {
 int main(void)
 {
     RDNState stack = {0};
-    Vars vars = {.hasheq = ht_cstr_hasheq};
-    Funcs funcs = {.hasheq = ht_cstr_hasheq};
 
-    funcs_define_native(&funcs, "init-window", 
+    funcs_define_native("init-window", 
                 rdn_init_window, NULL);
 
 
-    funcs_define_native(&funcs, "close-window", 
+    funcs_define_native("close-window", 
                 rdn_close_window, NULL);
 
 
-    funcs_define_native(&funcs, "window-should-close", 
+    funcs_define_native("window-should-close", 
                 rdn_window_should_close, NULL);
 
-    funcs_define_native(&funcs, "begin-drawing", 
+    funcs_define_native("begin-drawing", 
                 rdn_begin_drawing, NULL);
 
-    funcs_define_native(&funcs, "End-drawing", 
+    funcs_define_native("End-drawing", 
                 rdn_end_drawing, NULL);
 
 
-    funcs_define_native(&funcs, "clear-background", 
+    funcs_define_native("clear-background", 
                 rdn_clear_bg, NULL);
 
-    funcs_define_native(&funcs, "draw-rect", 
+    funcs_define_native("draw-rect", 
                 rdn_draw_rect, NULL);
 
-    funcs_define_native(&funcs, "get-screen-width", 
+    funcs_define_native("get-screen-width", 
                 rdn_get_width, NULL);
 
-    funcs_define_native(&funcs, "get-screen-height", 
+    funcs_define_native("get-screen-height", 
                 rdn_get_height, NULL);
 
-    funcs_define_native(&funcs, "set-target-fps", 
+    funcs_define_native("set-target-fps", 
                 rdn_set_target_fps, NULL);
 
     char* src = read_file("main.rdn");
-    evaluate_source(&stack, &vars, &funcs, src);
+    evaluate_source(&stack, src);
     return 0;
 }
 

@@ -59,15 +59,13 @@ int main(void)
     // rdn_do_string("32 print");
 
     RDNState stack = {0};
-    Vars vars = {.hasheq = ht_cstr_hasheq};
-    Funcs funcs = {.hasheq = ht_cstr_hasheq};
-    funcs_define(&funcs, "hey", "331 print", NULL, 1, 1);
-    funcs_define_native(&funcs, "foo", f, NULL);
-    evaluate_source(&stack, &vars, &funcs, "1");
+    funcs_define("hey", "331 print", NULL, 1, 1);
+    funcs_define_native("foo", f, NULL);
+    evaluate_source(&stack, "1");
     hello(&stack);
-    // evaluate_source(&stack, &vars, &funcs, "hey call");
-    // evaluate_source(&stack, &vars, &funcs, "foo call print");
-    evaluate_source(&stack, &vars, &funcs, "\"hey im rayden\" foo call print");
+    // evaluate_source(&stack, "hey call");
+    // evaluate_source(&stack, "foo call print");
+    evaluate_source(&stack, "\"hey im rayden\" foo call print");
 
     return 0;
 }

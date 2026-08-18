@@ -64,6 +64,91 @@ static char *g_module_func_prefix = NULL;
 static char *g_module_var_prefix = NULL;
 static RLList(char*) g_modules = {0};
 static LoadPathStack g_loaded_files = {0};
+static Vars vars = {.hasheq = ht_cstr_hasheq};
+static Funcs funcs = {.hasheq = ht_cstr_hasheq};
+
+static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else);
+static bool execute_block(RDNState *stack, char **cursor, BlockStop *stop_reason, bool allow_else);
+static bool apply_if(RDNState *stack, char **cursor, BlockStop *stop_reason);
+static bool apply_loop(RDNState *stack, char **cursor, BlockStop *stop_reason);
+static bool skip_if(char **cursor);
+static bool skip_loop(char **cursor);
+static bool skip_demac(char **cursor);
+static bool apply_defun(RDNState *stack, char **cursor);
+static bool apply_module(RDNState *stack, char **cursor);
+static bool apply_open(RDNState *stack, char **cursor);
+static bool apply_apply(RDNState *stack, char **cursor);
+static bool apply_demac(RDNState *stack, char **cursor);
+static bool apply_call(RDNState *stack);
+static bool apply_pcall(RDNState *stack);
+static bool execute_named_entry(RDNState *stack, Funcs_t *entry, const char *context_kind, const char *context_name);
+static bool expand_demac(Funcs_t *entry, char **cursor);
+static void free_macro_expansion_stack(MacroExpansionStack *expansions);
+static void free_macro_expansions(void);
+static bool apply_to_string(RDNState *stack);
+static bool skip_comment(char **cursor);
+static bool read_string_token(char **cursor, char **out_token);
+static bool read_plain_token(char **cursor, char **out_token);
+static bool next_token(char **cursor, char **out_token, bool *out_is_string);
+static bool push_token_value(RDNState *stack, const char *token, bool is_string);
+static bool is_value_token(const char *token, bool is_string);
+static bool is_identifier_token(const char *token);
+static bool execute_list_literal(RDNState *stack, char **cursor);
+static Value *parse_list_literal(char **cursor);
+static bool identifier_is_name_target(char *cursor);
+static bool apply_line_col(RDNState *stack);
+static bool apply_file_name(RDNState *stack);
+static bool apply_func_name(RDNState *stack);
+static bool apply_stack_size(RDNState *stack);
+static bool apply_do_string(RDNState *stack);
+static bool apply_do_file(RDNState *stack);
+static bool apply_let(RDNState *stack);
+static bool apply_assert(RDNState *stack);
+static bool apply_unlet(RDNState *stack);
+static bool apply_error(RDNState *stack);
+static bool apply_set(RDNState *stack);
+static bool apply_enum(RDNState *stack, bool reset);
+static bool apply_const(RDNState *stack);
+static bool typecheck_signature_types_valid(const Value *types);
+static bool append_typecheck_signature(const char *name, const Value *params, const Value *returns);
+static bool pop_string_path_operand(RDNState *stack, const char *context, Value **out_target, char **out_path);
+static void free_stack_values(RDNState *stack);
+static bool apply_binary_operator(RDNState *stack, const char *operator_token);
+static bool append_text(char **buffer, size_t *length, const char *text);
+static char *resolve_path_from_current_source(const char *path);
+static char *canonicalize_existing_path(const char *path);
+static bool path_is_readable_file(const char *path);
+static bool push_search_path(SearchPathStack *paths, const char *path);
+static char *resolve_load_path_candidate(const char *path, const SearchPathStack *search_paths);
+static bool load_path_stack_contains(const char *path);
+static bool push_load_path(const char *path);
+static void pop_load_path(void);
+static const char *host_shared_library_extension(void);
+static void free_native_module_regs(NativeModuleRegs *regs);
+static bool native_api_raise_error(RDNApi *api, const char *message);
+static bool native_module_set_error(RDNModule *module, const char *message);
+static bool native_module_register_function(RDNModule *module, const char *name, RDNNativeFunction function);
+static size_t native_api_stack_size(RDNApi *api);
+static RDNValueType native_api_type(RDNApi *api, long index);
+static bool native_api_is_number(RDNApi *api, long index);
+static bool native_api_to_integer(RDNApi *api, long index, long *out_value);
+static bool native_api_to_number(RDNApi *api, long index, double *out_value);
+static bool native_api_to_boolean(RDNApi *api, long index, bool *out_value);
+static const char *native_api_to_string(RDNApi *api, long index);
+static const char *native_api_to_identifier(RDNApi *api, long index);
+static void *native_api_resolve_variable(RDNApi *api, const char *name);
+static bool native_api_pop(RDNApi *api, size_t count);
+static bool native_api_push_null(RDNApi *api);
+static bool native_api_push_integer(RDNApi *api, long value);
+static bool native_api_push_number(RDNApi *api, double value);
+static bool native_api_push_boolean(RDNApi *api, bool value);
+static bool native_api_push_string(RDNApi *api, const char *value);
+static bool native_api_push_list(RDNApi *api);
+static bool native_api_list_len(RDNApi *api, long index, size_t *out_length);
+static bool native_api_list_append(RDNApi *api, long list_index, long value_index);
+static bool native_api_list_index(RDNApi *api, long list_index, long item_index);
+static bool native_api_list_remove(RDNApi *api, long list_index, long item_index);
+static void apply_host_environment(void);
 
 // Scope tracking for the hash-table-backed Vars. A hash table is unordered,
 // so it cannot store interleaved scope markers the way the old linear array
@@ -145,7 +230,7 @@ static bool path_is_separator_char(char ch);
 static const char *path_last_separator(const char *path);
 static char *get_install_prefix(void);
 
-static char *copy_string(const char *text) {
+char *copy_string(const char *text) {
     return arena_strdup(&g_arena, text);
 }
 
@@ -283,42 +368,42 @@ static bool diagnostic_note_current(const char *fmt, ...) {
     return false;
 }
 
-static Value *create_null_value(void) {
+Value *create_null_value(void) {
     Value *value = arena_alloc(&g_arena, sizeof(*value));
     value->type = VALUE_NULL;
     value->as.integer = 0;
     return value;
 }
 
-static Value *create_integer_value(long integer) {
+Value *create_integer_value(long integer) {
     Value *value = arena_alloc(&g_arena, sizeof(*value));
     value->type = VALUE_INTEGER;
     value->as.integer = integer;
     return value;
 }
 
-static Value *create_double_value(double number) {
+Value *create_double_value(double number) {
     Value *value = arena_alloc(&g_arena, sizeof(*value));
     value->type = VALUE_DOUBLE;
     value->as.number = number;
     return value;
 }
 
-static Value *create_boolean_value(bool boolean) {
+Value *create_boolean_value(bool boolean) {
     Value *value = arena_alloc(&g_arena, sizeof(*value));
     value->type = VALUE_BOOLEAN;
     value->as.boolean = boolean;
     return value;
 }
 
-static Value *create_string_value_owned(char *string) {
+Value *create_string_value_owned(char *string) {
     Value *value = arena_alloc(&g_arena, sizeof(*value));
     value->type = VALUE_STRING;
     value->as.string = string;
     return value;
 }
 
-static Value *create_string_value_copy(const char *string) {
+Value *create_string_value_copy(const char *string) {
     char *copy = copy_string(string);
 
     if (copy == NULL) {
@@ -328,7 +413,7 @@ static Value *create_string_value_copy(const char *string) {
     return create_string_value_owned(copy);
 }
 
-static Value *create_list_value(void) {
+Value *create_list_value(void) {
     Value *value = arena_alloc(&g_arena, sizeof(*value));
     value->type = VALUE_LIST;
     value->as.list.items = NULL;
@@ -337,14 +422,14 @@ static Value *create_list_value(void) {
     return value;
 }
 
-static Value *create_var_name_value(const char *name) {
+Value *create_var_name_value(const char *name) {
     Value *value = arena_alloc(&g_arena, sizeof(*value));
     value->type = VALUE_AS_VAR;
     value->as.string = copy_string(name);
     return value;
 }
 
-static Value *clone_value(const Value *value) {
+Value *clone_value(const Value *value) {
     size_t index = 0;
     Value *copy = NULL;
 
@@ -385,7 +470,7 @@ static Value *clone_value(const Value *value) {
     }
 }
 
-static Vars_t *create_var_entry(const char *name, Value *value, bool is_const) {
+Vars_t *create_var_entry(const char *name, Value *value, bool is_const) {
     (void)name;
     Vars_t *entry = arena_alloc(&g_arena, sizeof(*entry));
     *entry = (Vars_t){0};
@@ -398,7 +483,7 @@ static Vars_t *create_var_entry(const char *name, Value *value, bool is_const) {
     return entry;
 }
 
-static Funcs_t *create_func_entry(const char *name, char *body, const char *source_path, size_t source_line, size_t source_column) {
+Funcs_t *create_func_entry(const char *name, char *body, const char *source_path, size_t source_line, size_t source_column) {
     (void)name;
     Funcs_t *entry = arena_alloc(&g_arena, sizeof(*entry));
     *entry = (Funcs_t){0};
@@ -412,7 +497,7 @@ static Funcs_t *create_func_entry(const char *name, char *body, const char *sour
     return entry;
 }
 
-static Funcs_t *create_native_func_entry(const char *name, RDNNativeFunction native_function, void *native_library_handle) {
+Funcs_t *create_native_func_entry(const char *name, RDNNativeFunction native_function, void *native_library_handle) {
     (void)name;
     Funcs_t *entry = arena_alloc(&g_arena, sizeof(*entry));
     *entry = (Funcs_t){0};
@@ -426,15 +511,15 @@ static Funcs_t *create_native_func_entry(const char *name, RDNNativeFunction nat
     return entry;
 }
 
-static void free_vars(Vars *vars) {
-    ht_free(vars);
+void free_vars() {
+    ht_free(&vars);
 }
 
-static void free_funcs(Funcs *funcs) {
+void free_funcs() {
     // Only close native library handles. Entry payloads and keys are
     // arena-managed; ht_free() only releases the malloc'd slot buffer.
     RLList(void*) handles = {0};
-    ht_foreach(entry, funcs) {
+    ht_foreach(entry, &funcs) {
         void *handle = entry->native_library_handle;
         if (handle == NULL) continue;
         bool seen = false;
@@ -449,7 +534,7 @@ static void free_funcs(Funcs *funcs) {
             ray_append(&handles, handle);
         }
     }
-    ht_free(funcs);
+    ht_free(&funcs);
 }
 
 static void *native_library_open(const char *path) {
@@ -516,22 +601,21 @@ static const char *native_library_last_error(void) {
 #endif
 }
 
-static bool vars_push_scope(Vars *vars) {
-    (void)vars;
+bool vars_push_scope() {
     ScopeFrame frame = {0};
     frame.scope_id = g_next_scope_id++;
     ray_append(&g_scope_stack, frame);
     return true;
 }
 
-static void vars_pop_scope(Vars *vars) {
+void vars_pop_scope() {
     if (g_scope_stack.count == 0) {
         return;
     }
 
     ScopeFrame *frame = &g_scope_stack.items[g_scope_stack.count - 1];
     for (size_t i = 0; i < frame->names.count; i++) {
-        Vars_t *top = ht_find(vars, frame->names.items[i]);
+        Vars_t *top = ht_find(&vars, frame->names.items[i]);
         if (top == NULL) {
             continue;
         }
@@ -541,35 +625,35 @@ static void vars_pop_scope(Vars *vars) {
         if (top->prev != NULL) {
             *top = *top->prev;
         } else {
-            ht_delete(vars, top);
+            ht_delete(&vars, top);
         }
     }
 
     g_scope_stack.count--;
 }
 
-static Vars_t *find_var_entry(const Vars *vars, const char *name) {
-    return ht_find((Vars *)vars, (char *)name);
+Vars_t *find_var_entry(const char *name) {
+    return ht_find(&vars, (char *)name);
 }
 
-static Vars_t *find_current_scope_var_entry(const Vars *vars, const char *name) {
-    Vars_t *entry = ht_find((Vars *)vars, (char *)name);
+static Vars_t *find_current_scope_var_entry(const char *name) {
+    Vars_t *entry = ht_find(&vars, (char *)name);
     if (entry == NULL || entry->scope_id != vars_current_scope_id()) {
         return NULL;
     }
     return entry;
 }
 
-static Funcs_t *find_func_entry(const Funcs *funcs, const char *name) {
-    return ht_find((Funcs *)funcs, (char *)name);
+Funcs_t *find_func_entry(const char *name) {
+    return ht_find(&funcs, (char *)name);
 }
 
 static bool func_entry_has_body(const Funcs_t *entry) {
     return entry->type == FUNC_SCRIPT || entry->type == FUNC_APPLY || entry->type == FUNC_DEMAC;
 }
 
-static bool funcs_define(Funcs *funcs, const char *name, char *body, const char *source_path, size_t source_line, size_t source_column) {
-    Funcs_t *entry = find_func_entry(funcs, name);
+bool funcs_define(const char *name, char *body, const char *source_path, size_t source_line, size_t source_column) {
+    Funcs_t *entry = find_func_entry(name);
 
     if (entry != NULL) {
         entry->type = FUNC_SCRIPT;
@@ -586,12 +670,12 @@ static bool funcs_define(Funcs *funcs, const char *name, char *body, const char 
         return diagnostic_error_current("failed to allocate function entry");
     }
 
-    *ht_put(funcs, (char *)copy_string(name)) = *entry;
+    *ht_put(&funcs, (char *)copy_string(name)) = *entry;
     return true;
 }
 
-static bool funcs_define_apply(Funcs *funcs, const char *name, char *body, const char *source_path, size_t source_line, size_t source_column) {
-    Funcs_t *entry = find_func_entry(funcs, name);
+static bool funcs_define_apply(const char *name, char *body, const char *source_path, size_t source_line, size_t source_column) {
+    Funcs_t *entry = find_func_entry(name);
 
     if (entry != NULL) {
         entry->type = FUNC_APPLY;
@@ -609,12 +693,12 @@ static bool funcs_define_apply(Funcs *funcs, const char *name, char *body, const
     }
 
     entry->type = FUNC_APPLY;
-    *ht_put(funcs, (char *)copy_string(name)) = *entry;
+    *ht_put(&funcs, (char *)copy_string(name)) = *entry;
     return true;
 }
 
-static bool funcs_define_demac(Funcs *funcs, const char *name, char *body, const char *source_path, size_t source_line, size_t source_column) {
-    Funcs_t *entry = find_func_entry(funcs, name);
+static bool funcs_define_demac(const char *name, char *body, const char *source_path, size_t source_line, size_t source_column) {
+    Funcs_t *entry = find_func_entry(name);
 
     if (entry != NULL) {
         entry->type = FUNC_DEMAC;
@@ -632,12 +716,12 @@ static bool funcs_define_demac(Funcs *funcs, const char *name, char *body, const
     }
 
     entry->type = FUNC_DEMAC;
-    *ht_put(funcs, (char *)copy_string(name)) = *entry;
+    *ht_put(&funcs, (char *)copy_string(name)) = *entry;
     return true;
 }
 
-static bool funcs_define_native(Funcs *funcs, const char *name, RDNNativeFunction native_function, void *native_library_handle) {
-    Funcs_t *entry = find_func_entry(funcs, name);
+bool funcs_define_native(const char *name, RDNNativeFunction native_function, void *native_library_handle) {
+    Funcs_t *entry = find_func_entry(name);
 
     if (entry != NULL) {
         if (func_entry_has_body(entry)) {
@@ -655,12 +739,12 @@ static bool funcs_define_native(Funcs *funcs, const char *name, RDNNativeFunctio
         return false;
     }
 
-    *ht_put(funcs, (char *)copy_string(name)) = *entry;
+    *ht_put(&funcs, (char *)copy_string(name)) = *entry;
     return true;
 }
 
-static bool vars_let(Vars *vars, const char *name, const Value *value) {
-    Vars_t *top = find_var_entry(vars, name);
+bool vars_let(const char *name, const Value *value) {
+    Vars_t *top = find_var_entry(name);
     Value *copy = clone_value(value);
 
     if (copy == NULL) {
@@ -688,14 +772,14 @@ static bool vars_let(Vars *vars, const char *name, const Value *value) {
                 *binding->prev = *top;
             }
         }
-        *ht_put(vars, (char *)copy_string(name)) = *binding;
+        *ht_put(&vars, (char *)copy_string(name)) = *binding;
         vars_record_scope_name(name);
     }
     return true;
 }
 
-static bool vars_set(Vars *vars, const char *name, const Value *value) {
-    Vars_t *top = find_var_entry(vars, name);
+bool vars_set(const char *name, const Value *value) {
+    Vars_t *top = find_var_entry(name);
     Value *copy = clone_value(value);
 
     if (top == NULL) {
@@ -715,8 +799,8 @@ static bool vars_set(Vars *vars, const char *name, const Value *value) {
     return true;
 }
 
-static bool vars_const(Vars *vars, const char *name, const Value *value) {
-    Vars_t *top = find_var_entry(vars, name);
+bool vars_const(const char *name, const Value *value) {
+    Vars_t *top = find_var_entry(name);
     Value *copy = clone_value(value);
 
     if (copy == NULL) {
@@ -740,13 +824,13 @@ static bool vars_const(Vars *vars, const char *name, const Value *value) {
                 *binding->prev = *top;
             }
         }
-        *ht_put(vars, (char *)copy_string(name)) = *binding;
+        *ht_put(&vars, (char *)copy_string(name)) = *binding;
         vars_record_scope_name(name);
     }
     return true;
 }
 
-static void free_value(Value *value) {
+void free_value(Value *value) {
     (void)value;
 }
 
@@ -754,7 +838,7 @@ static void free_stack_values(RDNState *stack) {
     stack->count = 0;
 }
 
-static bool push_value(RDNState *stack, Value *value) {
+bool push_value(RDNState *stack, Value *value) {
     if (value == NULL) {
         fprintf(stderr, "failed to allocate value\n");
         return false;
@@ -829,7 +913,7 @@ static bool parse_double_token(const char *text, double *out_value) {
     return true;
 }
 
-static bool value_to_double(const Value *value, double *out_value) {
+bool value_to_double(const Value *value, double *out_value) {
     if (value->type == VALUE_INTEGER) {
         *out_value = (double)value->as.integer;
         return true;
@@ -843,7 +927,7 @@ static bool value_to_double(const Value *value, double *out_value) {
     return false;
 }
 
-static bool value_to_long(const Value *value, long *out_value) {
+bool value_to_long(const Value *value, long *out_value) {
     if (value->type != VALUE_INTEGER) {
         return false;
     }
@@ -852,7 +936,7 @@ static bool value_to_long(const Value *value, long *out_value) {
     return true;
 }
 
-static bool value_to_boolean(const Value *value, bool *out_value) {
+bool value_to_boolean(const Value *value, bool *out_value) {
     if (value->type != VALUE_BOOLEAN) {
         return false;
     }
@@ -861,14 +945,14 @@ static bool value_to_boolean(const Value *value, bool *out_value) {
     return true;
 }
 
-static Value *resolve_value_if_var(const Vars *vars, Value *value, const char *context) {
+Value *resolve_value_if_var(Value *value, const char *context) {
     Vars_t *entry = NULL;
 
     if (value == NULL || value->type != VALUE_AS_VAR) {
         return value;
     }
 
-    entry = find_var_entry(vars, value->as.string);
+    entry = find_var_entry(value->as.string);
     if (entry == NULL) {
         diagnostic_error_current("%s requires known variable '%s'", context == NULL ? "(UNKNOWN)" : context, value->as.string);
         free_value(value);
@@ -1024,7 +1108,7 @@ static char* exit_value(const Value* value , int* out_exit) {
     return "ERROR: exit expect integer";
 }
 
-static bool apply_binary_operator(RDNState *stack, Vars *vars, const char *operator_token) {
+static bool apply_binary_operator(RDNState *stack, const char *operator_token) {
     Value *left = NULL;
     Value *right = NULL;
     Value *result = NULL;
@@ -1040,7 +1124,7 @@ static bool apply_binary_operator(RDNState *stack, Vars *vars, const char *opera
             return diagnostic_error_current("operator '%s' requires 1 operand, got %zu", operator_token, stack->count);
         }
 
-        right = resolve_value_if_var(vars, ray_pop(stack), operator_token);
+        right = resolve_value_if_var(ray_pop(stack), operator_token);
         if (right == NULL) {
             return false;
         }
@@ -1066,8 +1150,8 @@ static bool apply_binary_operator(RDNState *stack, Vars *vars, const char *opera
         return diagnostic_error_current("operator '%s' requires 2 operands, got %zu", operator_token, stack->count);
     }
 
-    right = resolve_value_if_var(vars, ray_pop(stack), operator_token);
-    left = resolve_value_if_var(vars, ray_pop(stack), operator_token);
+    right = resolve_value_if_var(ray_pop(stack), operator_token);
+    left = resolve_value_if_var(ray_pop(stack), operator_token);
     if (left == NULL || right == NULL) {
         free_value(left);
         free_value(right);
@@ -1278,7 +1362,7 @@ static bool match_pattern(const char *pat, const char *text) {
     return *pat == '\0';
 }
 
-static bool apply_match(RDNState *stack, Vars *vars) {
+static bool apply_match(RDNState *stack) {
     Value *text_val = NULL;
     Value *pat_val = NULL;
     bool result = false;
@@ -1287,12 +1371,12 @@ static bool apply_match(RDNState *stack, Vars *vars) {
         return diagnostic_error_current("match requires 2 operands");
     }
 
-    text_val = resolve_value_if_var(vars, ray_pop(stack), "match");
+    text_val = resolve_value_if_var(ray_pop(stack), "match");
     if (text_val == NULL) {
         return false;
     }
 
-    pat_val = resolve_value_if_var(vars, ray_pop(stack), "match");
+    pat_val = resolve_value_if_var(ray_pop(stack), "match");
     if (pat_val == NULL) {
         free_value(text_val);
         return false;
@@ -1330,14 +1414,14 @@ static bool apply_debug(RDNState *stack) {
     return true;
 }
 
-static bool apply_print(RDNState *stack, Vars *vars) {
+static bool apply_print(RDNState *stack) {
     Value *value = NULL;
 
     if (stack->count < 1) {
         return diagnostic_error_current("print requires 1 operand");
     }
 
-    value = resolve_value_if_var(vars, ray_pop(stack), "print");
+    value = resolve_value_if_var(ray_pop(stack), "print");
     if (value == NULL) {
         return false;
     }
@@ -1346,14 +1430,14 @@ static bool apply_print(RDNState *stack, Vars *vars) {
     return true;
 }
 
-static bool apply_exit(RDNState *stack , Vars *vars, int* exit_status) {
+static bool apply_exit(RDNState *stack , int* exit_status) {
 
     if (stack->count < 1) {
         return diagnostic_error_current("type requires 1 operand");
     }
 
     Value *value = NULL;
-    value = resolve_value_if_var(vars, ray_pop(stack), "exit");
+    value = resolve_value_if_var(ray_pop(stack), "exit");
     if (value == NULL) {
         return false;
     }
@@ -1374,7 +1458,7 @@ static bool apply_stack_size(RDNState *stack){
     return push_value(stack, size);
 }
 
-static bool apply_func_name(RDNState *stack, Funcs *funcs){
+static bool apply_func_name(RDNState *stack){
     Value *fn = NULL;
     Value *result = NULL;
     Funcs_t *entry = NULL;
@@ -1390,7 +1474,7 @@ static bool apply_func_name(RDNState *stack, Funcs *funcs){
         return false;
     }
 
-    entry = find_func_entry(funcs, fn->as.string);
+    entry = find_func_entry(fn->as.string);
     if (entry == NULL) {
         diagnostic_error_current("unknown function: %s", fn->as.string);
         ray_append(stack, fn);
@@ -1402,7 +1486,7 @@ static bool apply_func_name(RDNState *stack, Funcs *funcs){
     return push_value(stack, result);
 }
 
-static bool apply_type(RDNState *stack, Vars *vars, Funcs *funcs) {
+static bool apply_type(RDNState *stack) {
     Value *value = NULL;
     Value *result = NULL;
 
@@ -1412,12 +1496,12 @@ static bool apply_type(RDNState *stack, Vars *vars, Funcs *funcs) {
 
     value = ray_pop(stack);
     if (value->type == VALUE_AS_VAR) {
-        if (find_func_entry(funcs, value->as.string) != NULL) {
+        if (find_func_entry(value->as.string) != NULL) {
             result = create_string_value_copy("function");
             free_value(value);
             value = NULL;
         } else {
-            value = resolve_value_if_var(vars, value, "type");
+            value = resolve_value_if_var(value, "type");
             if (value == NULL) {
                 return false;
             }
@@ -1478,13 +1562,13 @@ static bool apply_pop(RDNState *stack) {
     return true;
 }
 
-static bool apply_dup(RDNState *stack, Vars *vars) {
+static bool apply_dup(RDNState *stack) {
     if (stack->count < 1) {
         return diagnostic_error_current("dup requires 1 operand");
     }
 
     Value *value = NULL;
-    value = resolve_value_if_var(vars, ray_pop(stack), "dup");
+    value = resolve_value_if_var(ray_pop(stack), "dup");
     if (value == NULL) {
         return false;
     }
@@ -1535,13 +1619,13 @@ static bool apply_dup(RDNState *stack, Vars *vars) {
 }
 
 // to_string builtin function convert value from the top stack to string without remove it
-static bool apply_to_string(RDNState *stack, Vars *vars) {
+static bool apply_to_string(RDNState *stack) {
     if (stack->count < 1) {
         return diagnostic_error_current("to_string requires 1 operand");
     }
 
     Value *value = NULL;
-    value = resolve_value_if_var(vars, ray_pop(stack), "to_string");
+    value = resolve_value_if_var(ray_pop(stack), "to_string");
     if (value == NULL) {
         return false;
     }
@@ -1634,7 +1718,7 @@ static Value *create_string_char_value(char ch) {
     return create_string_value_owned(buffer);
 }
 
-static bool apply_append(RDNState *stack, Vars *vars) {
+static bool apply_append(RDNState *stack) {
     Value *item = NULL;
     Value *target = NULL;
     Vars_t *entry = NULL;
@@ -1647,7 +1731,7 @@ static bool apply_append(RDNState *stack, Vars *vars) {
     item = ray_pop(stack);
     target = ray_pop(stack);
 
-    if (target->type == VALUE_AS_VAR && (entry = find_var_entry(vars, target->as.string)) != NULL) {
+    if (target->type == VALUE_AS_VAR && (entry = find_var_entry(target->as.string)) != NULL) {
         if (entry->var_value->type == VALUE_LIST) {
             item_copy = clone_value(item);
             if (item_copy == NULL) {
@@ -1682,7 +1766,7 @@ static bool apply_append(RDNState *stack, Vars *vars) {
         return false;
     }
 
-    target = resolve_value_if_var(vars, target, "append");
+    target = resolve_value_if_var(target, "append");
     if (target == NULL) {
         free_value(item);
         return false;
@@ -1722,7 +1806,7 @@ static bool apply_append(RDNState *stack, Vars *vars) {
     return false;
 }
 
-static bool apply_index(RDNState *stack, Vars *vars) {
+static bool apply_index(RDNState *stack) {
     Value *index_value = NULL;
     Value *target = NULL;
     Vars_t *entry = NULL;
@@ -1733,7 +1817,7 @@ static bool apply_index(RDNState *stack, Vars *vars) {
         return diagnostic_error_current("index requires 2 operands");
     }
 
-    index_value = resolve_value_if_var(vars, ray_pop(stack), "index");
+    index_value = resolve_value_if_var(ray_pop(stack), "index");
     if (index_value == NULL) {
         return false;
     }
@@ -1746,10 +1830,10 @@ static bool apply_index(RDNState *stack, Vars *vars) {
         return false;
     }
 
-    if (target->type == VALUE_AS_VAR && (entry = find_var_entry(vars, target->as.string)) != NULL) {
+    if (target->type == VALUE_AS_VAR && (entry = find_var_entry(target->as.string)) != NULL) {
         resolved_target = entry->var_value;
     } else {
-        target = resolve_value_if_var(vars, target, "index");
+        target = resolve_value_if_var(target, "index");
         if (target == NULL) {
             free_value(index_value);
             return false;
@@ -1805,7 +1889,7 @@ static bool apply_index(RDNState *stack, Vars *vars) {
     return diagnostic_error_current("index requires list or string target");
 }
 
-static bool apply_remove(RDNState *stack, Vars *vars) {
+static bool apply_remove(RDNState *stack) {
     Value *index_value = NULL;
     Value *target = NULL;
     Vars_t *entry = NULL;
@@ -1817,7 +1901,7 @@ static bool apply_remove(RDNState *stack, Vars *vars) {
         return diagnostic_error_current("remove requires 2 operands");
     }
 
-    index_value = resolve_value_if_var(vars, ray_pop(stack), "remove");
+    index_value = resolve_value_if_var(ray_pop(stack), "remove");
     if (index_value == NULL) {
         return false;
     }
@@ -1830,10 +1914,10 @@ static bool apply_remove(RDNState *stack, Vars *vars) {
         return false;
     }
 
-    if (target->type == VALUE_AS_VAR && (entry = find_var_entry(vars, target->as.string)) != NULL) {
+    if (target->type == VALUE_AS_VAR && (entry = find_var_entry(target->as.string)) != NULL) {
         resolved_target = entry->var_value;
     } else {
-        target = resolve_value_if_var(vars, target, "remove");
+        target = resolve_value_if_var(target, "remove");
         if (target == NULL) {
             free_value(index_value);
             return false;
@@ -1893,7 +1977,7 @@ static bool apply_remove(RDNState *stack, Vars *vars) {
     return false;
 }
 
-static bool apply_len(RDNState *stack, Vars *vars) {
+static bool apply_len(RDNState *stack) {
     Value *target = NULL;
     Vars_t *entry = NULL;
     Value *resolved_target = NULL;
@@ -1904,10 +1988,10 @@ static bool apply_len(RDNState *stack, Vars *vars) {
     }
 
     target = ray_pop(stack);
-    if (target->type == VALUE_AS_VAR && (entry = find_var_entry(vars, target->as.string)) != NULL) {
+    if (target->type == VALUE_AS_VAR && (entry = find_var_entry(target->as.string)) != NULL) {
         resolved_target = entry->var_value;
     } else {
-        target = resolve_value_if_var(vars, target, "len");
+        target = resolve_value_if_var(target, "len");
         if (target == NULL) {
             return false;
         }
@@ -1935,14 +2019,14 @@ static bool apply_len(RDNState *stack, Vars *vars) {
     return true;
 }
 
-static bool apply_add_load_path(RDNState *stack, Vars *vars) {
+static bool apply_add_load_path(RDNState *stack) {
     Value *target = NULL;
     char *path = NULL;
     char *resolved = NULL;
     char *canonical = NULL;
     bool ok = false;
 
-    if (!pop_string_path_operand(stack, vars, "add_load_path", &target, &path)) {
+    if (!pop_string_path_operand(stack, "add_load_path", &target, &path)) {
         return false;
     }
 
@@ -1969,14 +2053,14 @@ static bool apply_add_load_path(RDNState *stack, Vars *vars) {
     return true;
 }
 
-static bool apply_add_native_path(RDNState *stack, Vars *vars) {
+static bool apply_add_native_path(RDNState *stack) {
     Value *target = NULL;
     char *path = NULL;
     char *resolved = NULL;
     char *canonical = NULL;
     bool ok = false;
 
-    if (!pop_string_path_operand(stack, vars, "add_native_path", &target, &path)) {
+    if (!pop_string_path_operand(stack, "add_native_path", &target, &path)) {
         return false;
     }
 
@@ -2003,7 +2087,7 @@ static bool apply_add_native_path(RDNState *stack, Vars *vars) {
     return true;
 }
 
-static bool apply_load(RDNState *stack, Vars *vars, Funcs *funcs){
+static bool apply_load(RDNState *stack){
     char *source = NULL;
     char *resolved_path = NULL;
     char *canonical_path = NULL;
@@ -2013,7 +2097,7 @@ static bool apply_load(RDNState *stack, Vars *vars, Funcs *funcs){
     Value *target = NULL;
     bool ok = false;
 
-    if (!pop_string_path_operand(stack, vars, "load", &target, &path)) {
+    if (!pop_string_path_operand(stack, "load", &target, &path)) {
         return false;
     }
 
@@ -2092,7 +2176,7 @@ static bool apply_load(RDNState *stack, Vars *vars, Funcs *funcs){
     {
         const char *previous_path = g_current_source_path;
         g_current_source_path = resolved_path;
-        ok = evaluate_source(stack, vars, funcs, source);
+        ok = evaluate_source(stack, source);
         g_current_source_path = previous_path;
     }
 
@@ -2105,7 +2189,7 @@ static bool apply_load(RDNState *stack, Vars *vars, Funcs *funcs){
     return ok;
 }
 
-static bool apply_loadnative(RDNState *stack, Vars *vars, Funcs *funcs) {
+static bool apply_loadnative(RDNState *stack) {
     char *resolved_path = NULL;
     char *canonical_path = NULL;
     char *path = NULL;
@@ -2121,7 +2205,7 @@ static bool apply_loadnative(RDNState *stack, Vars *vars, Funcs *funcs) {
     size_t path_length = 0;
     size_t shared_ext_length = 0;
 
-    if (!pop_string_path_operand(stack, vars, "loadnative", &target, &path)) {
+    if (!pop_string_path_operand(stack, "loadnative", &target, &path)) {
         return false;
     }
 
@@ -2222,7 +2306,7 @@ static bool apply_loadnative(RDNState *stack, Vars *vars, Funcs *funcs) {
 
     for (size_t index = 0; index < module_state.regs.count; index++) {
         NativeModuleReg *reg = module_state.regs.items[index];
-        if (!funcs_define_native(funcs, reg->name, reg->function, handle)) {
+        if (!funcs_define_native(reg->name, reg->function, handle)) {
             free_native_module_regs(&module_state.regs);
             free(module_state.error_message);
             native_library_close(handle);
@@ -2259,8 +2343,8 @@ static bool typecheck_signature_types_valid(const Value *types) {
     return true;
 }
 
-static bool append_typecheck_signature(Vars *vars, const char *name, const Value *params, const Value *returns) {
-    Vars_t *state_entry = find_var_entry(vars, "Typecheck::State");
+static bool append_typecheck_signature(const char *name, const Value *params, const Value *returns) {
+    Vars_t *state_entry = find_var_entry("Typecheck::State");
     Value *signature = NULL;
     Value *name_value = NULL;
     Value *params_copy = NULL;
@@ -2320,7 +2404,7 @@ static char *build_nested_module_prefix(const char *previous_prefix, const char 
     return prefix;
 }
 
-static bool apply_module(RDNState *stack, Vars *vars, Funcs *funcs, char **cursor) {
+static bool apply_module(RDNState *stack, char **cursor) {
     Value *name = NULL;
     char *body = NULL;
     char *body_start = *cursor;
@@ -2431,7 +2515,7 @@ static bool apply_module(RDNState *stack, Vars *vars, Funcs *funcs, char **curso
                     g_module_func_prefix = new_func_prefix;
                     g_module_var_prefix = new_var_prefix;
 
-                    if (!evaluate_source(stack, vars, funcs, body)) {
+                    if (!evaluate_source(stack, body)) {
                         free_value(name);
                         free(body);
                         free(g_module_func_prefix);
@@ -2466,13 +2550,13 @@ typedef struct {
     Vars_t payload;
 } VarAlias;
 
-static bool apply_open_full_module(Value *name, Vars *vars, Funcs *funcs) {
+static bool apply_open_full_module(Value *name) {
     size_t prefix_len = strlen(name->as.string);
     RLList(FuncAlias) func_aliases = {0};
     RLList(VarAlias) var_aliases = {0};
 
-    ht_foreach(entry, funcs) {
-        const char *func_name = ht_key(funcs, entry);
+    ht_foreach(entry, &funcs) {
+        const char *func_name = ht_key(&funcs, entry);
         size_t func_name_len = strlen(func_name);
 
         if (func_name_len > prefix_len + 2 &&
@@ -2481,7 +2565,7 @@ static bool apply_open_full_module(Value *name, Vars *vars, Funcs *funcs) {
             strncmp(func_name, name->as.string, prefix_len) == 0) {
             const char *alias = func_name + prefix_len + 2;
 
-            if (find_func_entry(funcs, alias) != NULL) {
+            if (find_func_entry(alias) != NULL) {
                 continue;
             }
 
@@ -2496,8 +2580,8 @@ static bool apply_open_full_module(Value *name, Vars *vars, Funcs *funcs) {
         }
     }
 
-    ht_foreach(entry, vars) {
-        const char *var_name = ht_key(vars, entry);
+    ht_foreach(entry, &vars) {
+        const char *var_name = ht_key(&vars, entry);
         size_t var_name_len = strlen(var_name);
 
         if (var_name_len > prefix_len + 2 &&
@@ -2506,7 +2590,7 @@ static bool apply_open_full_module(Value *name, Vars *vars, Funcs *funcs) {
             strncmp(var_name, name->as.string, prefix_len) == 0) {
             const char *alias = var_name + prefix_len + 2;
 
-            if (find_var_entry(vars, alias) != NULL) {
+            if (find_var_entry(alias) != NULL) {
                 continue;
             }
 
@@ -2529,16 +2613,16 @@ static bool apply_open_full_module(Value *name, Vars *vars, Funcs *funcs) {
     }
 
     for (size_t i = 0; i < func_aliases.count; i++) {
-        *ht_put(funcs, func_aliases.items[i].name) = func_aliases.items[i].payload;
+        *ht_put(&funcs, func_aliases.items[i].name) = func_aliases.items[i].payload;
     }
     for (size_t i = 0; i < var_aliases.count; i++) {
-        *ht_put(vars, var_aliases.items[i].name) = var_aliases.items[i].payload;
+        *ht_put(&vars, var_aliases.items[i].name) = var_aliases.items[i].payload;
     }
 
     return true;
 }
 
-static bool apply_open_selective(Value *name, Vars *vars, Funcs *funcs) {
+static bool apply_open_selective(Value *name) {
     const char *full_name = name->as.string;
     const char *last_colon = strrchr(full_name, ':');
 
@@ -2557,16 +2641,16 @@ static bool apply_open_selective(Value *name, Vars *vars, Funcs *funcs) {
     size_t full_name_len = strlen(full_name);
     bool found = false;
 
-    ht_foreach(entry, funcs) {
-        const char *func_name = ht_key(funcs, entry);
+    ht_foreach(entry, &funcs) {
+        const char *func_name = ht_key(&funcs, entry);
         if (strlen(func_name) == full_name_len && strcmp(func_name, full_name) == 0) {
-            if (find_func_entry(funcs, member) == NULL) {
+            if (find_func_entry(member) == NULL) {
                 Funcs_t payload = *entry;
                 if (func_entry_has_body(entry)) {
                     payload.as.func_body = copy_string(entry->as.func_body);
                 }
                 payload.source_path = copy_string(entry->source_path);
-                *ht_put(funcs, copy_string(member)) = payload;
+                *ht_put(&funcs, copy_string(member)) = payload;
             }
             found = true;
             break;
@@ -2574,10 +2658,10 @@ static bool apply_open_selective(Value *name, Vars *vars, Funcs *funcs) {
     }
 
     if (!found) {
-        ht_foreach(entry, vars) {
-            const char *var_name = ht_key(vars, entry);
+        ht_foreach(entry, &vars) {
+            const char *var_name = ht_key(&vars, entry);
             if (strlen(var_name) == full_name_len && strcmp(var_name, full_name) == 0) {
-                if (find_var_entry(vars, member) == NULL) {
+                if (find_var_entry(member) == NULL) {
                     Value *copy = clone_value(entry->var_value);
                     if (copy == NULL) {
                         return diagnostic_error_current("failed to clone variable value");
@@ -2587,7 +2671,7 @@ static bool apply_open_selective(Value *name, Vars *vars, Funcs *funcs) {
                         free_value(copy);
                         return diagnostic_error_current("failed to allocate variable alias");
                     }
-                    *ht_put(vars, copy_string(member)) = *alias_entry;
+                    *ht_put(&vars, copy_string(member)) = *alias_entry;
                 }
                 found = true;
                 break;
@@ -2602,7 +2686,7 @@ static bool apply_open_selective(Value *name, Vars *vars, Funcs *funcs) {
     return true;
 }
 
-static bool apply_open(RDNState *stack, Vars *vars, Funcs *funcs, char **cursor) {
+static bool apply_open(RDNState *stack, char **cursor) {
     (void)cursor;
     Value *name = NULL;
 
@@ -2621,12 +2705,12 @@ static bool apply_open(RDNState *stack, Vars *vars, Funcs *funcs, char **cursor)
     bool has_double_colon = (last_colon != NULL && last_colon > name->as.string && *(last_colon - 1) == ':');
 
     if (is_module_name(name->as.string)) {
-        if (!apply_open_full_module(name, vars, funcs)) {
+        if (!apply_open_full_module(name)) {
             free_value(name);
             return false;
         }
     } else if (has_double_colon) {
-        if (!apply_open_selective(name, vars, funcs)) {
+        if (!apply_open_selective(name)) {
             free_value(name);
             return false;
         }
@@ -2640,7 +2724,7 @@ static bool apply_open(RDNState *stack, Vars *vars, Funcs *funcs, char **cursor)
     return true;
 }
 
-static bool apply_defun(RDNState *stack, Vars *vars, Funcs *funcs, char **cursor) {
+static bool apply_defun(RDNState *stack, char **cursor) {
     Value *name = NULL;
     Value *params = NULL;
     Value *returns = NULL;
@@ -2746,14 +2830,14 @@ static bool apply_defun(RDNState *stack, Vars *vars, Funcs *funcs, char **cursor
                 memcpy(body, body_start, body_length);
                 body[body_length] = '\0';
 
-                if (!funcs_define(funcs, name->as.string, body, g_current_source_path, source_line, source_column)) {
+                if (!funcs_define(name->as.string, body, g_current_source_path, source_line, source_column)) {
                     free_value(name);
                     free_value(params);
                     free_value(returns);
                     return false;
                 }
 
-                if (signed_defun && !append_typecheck_signature(vars, name->as.string, params, returns)) {
+                if (signed_defun && !append_typecheck_signature(name->as.string, params, returns)) {
                     free_value(name);
                     free_value(params);
                     free_value(returns);
@@ -2771,7 +2855,7 @@ static bool apply_defun(RDNState *stack, Vars *vars, Funcs *funcs, char **cursor
     }
 }
 
-static bool apply_apply(RDNState *stack, Funcs *funcs, char **cursor) {
+static bool apply_apply(RDNState *stack, char **cursor) {
     Value *name = NULL;
     char *body = NULL;
     char *body_start = *cursor;
@@ -2845,7 +2929,7 @@ static bool apply_apply(RDNState *stack, Funcs *funcs, char **cursor) {
                 memcpy(body, body_start, body_length);
                 body[body_length] = '\0';
 
-                if (!funcs_define_apply(funcs, name->as.string, body, g_current_source_path, source_line, source_column)) {
+                if (!funcs_define_apply(name->as.string, body, g_current_source_path, source_line, source_column)) {
                     free_value(name);
                     return false;
                 }
@@ -2859,7 +2943,7 @@ static bool apply_apply(RDNState *stack, Funcs *funcs, char **cursor) {
     }
 }
 
-static bool apply_demac(RDNState *stack, Funcs *funcs, char **cursor) {
+static bool apply_demac(RDNState *stack, char **cursor) {
     Value *name = NULL;
     char *body = NULL;
     char *body_start = *cursor;
@@ -2922,7 +3006,7 @@ static bool apply_demac(RDNState *stack, Funcs *funcs, char **cursor) {
             memcpy(body, body_start, body_length);
             body[body_length] = '\0';
 
-            if (!funcs_define_demac(funcs, name->as.string, body, g_current_source_path, source_line, source_column)) {
+            if (!funcs_define_demac(name->as.string, body, g_current_source_path, source_line, source_column)) {
                 free_value(name);
                 return false;
             }
@@ -2952,6 +3036,34 @@ static bool expand_demac(Funcs_t *entry, char **cursor) {
     return true;
 }
 
+static bool materialize_scope_references(RDNState *stack) {
+    size_t index = 0;
+
+    for (index = 0; index < stack->count; index++) {
+        Value *value = stack->items[index];
+        Vars_t *entry = NULL;
+        Value *resolved = NULL;
+
+        if (value == NULL || value->type != VALUE_AS_VAR) {
+            continue;
+        }
+
+        entry = find_current_scope_var_entry(value->as.string);
+        if (entry == NULL) {
+            continue;
+        }
+
+        resolved = clone_value(entry->var_value);
+        if (resolved == NULL) {
+            return diagnostic_error_current("failed to materialize scoped value '%s'", value->as.string);
+        }
+
+        free_value(value);
+        stack->items[index] = resolved;
+    }
+
+    return true;
+}
 static void free_macro_expansion_stack(MacroExpansionStack *expansions) {
     expansions->count = 0;
 }
@@ -2961,7 +3073,7 @@ static void free_macro_expansions(void) {
     g_macro_expansions = (MacroExpansionStack){0};
 }
 
-static bool execute_named_entry(RDNState *stack, Vars *vars, Funcs *funcs, Funcs_t *entry, const char *context_kind, const char *context_name) {
+static bool execute_named_entry(RDNState *stack, Funcs_t *entry, const char *context_kind, const char *context_name) {
     BlockStop stop_reason = BLOCK_STOP_EOF;
     char *cursor = NULL;
 
@@ -2971,7 +3083,7 @@ static bool execute_named_entry(RDNState *stack, Vars *vars, Funcs *funcs, Funcs
         bool ok = false;
 
         call_state.stack = stack;
-        call_state.vars = vars;
+        call_state.vars = &vars;
         call_state.error_message = NULL;
 
         api.userdata = &call_state;
@@ -3008,7 +3120,7 @@ static bool execute_named_entry(RDNState *stack, Vars *vars, Funcs *funcs, Funcs
         return true;
     }
 
-    if (!vars_push_scope(vars)) {
+    if (!vars_push_scope()) {
         return false;
     }
 
@@ -3016,21 +3128,21 @@ static bool execute_named_entry(RDNState *stack, Vars *vars, Funcs *funcs, Funcs
     {
         DiagnosticContext previous_context = g_diagnostic_context;
         diagnostic_set_source(entry->source_path, entry->as.func_body, entry->source_line, entry->source_column);
-        if (!execute_block(stack, vars, funcs, &cursor, &stop_reason, false)) {
+        if (!execute_block(stack, &cursor, &stop_reason, false)) {
             g_diagnostic_context = previous_context;
             diagnostic_note_current("while %s '%s'", context_kind, context_name);
-            vars_pop_scope(vars);
+            vars_pop_scope();
             return false;
         }
         g_diagnostic_context = previous_context;
     }
 
-    if (!materialize_scope_references(stack, vars)) {
-        vars_pop_scope(vars);
+    if (!materialize_scope_references(stack)) {
+        vars_pop_scope();
         return false;
     }
 
-    vars_pop_scope(vars);
+    vars_pop_scope();
 
     if (stop_reason == BLOCK_STOP_BREAK) {
         return diagnostic_error_current("unexpected break");
@@ -3047,7 +3159,7 @@ static bool execute_named_entry(RDNState *stack, Vars *vars, Funcs *funcs, Funcs
     return true;
 }
 
-static bool apply_pcall(RDNState *stack, Vars *vars, Funcs *funcs) {
+static bool apply_pcall(RDNState *stack) {
     Value *name = NULL;
     Value *resolved_name = NULL;
     Vars_t *var_entry = NULL;
@@ -3069,7 +3181,7 @@ static bool apply_pcall(RDNState *stack, Vars *vars, Funcs *funcs) {
         return false;
     }
 
-    var_entry = find_var_entry(vars, name->as.string);
+    var_entry = find_var_entry(name->as.string);
     if (var_entry != NULL) {
         resolved_name = clone_value(var_entry->var_value);
         if (resolved_name == NULL) {
@@ -3085,9 +3197,9 @@ static bool apply_pcall(RDNState *stack, Vars *vars, Funcs *funcs) {
             return false;
         }
 
-        entry = find_func_entry(funcs, resolved_name->as.string);
+        entry = find_func_entry(resolved_name->as.string);
     } else {
-        entry = find_func_entry(funcs, name->as.string);
+        entry = find_func_entry(name->as.string);
     }
 
     if (entry == NULL) {
@@ -3104,7 +3216,7 @@ static bool apply_pcall(RDNState *stack, Vars *vars, Funcs *funcs) {
     was_suppressed = g_diagnostics_suppressed;
     g_diagnostics_suppressed = true;
 
-    ok = execute_named_entry(stack, vars, funcs, entry, "calling function", ht_key(funcs, entry));
+    ok = execute_named_entry(stack, entry, "calling function", ht_key(&funcs, entry));
 
     if (ok) {
         g_diagnostics_suppressed = was_suppressed;
@@ -3161,7 +3273,7 @@ static bool apply_pcall(RDNState *stack, Vars *vars, Funcs *funcs) {
     return true;
 }
 
-static bool apply_call(RDNState *stack, Vars *vars, Funcs *funcs) {
+static bool apply_call(RDNState *stack) {
     Value *name = NULL;
     Value *resolved_name = NULL;
     Vars_t *var_entry = NULL;
@@ -3179,7 +3291,7 @@ static bool apply_call(RDNState *stack, Vars *vars, Funcs *funcs) {
         return false;
     }
 
-    var_entry = find_var_entry(vars, name->as.string);
+    var_entry = find_var_entry(name->as.string);
     if (var_entry != NULL) {
         resolved_name = clone_value(var_entry->var_value);
         if (resolved_name == NULL) {
@@ -3195,9 +3307,9 @@ static bool apply_call(RDNState *stack, Vars *vars, Funcs *funcs) {
             return false;
         }
 
-        entry = find_func_entry(funcs, resolved_name->as.string);
+        entry = find_func_entry(resolved_name->as.string);
     } else {
-        entry = find_func_entry(funcs, name->as.string);
+        entry = find_func_entry(name->as.string);
     }
 
     if (entry == NULL) {
@@ -3208,40 +3320,12 @@ static bool apply_call(RDNState *stack, Vars *vars, Funcs *funcs) {
         return false;
     }
 
-    ok = execute_named_entry(stack, vars, funcs, entry, "calling function", ht_key(funcs, entry));
+    ok = execute_named_entry(stack, entry, "calling function", ht_key(&funcs, entry));
     free_value(resolved_name);
     free_value(name);
     return ok;
 }
 
-static bool materialize_scope_references(RDNState *stack, Vars *vars) {
-    size_t index = 0;
-
-    for (index = 0; index < stack->count; index++) {
-        Value *value = stack->items[index];
-        Vars_t *entry = NULL;
-        Value *resolved = NULL;
-
-        if (value == NULL || value->type != VALUE_AS_VAR) {
-            continue;
-        }
-
-        entry = find_current_scope_var_entry(vars, value->as.string);
-        if (entry == NULL) {
-            continue;
-        }
-
-        resolved = clone_value(entry->var_value);
-        if (resolved == NULL) {
-            return diagnostic_error_current("failed to materialize scoped value '%s'", value->as.string);
-        }
-
-        free_value(value);
-        stack->items[index] = resolved;
-    }
-
-    return true;
-}
 
 static bool skip_comment(char **cursor) {
     const char *comment_start = *cursor;
@@ -3376,6 +3460,110 @@ static bool next_token(char **cursor, char **out_token, bool *out_is_string) {
     return read_plain_token(cursor, out_token);
 }
 
+static bool apply_if(RDNState *stack, char **cursor, BlockStop *stop_reason) {
+    Value *condition = NULL;
+    bool condition_value = false;
+    BlockStop branch_stop = BLOCK_STOP_EOF;
+
+    if (stack->count < 1) {
+        return diagnostic_error_current("if requires 1 operand");
+    }
+
+    condition = ray_pop(stack);
+    if (!value_to_boolean(condition, &condition_value)) {
+        diagnostic_error_current("if requires a boolean operand");
+        ray_append(stack, condition);
+        return false;
+    }
+
+    free_value(condition);
+
+    if (condition_value) {
+        if (!vars_push_scope()) {
+            return false;
+        }
+        if (!execute_block(stack, cursor, &branch_stop, true)) {
+            vars_pop_scope();
+            return false;
+        }
+
+        if (branch_stop == BLOCK_STOP_EOF) {
+            vars_pop_scope();
+            return diagnostic_error_current("if missing end");
+        }
+
+        if (!materialize_scope_references(stack)) {
+            vars_pop_scope();
+            return false;
+        }
+
+        vars_pop_scope();
+
+        if (branch_stop == BLOCK_STOP_BREAK || branch_stop == BLOCK_STOP_CONTINUE || branch_stop == BLOCK_STOP_RETURN) {
+            *stop_reason = branch_stop;
+            return true;
+        }
+
+        if (branch_stop == BLOCK_STOP_ELSE) {
+            if (!skip_block(cursor, &branch_stop, true)) {
+                return false;
+            }
+
+            if (branch_stop != BLOCK_STOP_END) {
+                return diagnostic_error_current("else missing end");
+            }
+        }
+
+        *stop_reason = BLOCK_STOP_END;
+        return true;
+    }
+
+    if (!skip_block(cursor, &branch_stop, true)) {
+        return false;
+    }
+
+    if (branch_stop == BLOCK_STOP_EOF) {
+        return diagnostic_error_current("if missing end");
+    }
+
+    if (branch_stop == BLOCK_STOP_ELSE) {
+        if (!vars_push_scope()) {
+            return false;
+        }
+        if (!execute_block(stack, cursor, &branch_stop, true)) {
+            vars_pop_scope();
+            return false;
+        }
+
+        if (branch_stop == BLOCK_STOP_BREAK || branch_stop == BLOCK_STOP_CONTINUE || branch_stop == BLOCK_STOP_RETURN) {
+            if (!materialize_scope_references(stack)) {
+                vars_pop_scope();
+                return false;
+            }
+            vars_pop_scope();
+            *stop_reason = branch_stop;
+            return true;
+        }
+
+        if (branch_stop != BLOCK_STOP_END) {
+            vars_pop_scope();
+            return diagnostic_error_current("else missing end");
+        }
+
+        if (!materialize_scope_references(stack)) {
+            vars_pop_scope();
+            return false;
+        }
+
+        vars_pop_scope();
+        *stop_reason = BLOCK_STOP_END;
+        return true;
+    }
+
+    *stop_reason = BLOCK_STOP_END;
+    return true;
+}
+
 static bool push_token_value(RDNState *stack, const char *token, bool is_string) {
     long integer_value = 0;
     double double_value = 0;
@@ -3426,7 +3614,7 @@ static bool is_value_token(const char *token, bool is_string) {
     return is_token(token, "null") || is_token(token, "true") || is_token(token, "false");
 }
 
-static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char **cursor) {
+static bool execute_list_literal(RDNState *stack, char **cursor) {
     char *token = NULL;
     bool is_string = false;
 
@@ -3446,7 +3634,7 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
         if (!is_string && is_token(token, "(")) {
             Value *list_value = NULL;
 
-            list_value = parse_list_literal(cursor, vars, funcs);
+            list_value = parse_list_literal(cursor);
             if (list_value == NULL) {
                 return false;
             }
@@ -3459,7 +3647,7 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
         } else if (is_token(token, "if")) {
             BlockStop stop_reason = BLOCK_STOP_EOF;
 
-            if (!apply_if(stack, vars, funcs, cursor, &stop_reason)) {
+            if (!apply_if(stack, cursor, &stop_reason)) {
                 return false;
             }
             if (stop_reason == BLOCK_STOP_BREAK) {
@@ -3475,7 +3663,7 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
         } else if (is_token(token, "loop")) {
             BlockStop stop_reason = BLOCK_STOP_EOF;
 
-            if (!apply_loop(stack, vars, funcs, cursor, &stop_reason)) {
+            if (!apply_loop(stack, cursor, &stop_reason)) {
                 return false;
             }
             if (stop_reason == BLOCK_STOP_RETURN) {
@@ -3483,37 +3671,37 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
             }
             continue;
         } else if (is_token(token, "defun")) {
-            if (!apply_defun(stack, vars, funcs, cursor)) {
+            if (!apply_defun(stack, cursor)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "module")) {
-            if (!apply_module(stack, vars, funcs, cursor)) {
+            if (!apply_module(stack, cursor)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "open")) {
-            if (!apply_open(stack, vars, funcs, cursor)) {
+            if (!apply_open(stack, cursor)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "apply")) {
-            if (!apply_apply(stack, funcs, cursor)) {
+            if (!apply_apply(stack, cursor)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "demac")) {
-            if (!apply_demac(stack, funcs, cursor)) {
+            if (!apply_demac(stack, cursor)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "call")) {
-            if (!apply_call(stack, vars, funcs)) {
+            if (!apply_call(stack)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "pcall")) {
-            if (!apply_pcall(stack, vars, funcs)) {
+            if (!apply_pcall(stack)) {
                 return false;
             }
             continue;
@@ -3529,12 +3717,12 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
             }
             continue;
         } else if (is_operator_token(token)) {
-            if (!apply_binary_operator(stack, vars, token)) {
+            if (!apply_binary_operator(stack, token)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "print")) {
-            if (!apply_print(stack, vars)) {
+            if (!apply_print(stack)) {
                 return false;
             }
             continue;
@@ -3544,12 +3732,12 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
             }
             continue;
         } else if (is_token(token, "type")) {
-            if (!apply_type(stack, vars, funcs)) {
+            if (!apply_type(stack)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "__func_name")) {
-            if (!apply_func_name(stack, funcs)) {
+            if (!apply_func_name(stack)) {
                 return false;
             }
             continue;
@@ -3561,7 +3749,7 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
         } else if (is_token(token, "exit")) {
             int ret = 0;
 
-            if (!apply_exit(stack, vars, &ret)) {
+            if (!apply_exit(stack, &ret)) {
                 return false;
             }
             free_stack_values(stack);
@@ -3577,82 +3765,82 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
             }
             continue;
         } else if (is_token(token, "dup")) {
-            if (!apply_dup(stack, vars)) {
+            if (!apply_dup(stack)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "let")) {
-            if (!apply_let(stack, vars)) {
+            if (!apply_let(stack)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "set")) {
-            if (!apply_set(stack, vars)) {
+            if (!apply_set(stack)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "enum")) {
-            if (!apply_enum(stack, vars, false)) {
+            if (!apply_enum(stack, false)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "reset")) {
-            if (!apply_enum(stack, vars, true)) {
+            if (!apply_enum(stack, true)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "const")) {
-            if (!apply_const(stack, vars)) {
+            if (!apply_const(stack)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "to_string")) {
-            if (!apply_to_string(stack, vars)) {
+            if (!apply_to_string(stack)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "append")) {
-            if (!apply_append(stack, vars)) {
+            if (!apply_append(stack)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "remove")) {
-            if (!apply_remove(stack, vars)) {
+            if (!apply_remove(stack)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "index")) {
-            if (!apply_index(stack, vars)) {
+            if (!apply_index(stack)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "len")) {
-            if (!apply_len(stack, vars)) {
+            if (!apply_len(stack)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "match")) {
-            if (!apply_match(stack, vars)) {
+            if (!apply_match(stack)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "add_load_path")) {
-            if (!apply_add_load_path(stack, vars)) {
+            if (!apply_add_load_path(stack)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "add_native_path")) {
-            if (!apply_add_native_path(stack, vars)) {
+            if (!apply_add_native_path(stack)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "load")) {
-            if (!apply_load(stack, vars, funcs)) {
+            if (!apply_load(stack)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "loadnative")) {
-            if (!apply_loadnative(stack, vars, funcs)) {
+            if (!apply_loadnative(stack)) {
                 return false;
             }
             continue;
@@ -3663,18 +3851,18 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
 
             if (identifier_is_name_target(*cursor)) {
                 resolved = create_var_name_value(token);
-            } else if ((var_entry = find_var_entry(vars, token)) != NULL &&
+            } else if ((var_entry = find_var_entry(token)) != NULL &&
                        (var_entry->var_value->type == VALUE_LIST || var_entry->var_value->type == VALUE_STRING)) {
                 resolved = create_var_name_value(token);
-            } else if ((var_entry = find_var_entry(vars, token)) != NULL) {
+            } else if ((var_entry = find_var_entry(token)) != NULL) {
                 resolved = clone_value(var_entry->var_value);
-            } else if ((func_entry = find_func_entry(funcs, token)) != NULL && func_entry->type == FUNC_DEMAC) {
+            } else if ((func_entry = find_func_entry(token)) != NULL && func_entry->type == FUNC_DEMAC) {
                 if (!expand_demac(func_entry, cursor)) {
                     return false;
                 }
                 continue;
             } else if (func_entry != NULL && func_entry->type == FUNC_APPLY) {
-                bool ok = execute_named_entry(stack, vars, funcs, func_entry, "applying body", ht_key(funcs, func_entry));
+                bool ok = execute_named_entry(stack, func_entry, "applying body", ht_key(&funcs, func_entry));
                 if (!ok) {
                     return false;
                 }
@@ -3694,7 +3882,7 @@ static bool execute_list_literal(RDNState *stack, Vars *vars, Funcs *funcs, char
     }
 }
 
-static Value *parse_list_literal(char **cursor, Vars *vars, Funcs *funcs) {
+static Value *parse_list_literal(char **cursor) {
     Value *list = create_list_value();
     RDNState list_stack = {0};
     size_t index = 0;
@@ -3703,7 +3891,7 @@ static Value *parse_list_literal(char **cursor, Vars *vars, Funcs *funcs) {
         return NULL;
     }
 
-    if (!execute_list_literal(&list_stack, vars, funcs, cursor)) {
+    if (!execute_list_literal(&list_stack, cursor)) {
         free_stack_values(&list_stack);
         free_value(list);
         return NULL;
@@ -3713,7 +3901,7 @@ static Value *parse_list_literal(char **cursor, Vars *vars, Funcs *funcs) {
         Vars_t *entry = NULL;
         Value *item = list_stack.items[index];
 
-        if (item->type == VALUE_AS_VAR && (entry = find_var_entry(vars, item->as.string)) != NULL) {
+        if (item->type == VALUE_AS_VAR && (entry = find_var_entry(item->as.string)) != NULL) {
             Value *resolved_item = clone_value(entry->var_value);
 
             free_value(item);
@@ -3828,7 +4016,7 @@ static bool identifier_is_name_target(char *cursor) {
     return is_target;
 }
 
-static bool apply_error(RDNState *stack, Vars *vars) {
+static bool apply_error(RDNState *stack) {
     Value *name_or_val = NULL;
     if (stack->count < 1) {
         return diagnostic_error_current("error keyword requires 1 operands");
@@ -3836,7 +4024,7 @@ static bool apply_error(RDNState *stack, Vars *vars) {
     name_or_val = ray_pop(stack);
 
     if (name_or_val->type == VALUE_AS_VAR) {
-        Vars_t* var = find_current_scope_var_entry(vars, name_or_val->as.string);
+        Vars_t* var = find_current_scope_var_entry(name_or_val->as.string);
         if (var == NULL) {
             free_value(name_or_val);
             return diagnostic_error_current("unknown variable in error keyword");
@@ -3878,23 +4066,23 @@ static bool apply_line_col(RDNState *stack) {
     return true;
 }
 
-static bool apply_do_string(RDNState *stack, Vars *vars, Funcs *funcs){
+static bool apply_do_string(RDNState *stack){
     if (stack->count < 1) {
         return diagnostic_error_current("do_string requires 1 operands and must be string");
     }
     Value* str = ray_pop(stack);
     bool ok = true;
     if (str->type == VALUE_STRING) {
-        ok = evaluate_source(stack, vars, funcs, str->as.string);
+        ok = evaluate_source(stack, str->as.string);
         free_value(str);
         return ok;
     }else if(str->type == VALUE_AS_VAR) {
-        Vars_t* var = find_current_scope_var_entry(vars, str->as.string);
+        Vars_t* var = find_current_scope_var_entry(str->as.string);
         if (var == NULL || var->var_value->type != VALUE_STRING) {
             free_value(str);
             return diagnostic_error_current("variable must be a string type");
         }
-        ok = evaluate_source(stack, vars, funcs, var->var_value->as.string);
+        ok = evaluate_source(stack, var->var_value->as.string);
         free_value(str);
         return ok;
     }
@@ -3902,22 +4090,22 @@ static bool apply_do_string(RDNState *stack, Vars *vars, Funcs *funcs){
     return diagnostic_error_current("the value is not a string type or variable of string");
 }
 
-static bool apply_do_file(RDNState *stack, Vars *vars, Funcs *funcs){
+static bool apply_do_file(RDNState *stack){
     if (stack->count < 1) {
         return diagnostic_error_current("do_file requires 1 operands and must be string");
     }
     Value* path = ray_pop(stack);
     if (path->type == VALUE_STRING) {
-        evaluate_file(stack, vars, funcs, path->as.string);
+        evaluate_file(stack, path->as.string);
         free_value(path);
         return true;
     }else if (path->type == VALUE_AS_VAR) {
-        Vars_t* var = find_current_scope_var_entry(vars, path->as.string);
+        Vars_t* var = find_current_scope_var_entry(path->as.string);
         if (var == NULL || var->var_value->type != VALUE_STRING) {
             free_value(path);
             return diagnostic_error_current("variable must be a string type");
         }
-        evaluate_file(stack, vars, funcs, var->var_value->as.string);
+        evaluate_file(stack, var->var_value->as.string);
         free_value(path);
         return true;
     }
@@ -3925,7 +4113,7 @@ static bool apply_do_file(RDNState *stack, Vars *vars, Funcs *funcs){
     return diagnostic_error_current("do_file requires 1 operands and must be string");
 }
 
-static bool apply_unlet(RDNState *stack, Vars *vars) {
+static bool apply_unlet(RDNState *stack) {
     Value *name = NULL;
     if (stack->count < 1) {
         return diagnostic_error_current("unlet requires 1 operands");
@@ -3943,7 +4131,7 @@ static bool apply_unlet(RDNState *stack, Vars *vars) {
         return false;
     }
 
-    Vars_t *entry = find_var_entry(vars, name->as.string);
+    Vars_t *entry = find_var_entry(name->as.string);
 
     if (entry == NULL) {
         ray_append(stack, name);
@@ -3954,15 +4142,14 @@ static bool apply_unlet(RDNState *stack, Vars *vars) {
     if (entry->prev != NULL) {
         *entry = *entry->prev;
     } else {
-        ht_delete(vars, entry);
+        ht_delete(&vars, entry);
     }
     free_value(name);
     return true;
 }
 
-static bool apply_assert(RDNState *stack, Vars *vars)
+static bool apply_assert(RDNState *stack)
 {
-    (void)vars;
     Value *condition = NULL;
     Value *msg = NULL;
 
@@ -4000,7 +4187,7 @@ static bool apply_assert(RDNState *stack, Vars *vars)
     return true;
 }
 
-static bool apply_let(RDNState *stack, Vars *vars) {
+static bool apply_let(RDNState *stack) {
     Value *name = NULL;
     Value *value = NULL;
 
@@ -4033,7 +4220,7 @@ static bool apply_let(RDNState *stack, Vars *vars) {
         name->as.string = prefixed;
     }
 
-    if (!vars_let(vars, name->as.string, value)) {
+    if (!vars_let(name->as.string, value)) {
         ray_append(stack, value);
         ray_append(stack, name);
         return false;
@@ -4044,7 +4231,7 @@ static bool apply_let(RDNState *stack, Vars *vars) {
     return true;
 }
 
-static bool apply_set(RDNState *stack, Vars *vars) {
+static bool apply_set(RDNState *stack) {
     Value *name = NULL;
     Value *value = NULL;
 
@@ -4062,7 +4249,7 @@ static bool apply_set(RDNState *stack, Vars *vars) {
         return false;
     }
 
-    if (!vars_set(vars, name->as.string, value)) {
+    if (!vars_set(name->as.string, value)) {
         ray_append(stack, value);
         ray_append(stack, name);
         return false;
@@ -4073,8 +4260,7 @@ static bool apply_set(RDNState *stack, Vars *vars) {
     return true;
 }
 
-static bool apply_enum(RDNState *stack, Vars *vars , bool reset) {
-    (void)vars;
+static bool apply_enum(RDNState *stack , bool reset) {
     static long counter = 0;
     if (reset) {
         counter = 0;
@@ -4096,7 +4282,7 @@ static bool apply_enum(RDNState *stack, Vars *vars , bool reset) {
     return true;
 }
 
-static bool apply_const(RDNState *stack, Vars *vars) {
+static bool apply_const(RDNState *stack) {
     Value *name = NULL;
     Value *value = NULL;
 
@@ -4129,7 +4315,7 @@ static bool apply_const(RDNState *stack, Vars *vars) {
         name->as.string = prefixed;
     }
 
-    if (!vars_const(vars, name->as.string, value)) {
+    if (!vars_const(name->as.string, value)) {
         ray_append(stack, value);
         ray_append(stack, name);
         return false;
@@ -4140,114 +4326,298 @@ static bool apply_const(RDNState *stack, Vars *vars) {
     return true;
 }
 
-static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else);
-static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor, BlockStop *stop_reason, bool allow_else);
+static bool execute_block(RDNState *stack, char **cursor, BlockStop *stop_reason, bool allow_else) {
+    char *token = NULL;
+    bool is_string = false;
 
-static bool apply_if(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor, BlockStop *stop_reason) {
-    Value *condition = NULL;
-    bool condition_value = false;
-    BlockStop branch_stop = BLOCK_STOP_EOF;
-
-    if (stack->count < 1) {
-        return diagnostic_error_current("if requires 1 operand");
-    }
-
-    condition = ray_pop(stack);
-    if (!value_to_boolean(condition, &condition_value)) {
-        diagnostic_error_current("if requires a boolean operand");
-        ray_append(stack, condition);
-        return false;
-    }
-
-    free_value(condition);
-
-    if (condition_value) {
-        if (!vars_push_scope(vars)) {
-            return false;
-        }
-        if (!execute_block(stack, vars, funcs, cursor, &branch_stop, true)) {
-            vars_pop_scope(vars);
+    while (true) {
+        if (!next_token(cursor, &token, &is_string)) {
             return false;
         }
 
-        if (branch_stop == BLOCK_STOP_EOF) {
-            vars_pop_scope(vars);
-            return diagnostic_error_current("if missing end");
-        }
-
-        if (!materialize_scope_references(stack, vars)) {
-            vars_pop_scope(vars);
-            return false;
-        }
-
-        vars_pop_scope(vars);
-
-        if (branch_stop == BLOCK_STOP_BREAK || branch_stop == BLOCK_STOP_CONTINUE || branch_stop == BLOCK_STOP_RETURN) {
-            *stop_reason = branch_stop;
+        if (token == NULL) {
+            *stop_reason = BLOCK_STOP_EOF;
             return true;
         }
 
-        if (branch_stop == BLOCK_STOP_ELSE) {
-            if (!skip_block(cursor, &branch_stop, true)) {
+        if (!is_string && is_token(token, "(")) {
+            Value *list_value = parse_list_literal(cursor);
+            if (list_value == NULL) {
                 return false;
             }
-
-            if (branch_stop != BLOCK_STOP_END) {
-                return diagnostic_error_current("else missing end");
+            ray_append(stack, list_value);
+            continue;
+        } else if (is_token(token, "else")) {
+            if (!allow_else) {
+                return diagnostic_error_current("unexpected else");
             }
-        }
-
-        *stop_reason = BLOCK_STOP_END;
-        return true;
-    }
-
-    if (!skip_block(cursor, &branch_stop, true)) {
-        return false;
-    }
-
-    if (branch_stop == BLOCK_STOP_EOF) {
-        return diagnostic_error_current("if missing end");
-    }
-
-    if (branch_stop == BLOCK_STOP_ELSE) {
-        if (!vars_push_scope(vars)) {
-            return false;
-        }
-        if (!execute_block(stack, vars, funcs, cursor, &branch_stop, true)) {
-            vars_pop_scope(vars);
-            return false;
-        }
-
-        if (branch_stop == BLOCK_STOP_BREAK || branch_stop == BLOCK_STOP_CONTINUE || branch_stop == BLOCK_STOP_RETURN) {
-            if (!materialize_scope_references(stack, vars)) {
-                vars_pop_scope(vars);
-                return false;
-            }
-            vars_pop_scope(vars);
-            *stop_reason = branch_stop;
+            *stop_reason = BLOCK_STOP_ELSE;
             return true;
-        }
+        } else if (is_token(token, "end")) {
+            *stop_reason = BLOCK_STOP_END;
+            return true;
+        } else if (is_token(token, "if")) {
+            if (!apply_if(stack, cursor, stop_reason)) {
+                return false;
+            }
+            if (*stop_reason == BLOCK_STOP_BREAK || *stop_reason == BLOCK_STOP_CONTINUE || *stop_reason == BLOCK_STOP_RETURN) {
+                return true;
+            }
+            continue;
+        } else if (is_token(token, "loop")) {
+            if (!apply_loop(stack, cursor, stop_reason)) {
+                return false;
+            }
+            if (*stop_reason == BLOCK_STOP_RETURN) {
+                return true;
+            }
+            continue;
+        } else if (is_token(token, "defun")) {
+            if (!apply_defun(stack, cursor)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "module")) {
+            if (!apply_module(stack, cursor)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "open")) {
+            if (!apply_open(stack, cursor)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "apply")) {
+            if (!apply_apply(stack, cursor)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "demac")) {
+            if (!apply_demac(stack, cursor)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "call")) {
+            if (!apply_call(stack)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "pcall")) {
+            if (!apply_pcall(stack)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "break")) {
+            *stop_reason = BLOCK_STOP_BREAK;
+            return true;
+        } else if (is_token(token, "continue")) {
+            *stop_reason = BLOCK_STOP_CONTINUE;
+            return true;
+        } else if (is_token(token, "ret")) {
+            *stop_reason = BLOCK_STOP_RETURN;
+            return true;
+        } else if (is_value_token(token, is_string)) {
+            if (!push_token_value(stack, token, is_string)) {
+                return false;
+            }
+            continue;
+        } else if (is_operator_token(token)) {
+            if (!apply_binary_operator(stack, token)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "print")) {
+            if (!apply_print(stack)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "type")) {
+            if (!apply_type(stack)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "__func_name")) {
+            if (!apply_func_name(stack)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "__stack_size")) {
+            if (!apply_stack_size(stack)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "exit")){
+            int ret = 0;
+            if (!apply_exit(stack, &ret)) {
+                return false;
+            }
+            free_stack_values(stack);
+            exit(ret);
+        } else if (is_token(token, "pop")) {
+            if (!apply_pop(stack)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "swap")) {
+            if (!apply_swap(stack)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "dup")) {
+            if (!apply_dup(stack)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "let")) {
+            if (!apply_let(stack)) {
+                return false;
+            }
+            continue;
+        }else if (is_token(token, "assert")) {
+            if (!apply_assert(stack)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "unlet")) {
+            if (!apply_unlet(stack)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "do_string")) {
+            if (!apply_do_string(stack)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "do_file")) {
+            if (!apply_do_file(stack)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "__line_col")) {
+            if (!apply_line_col(stack)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "__file")) {
+            if (!apply_file_name(stack)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "error")) {
+            if (!apply_error(stack)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "set")) {
+            if (!apply_set(stack)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "enum")) {
+            if (!apply_enum(stack, false)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "reset")) {
+            if (!apply_enum(stack, true)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "const")) {
+            if (!apply_const(stack)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "to_string")) {
+            if (!apply_to_string(stack)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "append")) {
+            if (!apply_append(stack)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "remove")) {
+            if (!apply_remove(stack)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "index")) {
+            if (!apply_index(stack)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "len")) {
+            if (!apply_len(stack)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "match")) {
+            if (!apply_match(stack)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "add_load_path")) {
+            if (!apply_add_load_path(stack)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "add_native_path")) {
+            if (!apply_add_native_path(stack)) {
+                return false;
+            }
+            continue;
+        }else if(is_token(token, "load")) {
+            if (!apply_load(stack)) {
+                return false;
+            }
+            continue;
+        } else if (is_token(token, "loadnative")) {
+            if (!apply_loadnative(stack)) {
+                return false;
+            }
+            continue;
+        } else if (is_identifier_token(token)) {
+            Value *resolved = NULL;
+            Vars_t *var_entry = NULL;
+            Funcs_t *func_entry = NULL;
 
-        if (branch_stop != BLOCK_STOP_END) {
-            vars_pop_scope(vars);
-            return diagnostic_error_current("else missing end");
-        }
+            if (identifier_is_name_target(*cursor)) {
+                resolved = create_var_name_value(token);
+            } else if ((var_entry = find_var_entry(token)) != NULL &&
+                       (var_entry->var_value->type == VALUE_LIST || var_entry->var_value->type == VALUE_STRING)) {
+                resolved = create_var_name_value(token);
+            } else if ((var_entry = find_var_entry(token)) != NULL) {
+                resolved = clone_value(var_entry->var_value);
+            } else if ((func_entry = find_func_entry(token)) != NULL && func_entry->type == FUNC_DEMAC) {
+                if (!expand_demac(func_entry, cursor)) {
+                    return false;
+                }
+                continue;
+            } else if (func_entry != NULL && func_entry->type == FUNC_APPLY) {
+                bool ok = execute_named_entry(stack, func_entry, "applying body", ht_key(&funcs, func_entry));
+                if (!ok) {
+                    return false;
+                }
+                continue;
+            } else {
+                resolved = create_var_name_value(token);
+            }
 
-        if (!materialize_scope_references(stack, vars)) {
-            vars_pop_scope(vars);
+            if (!push_value(stack, resolved)) {
+                return false;
+            }
+            continue;
+        }else {
+            diagnostic_error_current("unknown token: %s", token);
             return false;
         }
-
-        vars_pop_scope(vars);
-        *stop_reason = BLOCK_STOP_END;
-        return true;
     }
-
-    *stop_reason = BLOCK_STOP_END;
     return true;
 }
 
-static bool apply_loop(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor, BlockStop *stop_reason) {
+static bool apply_loop(RDNState *stack, char **cursor, BlockStop *stop_reason) {
     Value *condition = NULL;
     bool condition_value = false;
     BlockStop body_stop = BLOCK_STOP_EOF;
@@ -4275,48 +4645,48 @@ static bool apply_loop(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor,
         return diagnostic_error_current("loop missing end");
     }
 
-    if (!vars_push_scope(vars)) {
+    if (!vars_push_scope()) {
         return false;
     }
 
     while (condition_value) {
         char *iteration_cursor = body_start;
 
-        if (!execute_block(stack, vars, funcs, &iteration_cursor, &body_stop, false)) {
-            vars_pop_scope(vars);
+        if (!execute_block(stack, &iteration_cursor, &body_stop, false)) {
+            vars_pop_scope();
             return false;
         }
 
         if (body_stop == BLOCK_STOP_BREAK) {
             condition_value = false;
-            if (!materialize_scope_references(stack, vars)) {
-                vars_pop_scope(vars);
+            if (!materialize_scope_references(stack)) {
+                vars_pop_scope();
                 return false;
             }
-            vars_pop_scope(vars);
+            vars_pop_scope();
             *cursor = body_end;
             *stop_reason = BLOCK_STOP_END;
             return true;
         }
 
         if (body_stop == BLOCK_STOP_RETURN) {
-            if (!materialize_scope_references(stack, vars)) {
-                vars_pop_scope(vars);
+            if (!materialize_scope_references(stack)) {
+                vars_pop_scope();
                 return false;
             }
-            vars_pop_scope(vars);
+            vars_pop_scope();
             *cursor = body_end;
             *stop_reason = BLOCK_STOP_RETURN;
             return true;
         }
 
         if (body_stop != BLOCK_STOP_END && body_stop != BLOCK_STOP_CONTINUE) {
-            vars_pop_scope(vars);
+            vars_pop_scope();
             return diagnostic_error_current("loop missing end");
         }
 
         if (stack->count < 1) {
-            vars_pop_scope(vars);
+            vars_pop_scope();
             return diagnostic_error_current("loop body must leave boolean condition on stack");
         }
 
@@ -4324,312 +4694,21 @@ static bool apply_loop(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor,
         if (!value_to_boolean(condition, &condition_value)) {
             diagnostic_error_current("loop body must leave boolean condition on stack");
             ray_append(stack, condition);
-            vars_pop_scope(vars);
+            vars_pop_scope();
             return false;
         }
         free_value(condition);
     }
 
-    if (!materialize_scope_references(stack, vars)) {
-        vars_pop_scope(vars);
+    if (!materialize_scope_references(stack)) {
+        vars_pop_scope();
         return false;
     }
 
-    vars_pop_scope(vars);
+    vars_pop_scope();
 
     *cursor = body_end;
     *stop_reason = BLOCK_STOP_END;
-    return true;
-}
-
-static bool execute_block(RDNState *stack, Vars* vars, Funcs *funcs, char **cursor, BlockStop *stop_reason, bool allow_else) {
-    char *token = NULL;
-    bool is_string = false;
-
-    while (true) {
-        if (!next_token(cursor, &token, &is_string)) {
-            return false;
-        }
-
-        if (token == NULL) {
-            *stop_reason = BLOCK_STOP_EOF;
-            return true;
-        }
-
-        if (!is_string && is_token(token, "(")) {
-            Value *list_value = parse_list_literal(cursor, vars, funcs);
-            if (list_value == NULL) {
-                return false;
-            }
-            ray_append(stack, list_value);
-            continue;
-        } else if (is_token(token, "else")) {
-            if (!allow_else) {
-                return diagnostic_error_current("unexpected else");
-            }
-            *stop_reason = BLOCK_STOP_ELSE;
-            return true;
-        } else if (is_token(token, "end")) {
-            *stop_reason = BLOCK_STOP_END;
-            return true;
-        } else if (is_token(token, "if")) {
-            if (!apply_if(stack, vars, funcs, cursor, stop_reason)) {
-                return false;
-            }
-            if (*stop_reason == BLOCK_STOP_BREAK || *stop_reason == BLOCK_STOP_CONTINUE || *stop_reason == BLOCK_STOP_RETURN) {
-                return true;
-            }
-            continue;
-        } else if (is_token(token, "loop")) {
-            if (!apply_loop(stack, vars, funcs, cursor, stop_reason)) {
-                return false;
-            }
-            if (*stop_reason == BLOCK_STOP_RETURN) {
-                return true;
-            }
-            continue;
-        } else if (is_token(token, "defun")) {
-            if (!apply_defun(stack, vars, funcs, cursor)) {
-                return false;
-            }
-            continue;
-        } else if (is_token(token, "module")) {
-            if (!apply_module(stack, vars, funcs, cursor)) {
-                return false;
-            }
-            continue;
-        } else if (is_token(token, "open")) {
-            if (!apply_open(stack, vars, funcs, cursor)) {
-                return false;
-            }
-            continue;
-        } else if (is_token(token, "apply")) {
-            if (!apply_apply(stack, funcs, cursor)) {
-                return false;
-            }
-            continue;
-        } else if (is_token(token, "demac")) {
-            if (!apply_demac(stack, funcs, cursor)) {
-                return false;
-            }
-            continue;
-        } else if (is_token(token, "call")) {
-            if (!apply_call(stack, vars, funcs)) {
-                return false;
-            }
-            continue;
-        } else if (is_token(token, "pcall")) {
-            if (!apply_pcall(stack, vars, funcs)) {
-                return false;
-            }
-            continue;
-        } else if (is_token(token, "break")) {
-            *stop_reason = BLOCK_STOP_BREAK;
-            return true;
-        } else if (is_token(token, "continue")) {
-            *stop_reason = BLOCK_STOP_CONTINUE;
-            return true;
-        } else if (is_token(token, "ret")) {
-            *stop_reason = BLOCK_STOP_RETURN;
-            return true;
-        } else if (is_value_token(token, is_string)) {
-            if (!push_token_value(stack, token, is_string)) {
-                return false;
-            }
-            continue;
-        } else if (is_operator_token(token)) {
-            if (!apply_binary_operator(stack, vars, token)) {
-                return false;
-            }
-            continue;
-        } else if (is_token(token, "print")) {
-            if (!apply_print(stack, vars)) {
-                return false;
-            }
-            continue;
-        } else if (is_token(token, "type")) {
-            if (!apply_type(stack, vars, funcs)) {
-                return false;
-            }
-            continue;
-        } else if (is_token(token, "__func_name")) {
-            if (!apply_func_name(stack, funcs)) {
-                return false;
-            }
-            continue;
-        } else if (is_token(token, "__stack_size")) {
-            if (!apply_stack_size(stack)) {
-                return false;
-            }
-            continue;
-        } else if (is_token(token, "exit")){
-            int ret = 0;
-            if (!apply_exit(stack, vars, &ret)) {
-                return false;
-            }
-            free_stack_values(stack);
-            exit(ret);
-        } else if (is_token(token, "pop")) {
-            if (!apply_pop(stack)) {
-                return false;
-            }
-            continue;
-        } else if (is_token(token, "swap")) {
-            if (!apply_swap(stack)) {
-                return false;
-            }
-            continue;
-        } else if (is_token(token, "dup")) {
-            if (!apply_dup(stack, vars)) {
-                return false;
-            }
-            continue;
-        } else if (is_token(token, "let")) {
-            if (!apply_let(stack, vars)) {
-                return false;
-            }
-            continue;
-        }else if (is_token(token, "assert")) {
-            if (!apply_assert(stack, vars)) {
-                return false;
-            }
-            continue;
-        } else if (is_token(token, "unlet")) {
-            if (!apply_unlet(stack, vars)) {
-                return false;
-            }
-            continue;
-        } else if (is_token(token, "do_string")) {
-            if (!apply_do_string(stack, vars , funcs)) {
-                return false;
-            }
-            continue;
-        } else if (is_token(token, "do_file")) {
-            if (!apply_do_file(stack, vars , funcs)) {
-                return false;
-            }
-            continue;
-        } else if (is_token(token, "__line_col")) {
-            if (!apply_line_col(stack)) {
-                return false;
-            }
-            continue;
-        } else if (is_token(token, "__file")) {
-            if (!apply_file_name(stack)) {
-                return false;
-            }
-            continue;
-        } else if (is_token(token, "error")) {
-            if (!apply_error(stack, vars)) {
-                return false;
-            }
-            continue;
-        } else if (is_token(token, "set")) {
-            if (!apply_set(stack, vars)) {
-                return false;
-            }
-            continue;
-        } else if (is_token(token, "enum")) {
-            if (!apply_enum(stack, vars , false)) {
-                return false;
-            }
-            continue;
-        } else if (is_token(token, "reset")) {
-            if (!apply_enum(stack, vars , true)) {
-                return false;
-            }
-            continue;
-        } else if (is_token(token, "const")) {
-            if (!apply_const(stack, vars)) {
-                return false;
-            }
-            continue;
-        } else if (is_token(token, "to_string")) {
-            if (!apply_to_string(stack, vars)) {
-                return false;
-            }
-            continue;
-        } else if (is_token(token, "append")) {
-            if (!apply_append(stack, vars)) {
-                return false;
-            }
-            continue;
-        } else if (is_token(token, "remove")) {
-            if (!apply_remove(stack, vars)) {
-                return false;
-            }
-            continue;
-        } else if (is_token(token, "index")) {
-            if (!apply_index(stack, vars)) {
-                return false;
-            }
-            continue;
-        } else if (is_token(token, "len")) {
-            if (!apply_len(stack, vars)) {
-                return false;
-            }
-            continue;
-        } else if (is_token(token, "match")) {
-            if (!apply_match(stack, vars)) {
-                return false;
-            }
-            continue;
-        } else if (is_token(token, "add_load_path")) {
-            if (!apply_add_load_path(stack, vars)) {
-                return false;
-            }
-            continue;
-        } else if (is_token(token, "add_native_path")) {
-            if (!apply_add_native_path(stack, vars)) {
-                return false;
-            }
-            continue;
-        }else if(is_token(token, "load")) {
-            if (!apply_load(stack, vars, funcs)) {
-                return false;
-            }
-            continue;
-        } else if (is_token(token, "loadnative")) {
-            if (!apply_loadnative(stack, vars, funcs)) {
-                return false;
-            }
-            continue;
-        } else if (is_identifier_token(token)) {
-            Value *resolved = NULL;
-            Vars_t *var_entry = NULL;
-            Funcs_t *func_entry = NULL;
-
-            if (identifier_is_name_target(*cursor)) {
-                resolved = create_var_name_value(token);
-            } else if ((var_entry = find_var_entry(vars, token)) != NULL &&
-                       (var_entry->var_value->type == VALUE_LIST || var_entry->var_value->type == VALUE_STRING)) {
-                resolved = create_var_name_value(token);
-            } else if ((var_entry = find_var_entry(vars, token)) != NULL) {
-                resolved = clone_value(var_entry->var_value);
-            } else if ((func_entry = find_func_entry(funcs, token)) != NULL && func_entry->type == FUNC_DEMAC) {
-                if (!expand_demac(func_entry, cursor)) {
-                    return false;
-                }
-                continue;
-            } else if (func_entry != NULL && func_entry->type == FUNC_APPLY) {
-                bool ok = execute_named_entry(stack, vars, funcs, func_entry, "applying body", ht_key(funcs, func_entry));
-                if (!ok) {
-                    return false;
-                }
-                continue;
-            } else {
-                resolved = create_var_name_value(token);
-            }
-
-            if (!push_value(stack, resolved)) {
-                return false;
-            }
-            continue;
-        }else {
-            diagnostic_error_current("unknown token: %s", token);
-            return false;
-        }
-    }
     return true;
 }
 
@@ -4746,64 +4825,51 @@ static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else) {
     }
 }
 
-static bool evaluate_source(RDNState *stack, Vars* vars, Funcs *funcs, char *source) {
+bool evaluate_source(RDNState *stack, char *source) {
     BlockStop stop_reason = BLOCK_STOP_EOF;
     char *cursor = source;
     DiagnosticContext previous_context = g_diagnostic_context;
 
-    RDNState _stack = {0};
-    Vars _vars = {.hasheq = ht_cstr_hasheq};
-    Funcs _funcs = {.hasheq = ht_cstr_hasheq};
-
     diagnostic_set_source(g_current_source_path, source, 1, 1);
 
     if (!execute_block(
-                stack == NULL ? &_stack : stack , 
-                vars == NULL ? &_vars : vars, 
-                funcs == NULL ? &_funcs : funcs, &cursor, &stop_reason, false)) {
+                stack , 
+                &cursor, &stop_reason, false)) {
         g_diagnostic_context = previous_context;
-        goto cleanup;
+        return false;
     }
 
     if (stop_reason == BLOCK_STOP_BREAK) {
         g_diagnostic_context = previous_context;
         diagnostic_error_current("unexpected break");
-        goto cleanup;
+        return false;
     }
 
     if (stop_reason == BLOCK_STOP_CONTINUE) {
         g_diagnostic_context = previous_context;
         diagnostic_error_current("unexpected continue");
-        goto cleanup;
+        return false;
     }
 
     if (stop_reason == BLOCK_STOP_RETURN) {
         g_diagnostic_context = previous_context;
         diagnostic_error_current("unexpected ret");
-        goto cleanup;
+        return false;
     }
 
     if (stop_reason != BLOCK_STOP_EOF) {
         g_diagnostic_context = previous_context;
         diagnostic_error_current("unexpected block terminator");
-        goto cleanup;
+        return false;
     }
 
     g_diagnostic_context = previous_context;
 
-    if (stack == NULL) free_stack_values(&_stack);
-    if (vars == NULL) free_vars(&_vars);
-    if (funcs == NULL) free_funcs(&_funcs);
     return true;
 
-cleanup:
-    if (stack == NULL) free_stack_values(&_stack);
-    if (vars == NULL) free_vars(&_vars);
-    if (funcs == NULL) free_funcs(&_funcs);
-    return false;
 }
 
-static bool evaluate_file(RDNState *stack, Vars *vars, Funcs *funcs, const char *path) {
+bool evaluate_file(RDNState *stack, const char *path) {
     char *source = NULL;
     const char *previous_path = g_current_source_path;
     bool ok = false;
@@ -4814,14 +4880,14 @@ static bool evaluate_file(RDNState *stack, Vars *vars, Funcs *funcs, const char 
     }
 
     g_current_source_path = path;
-    ok = evaluate_source(stack, vars, funcs, source);
+    ok = evaluate_source(stack, source);
     g_current_source_path = previous_path;
 
     free(source);
     return ok;
 }
 
-static char *read_file(const char *path) {
+char *read_file(const char *path) {
     FILE *file = fopen(path, "rb");
     char *buffer = NULL;
     long length = 0;
@@ -5290,7 +5356,7 @@ static bool reset_search_paths(void) {
     return true;
 }
 
-static bool pop_string_path_operand(RDNState *stack, Vars *vars, const char *context, Value **out_target, char **out_path) {
+static bool pop_string_path_operand(RDNState *stack, const char *context, Value **out_target, char **out_path) {
     Value *target = NULL;
 
     if (stack->count < 1) {
@@ -5299,7 +5365,7 @@ static bool pop_string_path_operand(RDNState *stack, Vars *vars, const char *con
 
     target = ray_pop(stack);
     if (target->type == VALUE_AS_VAR) {
-        Vars_t *entry = find_var_entry(vars, target->as.string);
+        Vars_t *entry = find_var_entry(target->as.string);
         if (entry == NULL) {
             free_value(target);
             return diagnostic_error_current("%s requires existing variable path", context);
@@ -5344,7 +5410,7 @@ static bool set_owned_error_message(char **slot, const char *message) {
     return true;
 }
 
-static Value *native_get_stack_value(RDNState *stack, long index) {
+Value *native_get_stack_value(RDNState *stack, long index) {
     long resolved_index = 0;
 
     if (index == 0) {
@@ -5364,7 +5430,7 @@ static Value *native_get_stack_value(RDNState *stack, long index) {
     return stack->items[resolved_index];
 }
 
-static RDNValueType native_value_type_from_value(const Value *value) {
+RDNValueType native_value_type_from_value(const Value *value) {
     if (value == NULL) {
         return RDN_VALUE_NONE;
     }
@@ -5467,14 +5533,15 @@ static const char *native_api_to_identifier(RDNApi *api, long index) {
 }
 
 static void *native_api_resolve_variable(RDNApi *api, const char *name) {
-    NativeCallState *state = api->userdata;
     Vars_t *entry = NULL;
+
+    (void)api;
 
     if (name == NULL) {
         return NULL;
     }
 
-    entry = find_var_entry(state->vars, name);
+    entry = find_var_entry(name);
     if (entry == NULL) {
         return NULL;
     }
@@ -5676,7 +5743,7 @@ static bool append_text(char **buffer, size_t *length, const char *text) {
     return true;
 }
 
-static bool source_has_complete_blocks(const char *source, const Funcs *funcs, bool *out_complete) {
+static bool source_has_complete_blocks(const char *source, bool *out_complete) {
     char *cursor = (char *)source;
     char *token = NULL;
     bool is_string = false;
@@ -5735,7 +5802,7 @@ static bool source_has_complete_blocks(const char *source, const Funcs *funcs, b
             free_macro_expansion_stack(&expansions);
             return false;
         } else if (!is_string && is_identifier_token(token)) {
-            Funcs_t *entry = find_func_entry(funcs, token);
+            Funcs_t *entry = find_func_entry(token);
 
             if (entry != NULL && entry->type == FUNC_DEMAC) {
                 if (!next_token(&cursor, &token, &is_string) || !is_token(token, "demac"))  {
@@ -5762,8 +5829,6 @@ static bool source_has_complete_blocks(const char *source, const Funcs *funcs, b
 
 static int run_repl(void) {
     RDNState stack = {0};
-    Vars vars = {.hasheq = ht_cstr_hasheq};
-    Funcs funcs = {.hasheq = ht_cstr_hasheq};
     char line[4096];
     char *source = NULL;
     size_t source_length = 0;
@@ -5774,7 +5839,7 @@ static int run_repl(void) {
         return EXIT_FAILURE;
     }
 
-    apply_host_environment(&vars);
+    apply_host_environment();
 
     printf("raden repl\n");
     printf("raden interpreter version %s , check or report any bug in 'https://github.com/abdorayden/rdn'\n" , RADEN_VERSION);
@@ -5798,14 +5863,14 @@ static int run_repl(void) {
             free(source);
             free_macro_expansions();
             free_stack_values(&stack);
-            free_vars(&vars);
-            free_funcs(&funcs);
+            free_vars();
+            free_funcs();
             free_modules();
             free_loaded_files();
             return EXIT_FAILURE;
         }
 
-        if (!source_has_complete_blocks(source, &funcs, &complete)) {
+        if (!source_has_complete_blocks(source, &complete)) {
             free(source);
             source = NULL;
             source_length = 0;
@@ -5819,7 +5884,7 @@ static int run_repl(void) {
             continue;
         }
 
-        if (!evaluate_source(&stack, &vars, &funcs, source)) {
+        if (!evaluate_source(&stack, source)) {
             free_stack_values(&stack);
             stack = (RDNState){0};
         }
@@ -5835,8 +5900,8 @@ static int run_repl(void) {
     free(source);
     free_macro_expansions();
     free_stack_values(&stack);
-    free_vars(&vars);
-    free_funcs(&funcs);
+    free_vars();
+    free_funcs();
     free_modules();
     free_loaded_files();
     return EXIT_SUCCESS;
@@ -5868,21 +5933,21 @@ static const char *host_shared_library_extension(void) {
 #endif
 }
 
-static void apply_host_environment(Vars *vars) {
+static void apply_host_environment(void) {
     Value *host_os = create_string_value_copy(host_os_name());
     Value *shared_lib_ext = create_string_value_copy(host_shared_library_extension());
 
     if (host_os != NULL) {
-        vars_const(vars, "__host_os", host_os);
+        vars_const("__host_os", host_os);
         free_value(host_os);
     }
     if (shared_lib_ext != NULL) {
-        vars_const(vars, "__sharedlib_ext", shared_lib_ext);
+        vars_const("__sharedlib_ext", shared_lib_ext);
         free_value(shared_lib_ext);
     }
 }
 
-static void apply_argv(Vars* vars , const char* path, int argc , char** argv) {
+static void apply_argv(const char* path, int argc , char** argv) {
 
     Value* argv_list = create_list_value();
     Value* tha_path_value = create_string_value_copy(path);
@@ -5893,16 +5958,14 @@ static void apply_argv(Vars* vars , const char* path, int argc , char** argv) {
         ray_append(&argv_list->as.list, val);
     }
 
-    vars_let(vars, "__argv", argv_list);
+    vars_let("__argv", argv_list);
     free_value(argv_list);
 }
 
 int rdn_main(int argc , char** argv) {
     const char *path = NULL;
     RDNState stack = {0};
-    Vars vars = {.hasheq = ht_cstr_hasheq};
-    Funcs funcs = {.hasheq = ht_cstr_hasheq};
-    int exit_code = EXIT_FAILURE;
+    int exit_code = EXIT_SUCCESS;
 
     if (argc < 2) {
         return run_repl();
@@ -5913,35 +5976,27 @@ int rdn_main(int argc , char** argv) {
         fprintf(stderr, "failed to initialize search paths\n");
         return exit_code;
     }
-    apply_host_environment(&vars);
-    apply_argv(&vars, path, argc ,  argv);
+    apply_host_environment();
+    apply_argv(path, argc ,  argv);
 
-    if (!evaluate_file(&stack, &vars, &funcs, path)) {
-        free_macro_expansions();
-        free_stack_values(&stack);
-        free_vars(&vars);
-        free_funcs(&funcs);
-        free_modules();
-        free_loaded_files();
-        return exit_code;
+    if (!evaluate_file(&stack, path)) {
+        exit_code = EXIT_FAILURE;
+        goto get_fuck_out;
     }
 
     if (stack.count != 0) {
+        exit_code = EXIT_FAILURE;
         fprintf(stderr, "unexpected values left on stack: %zu\n", stack.count);
-        free_macro_expansions();
-        free_stack_values(&stack);
-        free_vars(&vars);
-        free_funcs(&funcs);
-        free_modules();
-        free_loaded_files();
-        return exit_code;
+        goto get_fuck_out;
     }
+
+get_fuck_out:
 
     free_macro_expansions();
     free_stack_values(&stack);
-    free_vars(&vars);
-    free_funcs(&funcs);
+    free_vars();
+    free_funcs();
     free_modules();
     free_loaded_files();
-    return EXIT_SUCCESS;
+    return exit_code;
 }

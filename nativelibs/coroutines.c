@@ -1,93 +1,10 @@
+#include "../include/rdn.h"
 #include "../include/rdn_native.h"
-#include "../src/stack.h"
 
-#include <stdlib.h>
 #include <string.h>
-
-// redefine all this shit to avoid some unused declarations in rdn.h
-typedef enum ValueType {
-    VALUE_NULL,
-    VALUE_INTEGER,
-    VALUE_DOUBLE,
-    VALUE_STRING,
-    VALUE_BOOLEAN,
-    VALUE_LIST,
-    VALUE_AS_VAR
-} ValueType;
-
-typedef struct Value Value;
-
-struct Value {
-    ValueType type;
-    union {
-        long integer;
-        double number;
-        char *string;
-        bool boolean;
-        RLList(Value *) list;
-    } as;
-};
-
-typedef RLStack(Value *) RDNState;
-
-typedef struct NativeCallState {
-    RDNState *stack;
-    char *error_message;
-} NativeCallState;
 
 static NativeCallState *native_call_state(RDNApi *api) {
     return (NativeCallState *)api->userdata;
-}
-
-static Value *native_stack_value(RDNState *stack, long index) {
-    long resolved_index = 0;
-
-    if (stack == NULL || index == 0) {
-        return NULL;
-    }
-
-    if (index > 0) {
-        resolved_index = index - 1;
-    } else {
-        resolved_index = (long)stack->count + index;
-    }
-
-    if (resolved_index < 0 || (size_t)resolved_index >= stack->count) {
-        return NULL;
-    }
-
-    return stack->items[resolved_index];
-}
-
-static Value *native_make_list_value(void) {
-    Value *value = malloc(sizeof(*value));
-
-    if (value == NULL) {
-        return NULL;
-    }
-
-    value->type = VALUE_LIST;
-    value->as.list.items = NULL;
-    value->as.list.count = 0;
-    value->as.list.capacity = 0;
-    return value;
-}
-
-static Value *native_make_boolean_value(bool boolean) {
-    Value *value = malloc(sizeof(*value));
-
-    if (value == NULL) {
-        return NULL;
-    }
-
-    value->type = VALUE_BOOLEAN;
-    value->as.boolean = boolean;
-    return value;
-}
-
-static void native_free_value(Value *value) {
-    // No-op: all Values are arena-managed. The OS reclaims on exit.
-    (void)value;
 }
 
 static bool coroutine_resolve_target(RDNApi *api, Value *value, Value **out_target) {
@@ -130,35 +47,36 @@ static bool coCreate(RDNApi *api) {
     RDNState *stack = state->stack;
     Value *step = NULL;
     Value *initial_state = NULL;
-    Value *coro = NULL;
-    Value *alive = NULL;
 
     if (stack == NULL || stack->count < 2) {
         return api->raise_error(api, "coCreate requires 2 params");
     }
 
-    step = native_stack_value(stack, -1);
-    initial_state = native_stack_value(stack, -2);
+    step = native_get_stack_value(stack, -1);
+    initial_state = native_get_stack_value(stack, -2);
     if (step == NULL || step->type != VALUE_AS_VAR) {
         return api->raise_error(api, "coCreate requires function name and initial state");
     }
 
-    coro = native_make_list_value();
-    alive = native_make_boolean_value(true);
-    if (coro == NULL || alive == NULL) {
-        native_free_value(coro);
-        native_free_value(alive);
-        return api->raise_error(api, "coCreate failed to allocate coroutine");
+    // Build the coroutine as [step, initial_state, true] on an arena-backed
+    // list, so it can live for the rest of the program.
+    if (!api->pop(api, 2)) {
+        return false;
+    }
+    if (!api->push_list(api)) {
+        return false;
     }
 
-    step = ray_pop(stack);
-    initial_state = ray_pop(stack);
+    if (!push_value(stack, step) || !api->list_append(api, -2, -1) || !api->pop(api, 1)) {
+        return false;
+    }
+    if (!push_value(stack, initial_state) || !api->list_append(api, -2, -1) || !api->pop(api, 1)) {
+        return false;
+    }
+    if (!api->push_boolean(api, true) || !api->list_append(api, -2, -1) || !api->pop(api, 1)) {
+        return false;
+    }
 
-    ray_append(&coro->as.list, step);
-    ray_append(&coro->as.list, initial_state);
-    ray_append(&coro->as.list, alive);
-
-    ray_append(stack, coro);
     return true;
 }
 
@@ -175,9 +93,9 @@ static bool coUpdate(RDNApi *api) {
         return api->raise_error(api, "coUpdate requires 3 params");
     }
 
-    target_value = native_stack_value(stack, -3);
-    new_state = native_stack_value(stack, -2);
-    new_alive = native_stack_value(stack, -1);
+    target_value = native_get_stack_value(stack, -3);
+    new_state = native_get_stack_value(stack, -2);
+    new_alive = native_get_stack_value(stack, -1);
     if (target_value == NULL) {
         return api->raise_error(api, "coUpdate requires coroutine target");
     }
@@ -194,15 +112,15 @@ static bool coUpdate(RDNApi *api) {
         return api->raise_error(api, "coUpdate requires coroutine list");
     }
 
-    native_free_value(resolved_target->as.list.items[1]);
-    native_free_value(resolved_target->as.list.items[2]);
+    free_value(resolved_target->as.list.items[1]);
+    free_value(resolved_target->as.list.items[2]);
     resolved_target->as.list.items[1] = new_state;
     resolved_target->as.list.items[2] = new_alive;
 
     stack->count -= 3;
 
     if (target_value->type == VALUE_AS_VAR) {
-        native_free_value(target_value);
+        free_value(target_value);
     }
 
     (void)alive;
@@ -220,7 +138,7 @@ static bool coStatus(RDNApi *api) {
         return api->raise_error(api, "coStatus requires 1 param");
     }
 
-    target_value = native_stack_value(state->stack, -1);
+    target_value = native_get_stack_value(state->stack, -1);
     if (!coroutine_resolve_target(api, target_value, &resolved_target)) {
         return false;
     }

@@ -604,12 +604,12 @@ HT_UNUSED_FN static bool ht__find_and_delete(Ht__Abstract *ht, void *key, Ht__La
     return true;
 }
 
-static void *ht__key(void *slot, Ht__Layout l)
+HT_UNUSED_FN static void *ht__key(void *slot, Ht__Layout l)
 {
     return ht__slot_key(slot, l);
 }
 
-static bool ht__next(Ht__Abstract *ht, void **slot, Ht__Layout l)
+HT_UNUSED_FN static bool ht__next(Ht__Abstract *ht, void **slot, Ht__Layout l)
 {
     if (ht->impl_capacity == 0) {
         *slot = NULL;
@@ -651,7 +651,7 @@ HT_UNUSED_FN static void ht__reset(Ht__Abstract *ht, Ht__Layout l)
     ht->count = 0;
 }
 
-static void ht__free(Ht__Abstract *ht)
+HT_UNUSED_FN static void ht__free(Ht__Abstract *ht)
 {
     HT_FREE(ht->impl_slots);
     ht->impl_slots        = NULL;
