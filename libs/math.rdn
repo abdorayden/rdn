@@ -31,7 +31,8 @@ Examples:
 2 8 pow call print
 *]
 
-"../nativelibs/math" __sharedlib_ext to_string swap pop append loadnative
+[*"../nativelibs/math" loadnative*]
+"math" loadnative
 "Typecheck" load
 
 Typecheck open

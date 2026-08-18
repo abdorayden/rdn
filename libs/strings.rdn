@@ -96,6 +96,22 @@ Strings module
         strReplaceAll call
     end
 
+    rev (Str) (Str) defun
+        og let
+        "" for-ret let
+        og len og-len let
+        og-len 0 > loop
+            for-ret og og-len 1 - index append
+            og-len 1 - og-len set
+            og-len 0 >
+        end
+        for-ret @str
+    end
+
+    @rev apply
+        Strings::rev call
+    end
+
     @replace-all apply
         Strings::replace-all call
     end

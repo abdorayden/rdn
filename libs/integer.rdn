@@ -1,0 +1,156 @@
+"Math" load
+"Typecheck" load
+"Core" load
+"Strings" load
+
+Core open
+Typecheck::OGTypes open
+Strings::rev open
+
+Integer module
+
+    parse-single apply
+        n let
+
+        n "0" = if
+            0 ret
+        end
+
+        n "1" = if
+            1 ret
+        end
+
+        n "2" = if
+            2 ret
+        end
+
+        n "3" = if
+            3 ret
+        end
+
+        n "4" = if
+            4 ret
+        end
+
+        n "5" = if
+            5 ret
+        end
+
+        n "6" = if
+            6 ret
+        end
+
+        n "7" = if
+            7 ret
+        end
+
+        n "8" = if
+            8 ret
+        end
+
+        n "9" = if
+            9 ret
+        end
+
+        null
+
+    end
+
+    is-int (Str) (Bool) defun
+        str-num let
+        str-num len tha-length let
+        0 i let
+        str-num i index "-" @eq if
+            i @inc i set
+        end
+        i tha-length < loop
+            str-num i index Integer::parse-single
+            null = if
+                false
+            else
+                1 i + i set
+                i tha-length <
+            end
+        end
+        i tha-length < @not
+    end
+
+    parse-int (Str) (Any) defun
+        dup Integer::is-int call ! if
+            null
+            ret
+        end
+
+        str-num let
+
+        str-num len tha-length let
+        0 for-ret let
+        0 i let
+        1 neg let
+        str-num i index "-" @eq if
+            -1 neg set
+            i @inc i set
+        end
+        i tha-length < loop
+            for-ret 10 *
+            str-num i index Integer::parse-single
+            dup null = if
+                "parse integer the input is not number" error
+            end
+            + for-ret set
+
+            i @inc i set
+            i tha-length <
+        end
+        for-ret neg *
+    end
+
+    local-to-bin (Int) (Str) defun
+        n let
+        "" for-ret let
+
+        n 1 > loop
+            for-ret
+            n 2 % @str append
+            n 2 // n set
+            n 1 >
+        end
+
+        n 0 != if
+            for-ret
+            "1" append
+        end
+
+        for-ret
+    end
+
+    to-bin (Int) (Str) defun
+        Integer::local-to-bin call
+        rev call
+    end
+
+    bit-count (Int) (Int) defun
+        [*Number of ones in the binary representation of the absolute value of self.*]
+        n1 let
+        0 count let
+        0 i let
+
+        n1 Integer::to-bin call bin let
+
+        i bin len < loop
+            bin i index "1" = if
+                1 count + count set
+            end
+            1 i + i set
+            i bin len <
+        end
+        count
+    end
+
+    bit-length (Int) (Int) defun
+        [*Number of bits necessary to represent self in binary.*]
+        n1 let
+        n1 Integer::to-bin call len
+    end
+
+end
