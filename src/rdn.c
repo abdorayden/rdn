@@ -2543,10 +2543,10 @@ static bool apply_open_selective(Value *name, Vars *vars, Funcs *funcs) {
     const char *last_colon = strrchr(full_name, ':');
 
     size_t split = (size_t)(last_colon - 1 - full_name);
-    char module_part[1024];
-    size_t module_len = split < sizeof(module_part) ? split : sizeof(module_part) - 1;
-    memcpy(module_part, full_name, module_len);
-    module_part[module_len] = '\0';
+
+    char module_part[split + 1];
+    memcpy(module_part, full_name, split);
+    module_part[split] = '\0';
 
     const char *member = last_colon + 1;
 
