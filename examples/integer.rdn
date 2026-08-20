@@ -1,0 +1,9 @@
+"Io" load
+"Integer" load
+
+Io::@println open
+"-123" Integer::parse-int call @println
+2 Integer::to-bin call @println
+13 Integer::bit-count call @println
+37 Integer::bit-length call @println
+"-123" Integer::is-int call @println

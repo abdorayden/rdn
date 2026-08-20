@@ -1,0 +1,20 @@
+"Io" load
+"Base64" load
+Io::@println open
+
+[*"a" ord call print*]
+[*"\n" print*]
+[*97 chr call print*]
+[*"1010" Integer::from-bin call @println*]
+
+"Sun" Base64::b64encode call
+@println
+
+"Su" Base64::b64encode call
+@println
+
+"Hello im rayden" Base64::b64encode call
+@println
+
+"SGVsbG8gaW0gcmF5ZGVu" Base64::b64decode call
+@println
