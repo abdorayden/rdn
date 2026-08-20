@@ -1,3 +1,28 @@
+[* 
+integer.rdn
+
+Copyright (c) 2023-2026 Ray Den
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+*]
+
 "Math" load
 "Typecheck" load
 "Core" load
@@ -127,6 +152,38 @@ Integer module
     to-bin (Int) (Str) defun
         Integer::local-to-bin call
         rev call
+    end
+
+    from-bin (Str) (Int) defun
+        bins let
+        bins len bins-len let
+
+        0 forret let
+        0 i let
+
+        i bins-len < loop
+            bins i index [*chr*]
+            Integer::parse-single
+            dup
+            1 = if
+                forret
+                2 bins-len 1 - i -
+                Math::pow call
+                +
+                forret set
+
+            else
+                dup 0 != if
+                    "is not bin" error
+                end
+            end
+            pop
+
+            1 i + i set
+            i bins-len <
+        end
+
+        forret
     end
 
     bit-count (Int) (Int) defun

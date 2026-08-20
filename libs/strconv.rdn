@@ -31,6 +31,18 @@ Typecheck::OGTypes open
 
 Strconv module
 
+    Ascii module
+
+        chr (Int) (Str) defun
+            ascii_chr call
+        end
+
+        ord (Str) (Int) defun
+            ascii_ord call
+        end
+
+    end
+
     atoi (Str) (Int) defun
         _atoi call
     end

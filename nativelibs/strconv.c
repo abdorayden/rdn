@@ -14,6 +14,7 @@
  * - formatBool(boolean) -> string
  */
 
+#include <stdint.h>
 #define _POSIX_C_SOURCE 200809L
 
 #include "../include/rdn_native.h"
@@ -155,7 +156,68 @@ static bool formatBool_native(RDNApi *api) {
     return api->push_string(api, value ? "true" : "false");
 }
 
+bool ascii_chr(RDNApi* api) {
+    if (api->stack_size(api) < 1) {
+        return api->raise_error(api, "chr requires ascii code");
+    }
+
+    long code = -1;
+
+    if (!api->to_integer(api , -1 , &code)) {
+        api->raise_error(api, "chr error reading integer type from stack");
+        return false;
+    }
+
+    if (code > 127 || code < 0) {
+        api->raise_error(api, "ascii code not in range 0 to 127");
+        return false;
+    }
+
+    char buffer[2];
+    buffer[0] = (char)code;
+    buffer[1] = '\0';
+
+    if (!api->pop(api, 1)) {
+        return false;
+    }
+    return api->push_string(api, buffer);
+}
+
+bool ascii_ord(RDNApi* api) {
+    if (api->stack_size(api) < 1) {
+        api->raise_error(api, "ord requires string param");
+        return false;
+    }
+
+    const char* chr = api->to_string(api, -1);
+    if (chr == NULL) {
+        return false;
+    }
+
+    if (strlen(chr) > 1) {
+        api->raise_error(api, "ord expected a character");
+        return false;
+    }
+
+    if (!api->pop(api, 1)) {
+        return false;
+    }
+
+    api->push_integer(api , (long)chr[0]);
+
+    return true;
+}
+
 bool rdn_module_init(RDNModule *module) {
+
+    if (!module->register_function(module, "ascii_ord", ascii_ord)) {
+        return false;
+    }
+
+    if (!module->register_function(module, "ascii_chr", ascii_chr)) {
+        return false;
+    }
+
     if (!module->register_function(module, "_atoi", atoi_native)) {
         return false;
     }
