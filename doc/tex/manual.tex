@@ -437,13 +437,13 @@ MyModule::func1 call
 MyModule::app1
 \end{lstlisting}
 
-Variables and constants inside a module use \code{.} as prefix:
+Variables and constants inside a module also use \code{::} as prefix:
 \begin{lstlisting}[language=Raden]
 Cfg module
     10 limit let
 end
 
-Cfg.limit print
+Cfg::limit print
 \end{lstlisting}
 
 \subsection{open}

@@ -156,14 +156,14 @@ MyModule open
 func1 call
 ```
 
-Functions and apply-words use `::` prefix, variables use `.`:
+Functions and apply-words use `::` prefix, variables also use `::`:
 
 ```raden
 Cfg module
     10 limit let
 end
 
-Cfg.limit print
+Cfg::limit print
 ```
 
 Modules nest with `::` chaining:

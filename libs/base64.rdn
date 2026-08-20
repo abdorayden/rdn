@@ -52,7 +52,6 @@ Base64 module
         
         "" forret let
 
-        [*int indexOfLastCompleteTriple = (int)(toEncodeAsBytes.Length / 3) * 3;*]
         text-len 3 // 3 *
         indexOfLastCompleteTriple let
 
