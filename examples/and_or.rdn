@@ -1,7 +1,7 @@
 "Core" load
-Core open
-
 "Io" load
+
+Core open
 Io open
 
 "hey" false @@or @println

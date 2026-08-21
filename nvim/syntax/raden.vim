@@ -36,6 +36,17 @@ syntax match radenOperator /[|&^!]/
 
 syntax match radenListDelimiter /[()]/
 
+" @-tags: applied macros / anonymous callables (also generated for `X apply`).
+syntax match radenTag /@\w\+/
+
+" Module::member paths - may be nested (Typecheck::OGTypes::Int) and may
+" address a tag (Io::@println).  `contains=radenTag` keeps the embedded
+" @name in its tag colour.
+syntax match radenModulePath /\v\w+(\:\:[%@]?\w+)+/ contains=radenTag
+
+" Typed-words for signed defun signatures in the standard library.
+syntax keyword radenType Int Str Bool Real List Null
+
 highlight default link radenComment Comment
 highlight default link radenString String
 highlight default link radenEscape SpecialChar
@@ -49,5 +60,8 @@ highlight default link radenKeyword Keyword
 highlight default link radenBuiltin Function
 highlight default link radenOperator Operator
 highlight default link radenListDelimiter Delimiter
+highlight default link radenTag Identifier
+highlight default link radenModulePath Include
+highlight default link radenType Type
 
 let b:current_syntax = "raden"
