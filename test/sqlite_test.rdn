@@ -1,0 +1,46 @@
+"../libs/sqlite.rdn" load
+
+"/tmp/rdn-sqlite3-test.db" Sqlite::connect call db let
+
+db "DROP TABLE IF EXISTS people" Sqlite::exec call
+db "CREATE TABLE people (name TEXT, age INTEGER, score REAL)" Sqlite::exec call
+
+db "INSERT INTO people VALUES (?, ?, ?)" Sqlite::cursor call ins let
+ins ("Alice" 30 91.5) Sqlite::bind call
+ins Sqlite::step call pop
+ins ("Bob" 25 77.25) Sqlite::bind call
+ins Sqlite::step call pop
+ins ("Carol" 41 88.0) Sqlite::bind call
+ins Sqlite::step call pop
+ins Sqlite::close-cursor call
+
+[* typed query: only rows with age >= 26, ordered by name *]
+db "SELECT name, age, score FROM people WHERE age >= ? ORDER BY name" Sqlite::cursor call sel let
+
+sel (26) Sqlite::bind call
+sel Sqlite::step call print "\n" print
+sel Sqlite::step call print "\n" print
+sel Sqlite::step call print "\n" print
+
+[* rebinding resets the cursor so it can be stepped again *]
+sel (0) Sqlite::bind call
+sel Sqlite::step call print "\n" print
+sel Sqlite::step call print "\n" print
+sel Sqlite::step call print "\n" print
+sel Sqlite::step call print "\n" print
+sel Sqlite::close-cursor call
+
+[* null round-trip through bind and step *]
+db "DROP TABLE IF EXISTS t2" Sqlite::exec call
+db "CREATE TABLE t2 (a INTEGER, b TEXT)" Sqlite::exec call
+db "INSERT INTO t2 VALUES (?, ?)" Sqlite::cursor call ins2 let
+ins2 (7 null) Sqlite::bind call
+ins2 Sqlite::step call pop
+ins2 Sqlite::close-cursor call
+
+db "SELECT a, b FROM t2" Sqlite::cursor call sel2 let
+sel2 Sqlite::step call print "\n" print
+sel2 Sqlite::close-cursor call
+
+db Sqlite::close call
+"ok\n" print

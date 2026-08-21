@@ -168,6 +168,19 @@ if ! "${CC:-gcc}" -Wall -Wextra -Werror -ggdb -std=c11 -fPIC -shared \
     exit 1
 fi
 
+# The SQLite amalgamation cannot survive -Wall -Wextra -Werror, so the
+# module and the amalgamation share one relaxed TU.
+printf "%sBuilding sqlite native module...%s\n" "$BLUE" "$RESET"
+if ! "${CC:-gcc}" -O3 -ggdb -std=c11 -fPIC -w -shared \
+    "$ROOT_DIR/nativelibs/sqlite3.c" \
+    "$ROOT_DIR/src/sqlite-amalgamation-3530400/sqlite3.c" \
+    -I"$ROOT_DIR" \
+    -o "$ROOT_DIR/nativelibs/sqlite3.$SHARED_EXT" \
+    -lpthread -ldl -lm; then
+    printf "%sSqlite native module build failed%s\n" "$RED" "$RESET"
+    exit 1
+fi
+
 for test_file in "$TEST_DIR"/*.rdn; do
     test_name="$(basename "$test_file" .rdn)"
     expected_out="$EXPECTED_DIR/$test_name.out"
