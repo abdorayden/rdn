@@ -1,0 +1,37 @@
+"../libs/time.rdn" load
+
+[* fixed epochs: exact UTC conversions, verified against date -u *]
+0 Time::ymd-of call print "\n" print
+0 Time::hms-of call print "\n" print
+86399 Time::ymd-of call print "\n" print
+86399 Time::hms-of call print "\n" print
+951868800 Time::ymd-of call print "\n" print
+951868800 Time::hms-of call print "\n" print
+1709164861 Time::iso-of call print "\n" print
+1709164861 Time::hh-of call print "\n" print
+1709164861 Time::mm-of call print "\n" print
+1709164861 Time::ss-of call print "\n" print
+
+[* types of live values *]
+Time::now call type print "\n" print
+Time::clock-ms call type print "\n" print
+
+[* sleeping zero milliseconds still reports success *]
+0 Time::sleep-ms call print "\n" print
+
+[* elapsed sanity: sleeping 30 ms takes at least 30 ms of monotonic clock *]
+Time::clock-ms call t0 let
+30 Time::sleep-ms call pop
+t0 Time::elapsed-ms call 30 >= print "\n" print
+
+[* negative epochs are rejected: pcall catches the raised error *]
+bad-epoch defun
+    -1 Time::hms-of call
+end
+
+bad-epoch pcall
+if
+    "FAIL: negative epoch accepted" print "\n" print
+else
+    type print "\n" print
+end

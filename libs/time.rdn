@@ -1,0 +1,232 @@
+[* 
+time.rdn
+
+Copyright (c) 2023-2026 Ray Den
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+*]
+
+[*
+Purpose:
+UTC time helpers built in Raden itself over the Os module.
+
+Design notes:
+- All conversions take a non-negative epoch-seconds integer. Taking the epoch
+  as an argument keeps every conversion deterministic and easy to test; the
+  zero-arg forms simply feed them Time::now.
+- Times are UTC only. Negative epochs are rejected because the VM's % and //
+  truncate toward zero.
+- Durations use Os::clock (monotonic milliseconds), never wall time, so they
+  are safe across wall-clock changes.
+
+Exports:
+- hh-of / mm-of / ss-of : epoch -> hour / minute / second
+- hms-of                : epoch -> "HH:MM:SS"
+- ymd-of                : epoch -> "YYYY-MM-DD"
+- iso-of                : epoch -> "YYYY-MM-DDTHH:MM:SSZ"
+- now                   : -> current epoch seconds
+- hms / ymd / iso       : zero-arg conveniences over now
+- clock-ms              : -> monotonic milliseconds since an arbitrary point
+- sleep-ms              : milliseconds -> true after sleeping
+- elapsed-ms            : start-clock-ms -> milliseconds elapsed since start
+
+Examples:
+"Time" load
+
+0 Time::hms-of print                   -- prints 00:00:00
+951868800 Time::ymd-of print           -- prints 2000-03-01
+Time::now Time::iso-of print           -- prints 2026-08-22T12:34:56Z
+
+Time::clock-ms start let
+50 Time::sleep-ms pop
+start Time::elapsed-ms print           -- prints >= 50
+
+*]
+
+"Typecheck" load
+"Core" load
+"Os" load
+
+Typecheck::OGTypes open
+Core::@str open
+
+Time module
+
+    [* ---- private helpers ---- *]
+
+    __pad2 (Int) (Str) defun
+        n let
+        n 10 < if
+            [* to_string keeps the original, so drain it: the Core::@str idiom *]
+            "0" n @str append
+        else
+            n @str
+        end
+    end
+
+    __pad4 (Int) (Str) defun
+        n let
+        n 100 < if
+            "00" n @str append
+        else
+            n 1000 < if
+                "0" n @str append
+            else
+                n @str
+            end
+        end
+    end
+
+    __check-epoch (Int) () defun
+        epoch let
+        epoch 0 < if
+            "time: epoch must be non-negative" error
+        end
+    end
+
+    [* ---- epoch-taking core ---- *]
+
+    hh-of (Int) (Int) defun
+        dup Time::__check-epoch call
+        86400 %
+        3600 //
+    end
+
+    mm-of (Int) (Int) defun
+        dup Time::__check-epoch call
+        86400 %
+        3600 %
+        60 //
+    end
+
+    ss-of (Int) (Int) defun
+        dup Time::__check-epoch call
+        60 %
+    end
+
+    hms-of (Int) (Str) defun
+        dup Time::__check-epoch call
+        epoch let
+
+        [* build functionally: string variables must not be held across a
+           nested call boundary because scope materialization resolves them *]
+
+        epoch Time::hh-of call Time::__pad2 call
+        ":"
+        epoch Time::mm-of call Time::__pad2 call
+        ":"
+        epoch Time::ss-of call Time::__pad2 call
+        append append append append
+    end
+
+    ymd-of (Int) (Str) defun
+        dup Time::__check-epoch call
+        epoch let
+
+        [* civil-from-days: Howard Hinnant's algorithm, valid for epoch >= 0 *]
+
+        epoch 86400 // days let
+        days 719468 + z let
+        z 146097 // era let
+        z era 146097 * - doe let
+        doe doe 1460 // - doe 36524 // + doe 146096 // - 365 // yoe let
+        yoe era 400 * + year let
+        doe yoe 365 * yoe 4 // + yoe 100 // - - doy let
+        doy 5 * 2 + 153 // mp let
+        mp 10 < if
+            mp 3 +
+        else
+            mp 9 -
+        end
+        month let
+        month 2 <= if
+            year 1 + year set
+        end
+        doy 153 mp * 2 + 5 // - 1 + day let
+
+        year Time::__pad4 call
+        "-"
+        month Time::__pad2 call
+        "-"
+        day Time::__pad2 call
+        append append append append
+    end
+
+    iso-of (Int) (Str) defun
+        dup Time::__check-epoch call
+        epoch let
+
+        epoch Time::ymd-of call
+        "T"
+        epoch Time::hms-of call
+        "Z"
+        append append append
+    end
+
+    [* ---- zero-arg conveniences over now ---- *]
+
+    now () (Int) defun
+        Os::now call
+    end
+
+    hms () (Str) defun
+        Time::now call Time::hms-of call
+    end
+
+    ymd () (Str) defun
+        Time::now call Time::ymd-of call
+    end
+
+    iso () (Str) defun
+        Time::now call Time::iso-of call
+    end
+
+    [* ---- durations (monotonic clock) ---- *]
+
+    clock-ms () (Int) defun
+        Os::clock call
+    end
+
+    sleep-ms (Int) (Bool) defun
+        Os::sleep call
+    end
+
+    elapsed-ms (Int) (Int) defun
+        start let
+        Time::clock-ms call start -
+    end
+
+    [* ---- aliases ---- *]
+
+    @hh-of apply Time::hh-of call end
+    @mm-of apply Time::mm-of call end
+    @ss-of apply Time::ss-of call end
+    @hms-of apply Time::hms-of call end
+    @ymd-of apply Time::ymd-of call end
+    @iso-of apply Time::iso-of call end
+    @now apply Time::now call end
+    @hms apply Time::hms call end
+    @ymd apply Time::ymd call end
+    @iso apply Time::iso call end
+    @clock-ms apply Time::clock-ms call end
+    @sleep-ms apply Time::sleep-ms call end
+    @elapsed-ms apply Time::elapsed-ms call end
+
+end
