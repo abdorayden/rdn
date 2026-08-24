@@ -4131,6 +4131,20 @@ static bool apply_unlet(RDNState *stack) {
         return false;
     }
 
+    if (g_module_var_prefix != NULL) {
+        size_t name_len = strlen(name->as.string);
+        size_t prefix_len = strlen(g_module_var_prefix);
+        char *prefixed = arena_alloc(&g_arena, prefix_len + name_len + 1);
+        if (prefixed == NULL) {
+            free_value(name);
+            return diagnostic_error_current("failed to allocate module-prefixed variable name");
+        }
+        memcpy(prefixed, g_module_var_prefix, prefix_len);
+        memcpy(prefixed + prefix_len, name->as.string, name_len + 1);
+        free(name->as.string);
+        name->as.string = prefixed;
+    }
+
     Vars_t *entry = find_var_entry(name->as.string);
 
     if (entry == NULL) {
@@ -4247,6 +4261,21 @@ static bool apply_set(RDNState *stack) {
         ray_append(stack, value);
         ray_append(stack, name);
         return false;
+    }
+
+    if (g_module_var_prefix != NULL) {
+        size_t name_len = strlen(name->as.string);
+        size_t prefix_len = strlen(g_module_var_prefix);
+        char *prefixed = arena_alloc(&g_arena, prefix_len + name_len + 1);
+        if (prefixed == NULL) {
+            free_value(name);
+            free_value(value);
+            return diagnostic_error_current("failed to allocate module-prefixed variable name");
+        }
+        memcpy(prefixed, g_module_var_prefix, prefix_len);
+        memcpy(prefixed + prefix_len, name->as.string, name_len + 1);
+        free(name->as.string);
+        name->as.string = prefixed;
     }
 
     if (!vars_set(name->as.string, value)) {
