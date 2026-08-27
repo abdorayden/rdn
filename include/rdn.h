@@ -11,9 +11,6 @@
 #define RDN_INSTALL_PREFIX "/usr/local/share/rdn"
 #endif
 
-#define HT_IMPLEMENTATION
-#include "../src/ht.h"
-
 typedef enum ValueType ValueType;
 typedef enum BlockStop BlockStop;
 typedef enum FuncType FuncType;
@@ -107,8 +104,6 @@ typedef struct RDNState {
     size_t count;
     size_t capacity;
 } RDNState;
-typedef Ht(char*, Vars_t) Vars;
-typedef Ht(char*, Funcs_t) Funcs;
 typedef struct RDNNativeModuleList {
     NativeModuleReg **items;
     size_t count;
@@ -122,7 +117,7 @@ struct NativeModuleReg {
 
 struct NativeCallState {
     RDNState *stack;
-    Vars *vars;
+    void *vars;
     char *error_message;
 };
 
@@ -138,12 +133,6 @@ enum BlockStop{
     BLOCK_STOP_BREAK,
     BLOCK_STOP_CONTINUE,
     BLOCK_STOP_RETURN,
-};
-
-struct RDNSharedState {
-    RDNState rdn_state;
-    Vars    rdn_vars;
-    Funcs   rdn_funcs;
 };
 
 struct DiagnosticContext {
@@ -190,6 +179,7 @@ void free_vars(void);
 void free_funcs(void);
 
 bool push_value(RDNState *stack, Value *value);
+Value *pop_value(RDNState *stack);
 bool evaluate_source(RDNState *stack, char *source);
 bool evaluate_file(RDNState *stack, const char *path);
 char *read_file(const char *path);

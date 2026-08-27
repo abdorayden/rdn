@@ -22,6 +22,11 @@
 #include "../include/rdn_native.h"
 #include "stack.h"
 #include "../include/rdn.h"
+#define HT_IMPLEMENTATION
+#include "ht.h"
+
+typedef Ht(char *, Vars_t) Vars;
+typedef Ht(char *, Funcs_t) Funcs;
 #define ARENA_REGION_DEFAULT_CAPACITY (1024*1024) // 1M uintptr_t units = 8MB data per region
 #define ARENA_IMPLEMENTATION
 #include "arena.h"
@@ -846,6 +851,13 @@ bool push_value(RDNState *stack, Value *value) {
 
     ray_append(stack, value);
     return true;
+}
+
+Value *pop_value(RDNState *stack) {
+    if (stack == NULL || stack->count == 0) {
+        return NULL;
+    }
+    return ray_pop(stack);
 }
 
 static bool parse_integer_token(const char *text, long *out_value) {
