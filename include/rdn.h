@@ -2,7 +2,6 @@
 #define RDN_H_
 
 #include "./rdn_native.h"
-#include "../src/stack.h"
 
 #define RADEN_VERSION "1.2.0"
 #define RDN_TYPECHECK_FUNC_CODE 6
@@ -26,9 +25,20 @@ typedef struct NativeCallState NativeCallState;
 typedef struct NativeModuleReg NativeModuleReg;
 typedef struct NativeModuleLoadState NativeModuleLoadState;
 typedef struct DiagnosticContext DiagnosticContext;
-typedef RLList(char *) LoadPathStack;
-typedef RLList(char *) SearchPathStack;
-typedef RLList(char *) MacroExpansionStack;
+typedef struct RDNStringList {
+    char **items;
+    size_t count;
+    size_t capacity;
+} RDNStringList;
+typedef RDNStringList LoadPathStack;
+typedef RDNStringList SearchPathStack;
+typedef RDNStringList MacroExpansionStack;
+
+typedef struct RDNValueList {
+    Value **items;
+    size_t count;
+    size_t capacity;
+} RDNValueList;
 
 enum ValueType{
     VALUE_NULL,
@@ -49,7 +59,7 @@ struct Value{
         char *string;
         bool boolean;
         // list is (1 2 3 4 5 6)
-        RLList(Value*) list;
+        RDNValueList list;
     } as;
 };
 
@@ -92,10 +102,18 @@ struct Funcs_t {
     void *native_library_handle;
 };
 
-typedef RLStack(Value *) RDNState;
+typedef struct RDNState {
+    Value **items;
+    size_t count;
+    size_t capacity;
+} RDNState;
 typedef Ht(char*, Vars_t) Vars;
 typedef Ht(char*, Funcs_t) Funcs;
-typedef RLList(NativeModuleReg*) NativeModuleRegs;
+typedef struct RDNNativeModuleList {
+    NativeModuleReg **items;
+    size_t count;
+    size_t capacity;
+} NativeModuleRegs;
 
 struct NativeModuleReg {
     char *name;
