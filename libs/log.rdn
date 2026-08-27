@@ -1,0 +1,279 @@
+[*
+log.rdn
+
+Copyright (c) 2023-2026 Ray Den
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+Purpose:
+Go-inspired logging module with timestamps, prefixes, flags, and severity levels.
+
+Exports:
+- Configuration: SetPrefix, Prefix, SetFlags, Flags, SetOutput, Writer
+- lprint: lprint, Printf, Println
+- Fatal: Fatal, Fatalf, Fatalln (print + exit 1)
+- Panic: Panic, Panicf, Panicln (print + error)
+- Logger instance: new
+- Flags: Ldate, Ltime, Lmicroseconds, Llongfile, Lshortfile, LUTC, LstdFlags
+
+*]
+
+"Time" load
+"Io" load
+"Files" load
+"Typecheck" load
+"Core" load
+
+Typecheck open
+Typecheck::OGTypes open
+Core::format open
+Core::@str open
+Files::File::stderr open
+Files::File::fwrite open
+Files::File::FileTyping open
+Time open
+
+reset
+enum Ldate const
+enum Ltime const
+enum Lmicroseconds const
+enum Llongfile const
+enum Lshortfile const
+enum LUTC const
+enum LstdFlags const
+reset
+
+Log module
+
+    "" __prefix let
+    Ldate Ltime | __flags let
+    stderr __output let
+
+    1 Ldate const
+    2 Ltime const
+    4 Lmicroseconds const
+    8 Llongfile const
+    16 Lshortfile const
+    32 LUTC const
+    Ldate Ltime | LstdFlags const
+
+    __format-header () (Str) defun
+        "" header let
+        Log::__flags Ldate & 0 != if
+            now call
+            ymd-of call
+            header @str swap append header set
+        end
+        Log::__flags Ltime & 0 != if
+            header "" != if
+                " " header @str swap append header set
+            end
+            now call
+            Log::__flags LUTC & 0 != if
+                hms-of call
+            else
+                hms-of call
+            end
+            header @str swap append header set
+            Log::__flags Lmicroseconds & 0 != if
+                header @str ".000" append header set
+            end
+        end
+        header @str
+        Log::__prefix @str
+        append header set
+        header
+    end
+
+    __get-caller-info () (Str) defun
+        __file @str file let
+        Log::__flags Llongfile = if
+            file @str
+        else
+            Log::__flags Lshortfile = if
+                file len 0 > if
+                    -1 last-slash let
+                    0 i let
+                    file len i < loop
+                        file i index "/" = if
+                            i last-slash set
+                        end
+                        i 1 + i set
+                        file len i <
+                    end
+                    last-slash 0 >= if
+                        file @str
+                    else
+                        file @str
+                    end
+                else
+                    file @str
+                end
+            else
+                ""
+            end
+        end
+        caller let
+        Log::__flags Llongfile & 0 != if
+            caller @str ":" append
+            __line_col
+            @str
+            swap
+            @str
+            ":" append
+            append
+            append
+        else
+            Log::__flags Lshortfile & 0 != if
+                caller @str ":" append
+                __line_col
+                @str
+                swap
+                @str
+                ":" append
+                append
+                append
+            else
+                caller @str
+            end
+        end
+        caller
+    end
+
+    __write (Str) () defun
+        Log::__output swap
+        fwrite call pop
+    end
+
+    __do-print (Str) () defun
+        args let
+        Log::__format-header call header let
+        args @str len 0 = if
+            header Log::__write call pop
+        else
+            header @str " " append header set
+            header @str args @str append header set
+            Log::__get-caller-info call caller let
+            caller len 0 > if
+                " " header @str append header set
+                header @str caller append header set
+            end
+            header @str "\n" append Log::__write call pop
+        end
+    end
+
+    __do-fatal (Str) () defun
+        Log::__do-print call
+        1 exit
+    end
+
+    __do-panic (Str) () defun
+        Log::__do-print call
+        "panic" error
+    end
+
+    set-prefix (Str) () defun
+        Log::__prefix set
+    end
+
+    prefix () (Str) defun
+        Log::__prefix
+    end
+
+    set-flags (Int) () defun
+        Log::__flags set
+    end
+
+    flags () (Int) defun
+        Log::__flags
+    end
+
+    set-output (NullAbleFILEPTR) () defun
+        Log::__output set
+    end
+
+    writer () (NullAbleFILEPTR) defun
+        Log::__output
+    end
+
+    lprint (Str) () defun
+        Log::__do-print call
+    end
+
+    printf (Str List) () defun
+        Io::@fmt formatted let
+        formatted Log::lprint call
+    end
+
+    println (Str) () defun
+        Log::lprint call
+    end
+
+    fatal (Str) () defun
+        Log::__do-fatal call
+    end
+
+    fatalf (Str List) () defun
+        fmt args let
+        fmt args Io::@fmt formatted let
+        formatted Log::fatal call
+    end
+
+    fatalln (Str) () defun
+        Log::fatal call
+    end
+
+    panic (Str) () defun
+        Log::__do-panic call
+    end
+
+    panicf (Str List) () defun
+        fmt args let
+        fmt args Io::@fmt formatted let
+        formatted Log::panic call
+    end
+
+    panicln (Str) () defun
+        Log::panic call
+    end
+
+    new (Str) () defun
+        prefix let
+        null logger let
+        logger
+    end
+
+    [* ---- Convenience aliases ---- *]
+    @print apply Log::lprint call end
+    @printf apply Log::printf call end
+    @println apply Log::println call end
+    @fatal apply Log::fatal call end
+    @fatalf apply Log::fatalf call end
+    @fatalln apply Log::fatalln call end
+    @panic apply Log::panic call end
+    @panicf apply Log::panicf call end
+    @panicln apply Log::panicln call end
+    @set-prefix apply Log::set-prefix call end
+    @prefix apply Log::prefix call end
+    @set-flags apply Log::set-flags call end
+    @flags apply Log::flags call end
+    @set-output apply Log::set-output call end
+    @writer apply Log::writer call end
+
+end

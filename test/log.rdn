@@ -1,0 +1,8 @@
+"../libs/log.rdn" load
+
+0 Log::set-flags call
+"[TEST]" Log::set-prefix call
+
+"Hello World" Log::lprint call
+"single line" Log::println call
+"formatted: % %" ("value" 42) Log::printf call
