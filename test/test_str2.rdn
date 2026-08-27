@@ -1,0 +1,9 @@
+"Core" load
+Core::@str open
+
+Test module
+    "hello" __prefix let
+end
+
+Test::__prefix @str print
+"\n" print

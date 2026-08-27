@@ -1,0 +1,9 @@
+"Core" load
+"Typecheck" load
+Typecheck::OGTypes open
+
+test-func (Str) () defun
+    print
+end
+
+"hello" test-func call

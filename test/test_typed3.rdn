@@ -1,0 +1,15 @@
+"Core" load
+"Typecheck" load
+Typecheck::OGTypes open
+
+Test module
+    inner-func (Str) () defun
+        print
+    end
+
+    outer-func (Str) () defun
+        Test::inner-func call
+    end
+end
+
+"hello" Test::outer-func call

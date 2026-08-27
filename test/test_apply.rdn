@@ -1,0 +1,6 @@
+"Core" load
+
+my-str apply to_string swap pop end
+
+42 my-str print
+"\n" print

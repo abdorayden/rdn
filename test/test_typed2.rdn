@@ -1,0 +1,13 @@
+"Core" load
+"Typecheck" load
+Typecheck::OGTypes open
+
+inner-func (Str) () defun
+    print
+end
+
+outer-func (Str) () defun
+    inner-func call
+end
+
+"hello" outer-func call

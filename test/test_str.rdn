@@ -1,0 +1,4 @@
+"Core" load
+Core::@str open
+42 @str print
+"\n" print

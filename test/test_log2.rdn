@@ -1,0 +1,8 @@
+"../libs/log.rdn" load
+"Core" load
+Core::@str open
+
+"[TEST] " Log::SetPrefix call
+
+Log::__get-prefix call @str print
+"\n" print

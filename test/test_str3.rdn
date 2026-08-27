@@ -1,0 +1,13 @@
+"Core" load
+Core::@str open
+
+Test module
+    "hello" __prefix let
+
+    get-prefix defun
+        Test::__prefix @str
+    end
+end
+
+Test::get-prefix call print
+"\n" print

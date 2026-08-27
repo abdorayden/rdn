@@ -1,0 +1,18 @@
+"Core" load
+"Typecheck" load
+Typecheck::OGTypes open
+Core::@str open
+
+Test module
+    "hello" __prefix let
+
+    __get-prefix () (Str) defun
+        Test::__prefix @str
+    end
+end
+
+Test::__get-prefix call type print
+"\n" print
+
+Test::__get-prefix call @str print
+"\n" print
