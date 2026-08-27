@@ -5,7 +5,7 @@
 // built: gcc -o main main.c && ./main
 
 void hello (RDNState* state) {
-    Value* top = ray_pop(state);
+    Value* top = pop_value(state);
     if (top->type == VALUE_INTEGER) {
         printf("%ld\n" , top->as.integer);
     }

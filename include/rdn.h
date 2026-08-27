@@ -11,31 +11,15 @@
 #define RDN_INSTALL_PREFIX "/usr/local/share/rdn"
 #endif
 
-typedef enum ValueType ValueType;
-typedef enum BlockStop BlockStop;
-typedef enum FuncType FuncType;
-typedef struct Value Value ;
-typedef struct Vars_t Vars_t;
-typedef struct Funcs_t Funcs_t;
-typedef struct RDNSharedState RDNSharedState;
-typedef struct NativeCallState NativeCallState;
-typedef struct NativeModuleReg NativeModuleReg;
-typedef struct NativeModuleLoadState NativeModuleLoadState;
-typedef struct DiagnosticContext DiagnosticContext;
 typedef struct RDNStringList {
     char **items;
     size_t count;
     size_t capacity;
 } RDNStringList;
+
 typedef RDNStringList LoadPathStack;
 typedef RDNStringList SearchPathStack;
 typedef RDNStringList MacroExpansionStack;
-
-typedef struct RDNValueList {
-    Value **items;
-    size_t count;
-    size_t capacity;
-} RDNValueList;
 
 enum ValueType{
     VALUE_NULL,
@@ -47,6 +31,54 @@ enum ValueType{
 
     VALUE_AS_VAR,
 };
+
+enum FuncType {
+    FUNC_SCRIPT,
+    FUNC_APPLY,
+    FUNC_DEMAC,
+    FUNC_NATIVE,
+};
+
+struct NativeModuleReg {
+    char *name;
+    RDNNativeFunction function;
+};
+
+enum BlockStop{
+    BLOCK_STOP_EOF,
+    BLOCK_STOP_ELSE,
+    BLOCK_STOP_END,
+    BLOCK_STOP_BREAK,
+    BLOCK_STOP_CONTINUE,
+    BLOCK_STOP_RETURN,
+};
+
+struct DiagnosticContext {
+    const char *path;
+    const char *source;
+    size_t base_line;
+    size_t base_column;
+    const char *last_token_start;
+    const char *last_token_end;
+};
+
+typedef enum ValueType ValueType;
+typedef enum BlockStop BlockStop;
+typedef enum FuncType FuncType;
+typedef struct Value Value ;
+typedef struct Vars_t Vars_t;
+typedef struct Funcs_t Funcs_t;
+typedef struct RDNSharedState RDNSharedState;
+typedef struct NativeCallState NativeCallState;
+typedef struct NativeModuleReg NativeModuleReg;
+typedef struct NativeModuleLoadState NativeModuleLoadState;
+typedef struct DiagnosticContext DiagnosticContext;
+
+typedef struct RDNValueList {
+    Value **items;
+    size_t count;
+    size_t capacity;
+} RDNValueList;
 
 struct Value{
     ValueType type;
@@ -77,11 +109,27 @@ struct Vars_t {
     size_t scope_id;
 };
 
-enum FuncType {
-    FUNC_SCRIPT,
-    FUNC_APPLY,
-    FUNC_DEMAC,
-    FUNC_NATIVE,
+typedef struct RDNState {
+    Value **items;
+    size_t count;
+    size_t capacity;
+} RDNState;
+
+typedef struct RDNNativeModuleList {
+    NativeModuleReg **items;
+    size_t count;
+    size_t capacity;
+} NativeModuleRegs;
+
+struct NativeCallState {
+    RDNState *stack;
+    void *vars;
+    char *error_message;
+};
+
+struct NativeModuleLoadState {
+    NativeModuleRegs regs;
+    char *error_message;
 };
 
 struct Funcs_t {
@@ -97,51 +145,6 @@ struct Funcs_t {
     size_t source_line;
     size_t source_column;
     void *native_library_handle;
-};
-
-typedef struct RDNState {
-    Value **items;
-    size_t count;
-    size_t capacity;
-} RDNState;
-typedef struct RDNNativeModuleList {
-    NativeModuleReg **items;
-    size_t count;
-    size_t capacity;
-} NativeModuleRegs;
-
-struct NativeModuleReg {
-    char *name;
-    RDNNativeFunction function;
-};
-
-struct NativeCallState {
-    RDNState *stack;
-    void *vars;
-    char *error_message;
-};
-
-struct NativeModuleLoadState {
-    NativeModuleRegs regs;
-    char *error_message;
-};
-
-enum BlockStop{
-    BLOCK_STOP_EOF,
-    BLOCK_STOP_ELSE,
-    BLOCK_STOP_END,
-    BLOCK_STOP_BREAK,
-    BLOCK_STOP_CONTINUE,
-    BLOCK_STOP_RETURN,
-};
-
-struct DiagnosticContext {
-    const char *path;
-    const char *source;
-    size_t base_line;
-    size_t base_column;
-    const char *last_token_start;
-    const char *last_token_end;
 };
 
 // Curated public runtime API

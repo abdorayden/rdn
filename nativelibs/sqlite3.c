@@ -24,6 +24,7 @@
  *   __m__sqlite3__close         ( conn -- )
  */
 
+#include "../include/rdn.h"
 #include "../include/rdn_native.h"
 
 #include <stdbool.h>
@@ -32,44 +33,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "../src/stack.h"
 #include "../src/sqlite-amalgamation-3530400/sqlite3.h"
-
-/*
- * Local copies of the interpreter value types so this module can touch
- * stack values directly, the same way map.c does. These must match the
- * layouts in include/rdn.h.
- */
-typedef enum ValueType {
-    VALUE_NULL,
-    VALUE_INTEGER,
-    VALUE_DOUBLE,
-    VALUE_STRING,
-    VALUE_BOOLEAN,
-    VALUE_LIST,
-    VALUE_AS_VAR
-} ValueType;
-
-typedef struct Value Value;
-
-struct Value {
-    ValueType type;
-    union {
-        long integer;
-        double number;
-        char *string;
-        bool boolean;
-        RLList(Value *) list;
-    } as;
-};
-
-typedef RLStack(Value *) RDNState;
-
-typedef struct NativeCallState {
-    RDNState *stack;
-    void *vars;
-    char *error_message;
-} NativeCallState;
 
 typedef struct {
     long id;
@@ -269,7 +233,7 @@ static bool __m__sqlite3__open(RDNApi *api) {
         return sql_error(api, "Sqlite::open requires a database path");
     }
 
-    path_value = ray_pop(stack);
+    path_value = pop_value(stack);
     path_value = sql_resolve(api, path_value);
 
     if (path_value == NULL || path_value->type != VALUE_STRING) {
@@ -307,8 +271,8 @@ static bool __m__sqlite3__exec(RDNApi *api) {
         return sql_error(api, "Sqlite::exec requires a connection and SQL text");
     }
 
-    sql_value = ray_pop(stack);
-    conn_value = ray_pop(stack);
+    sql_value = pop_value(stack);
+    conn_value = pop_value(stack);
 
     if (!sql_resolve_conn(api, conn_value, &conn)) {
         return false;
@@ -344,8 +308,8 @@ static bool __m__sqlite3__cursor(RDNApi *api) {
         return sql_error(api, "Sqlite::cursor requires a connection and SQL text");
     }
 
-    sql_value = ray_pop(stack);
-    conn_value = ray_pop(stack);
+    sql_value = pop_value(stack);
+    conn_value = pop_value(stack);
 
     if (!sql_resolve_conn(api, conn_value, &conn)) {
         return false;
@@ -380,8 +344,8 @@ static bool __m__sqlite3__bind(RDNApi *api) {
         return sql_error(api, "Sqlite::bind requires a cursor and a parameter list");
     }
 
-    params_value = ray_pop(stack);
-    cursor_value = ray_pop(stack);
+    params_value = pop_value(stack);
+    cursor_value = pop_value(stack);
 
     if (!sql_resolve_cursor(api, cursor_value, &cursor)) {
         return false;
@@ -447,7 +411,7 @@ static bool __m__sqlite3__step(RDNApi *api) {
         return sql_error(api, "Sqlite::step requires a cursor");
     }
 
-    cursor_value = ray_pop(stack);
+    cursor_value = pop_value(stack);
 
     if (!sql_resolve_cursor(api, cursor_value, &cursor)) {
         return false;
@@ -522,7 +486,7 @@ static bool __m__sqlite3__close_cursor(RDNApi *api) {
         return sql_error(api, "Sqlite::close-cursor requires a cursor");
     }
 
-    cursor_value = ray_pop(stack);
+    cursor_value = pop_value(stack);
 
     if (!sql_resolve_cursor(api, cursor_value, &cursor)) {
         return false;
@@ -543,7 +507,7 @@ static bool __m__sqlite3__close(RDNApi *api) {
         return sql_error(api, "Sqlite::close requires a connection");
     }
 
-    conn_value = ray_pop(stack);
+    conn_value = pop_value(stack);
 
     if (!sql_resolve_conn(api, conn_value, &conn)) {
         return false;

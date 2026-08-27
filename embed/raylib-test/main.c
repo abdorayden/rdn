@@ -1,6 +1,4 @@
 #include <raylib.h>
-#include <stdio.h>
-#include <string.h>
 #include "../../include/rdn.h"
 #include "raylib-6.0_linux_amd64/include/raylib.h"
 

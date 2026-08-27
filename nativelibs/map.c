@@ -20,6 +20,7 @@
  *   __m__map__types
  */
 
+#include "../include/rdn.h"
 #include "../include/rdn_native.h"
 
 #include <stdbool.h>
@@ -28,12 +29,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "../src/stack.h"
-
-#ifndef HT_IMPLEMENTATION
 #define HT_IMPLEMENTATION
-#endif /* ifndef HT_IMPLEMENTATION */
-
 #include "../src/ht.h"
 
 enum {
@@ -46,43 +42,6 @@ enum {
     m_Func,
     m_Any,
 };
-
-/*
- * Local copies of the interpreter value types so this module can touch
- * stack values directly, the same way coroutines.c does. These must match
- * the layouts in include/rdn.h.
- */
-typedef enum ValueType {
-    VALUE_NULL,
-    VALUE_INTEGER,
-    VALUE_DOUBLE,
-    VALUE_STRING,
-    VALUE_BOOLEAN,
-    VALUE_LIST,
-    VALUE_AS_VAR
-} ValueType;
-
-typedef struct Value Value;
-
-struct Value {
-    ValueType type;
-    union {
-        long integer;
-        double number;
-        char *string;
-        bool boolean;
-        RLList(Value *) list;
-    } as;
-};
-
-typedef RLStack(Value *) RDNState;
-
-/* `vars` is kept as void* only to preserve the interpreter struct layout. */
-typedef struct NativeCallState {
-    RDNState *stack;
-    void *vars;
-    char *error_message;
-} NativeCallState;
 
 typedef struct {
     Value *value;
@@ -292,7 +251,7 @@ static Value *map_clone_value(RDNApi *api, RDNState *stack, Value *value) {
         return NULL;
     }
 
-    return ray_pop(stack);
+    return pop_value(stack);
 }
 
 static bool map_type_valid(int expected, ValueType actual) {
@@ -330,7 +289,7 @@ static bool __m__map__new(RDNApi *api) {
         return api->raise_error(api, "Map::new requires a types list");
     }
 
-    types_value = ray_pop(stack);
+    types_value = pop_value(stack);
     resolved = types_value;
     if (resolved->type == VALUE_AS_VAR) {
         resolved = api->resolve_variable(api, resolved->as.string);
@@ -383,9 +342,9 @@ static bool __m__map__put(RDNApi *api) {
         return api->raise_error(api, "Map::put requires map, key and value");
     }
 
-    value_value = ray_pop(stack);
-    key_value = ray_pop(stack);
-    map_value = ray_pop(stack);
+    value_value = pop_value(stack);
+    key_value = pop_value(stack);
+    map_value = pop_value(stack);
 
     if (!map_resolve_table(api, map_value, &table)) {
         return false;
@@ -430,8 +389,8 @@ static bool __m__map__get(RDNApi *api) {
         return api->raise_error(api, "Map::get requires map and key");
     }
 
-    key_value = ray_pop(stack);
-    map_value = ray_pop(stack);
+    key_value = pop_value(stack);
+    map_value = pop_value(stack);
 
     if (!map_resolve_table(api, map_value, &table)) {
         return false;
@@ -467,8 +426,8 @@ static bool __m__map__del(RDNApi *api) {
         return api->raise_error(api, "Map::del requires map and key");
     }
 
-    key_value = ray_pop(stack);
-    map_value = ray_pop(stack);
+    key_value = pop_value(stack);
+    map_value = pop_value(stack);
 
     if (!map_resolve_table(api, map_value, &table)) {
         return false;
@@ -497,7 +456,7 @@ static bool __m__map__clear(RDNApi *api) {
         return api->raise_error(api, "Map::clear requires a map value");
     }
 
-    map_value = ray_pop(stack);
+    map_value = pop_value(stack);
 
     if (!map_resolve_table(api, map_value, &table)) {
         return false;
@@ -516,7 +475,7 @@ static bool __m__map__size(RDNApi *api) {
         return api->raise_error(api, "Map::size requires a map value");
     }
 
-    map_value = ray_pop(stack);
+    map_value = pop_value(stack);
 
     if (!map_resolve_table(api, map_value, &table)) {
         return false;
@@ -534,7 +493,7 @@ static bool __m__map__keys(RDNApi *api) {
         return api->raise_error(api, "Map::keys requires a map value");
     }
 
-    map_value = ray_pop(stack);
+    map_value = pop_value(stack);
 
     if (!map_resolve_table(api, map_value, &table)) {
         return false;
@@ -569,7 +528,7 @@ static bool __m__map__values(RDNApi *api) {
         return api->raise_error(api, "Map::values requires a map value");
     }
 
-    map_value = ray_pop(stack);
+    map_value = pop_value(stack);
 
     if (!map_resolve_table(api, map_value, &table)) {
         return false;
@@ -603,7 +562,7 @@ static bool __m__map__types(RDNApi *api) {
         return api->raise_error(api, "Map::types requires a map value");
     }
 
-    map_value = ray_pop(stack);
+    map_value = pop_value(stack);
 
     if (!map_resolve_table(api, map_value, &table)) {
         return false;
