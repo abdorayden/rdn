@@ -12,3 +12,6 @@ snips7.rdn
 snips8.rdn
 snips9.rdn
 .nvimlog
+rdn.o
+librdn.so
+librdn.a

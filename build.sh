@@ -39,6 +39,10 @@ VERBOSE=${VERBOSE:-1}
 main_binary="$ROOT_DIR/main"
 shared_ext="so"
 
+rdn_lib_object="$ROOT_DIR/rdn.o"
+static_lib="$ROOT_DIR/librdn.a"
+shared_lib="$ROOT_DIR/librdn.so"
+
 usage() {
     cat <<EOF
 usage: $(basename "$0") [all|build|install|clean|help]
@@ -97,6 +101,14 @@ build_main() {
     run "$CC" "$ROOT_DIR/main.o" -O3 -o "$main_binary" $LDFLAGS
 }
 
+build_libs() {
+    section "Building interpreter libraries (librdn.a / librdn.so)"
+    run "$CC" $CFLAGS -O3 -fPIC -DRDN_INSTALL_PREFIX=\"${PREFIX}\" \
+        -c "$ROOT_DIR/src/rdn.c" -o "$rdn_lib_object"
+    run ar rcs "$static_lib" "$rdn_lib_object"
+    run "$CC" -shared -rdynamic -o "$shared_lib" "$rdn_lib_object" -ldl
+}
+
 build_native() {
     local source_file="$1"
     local output_file="$2"
@@ -142,6 +154,7 @@ build_all() {
     log "compiler: $CC"
     log "shared extension: $shared_ext"
     build_main
+    build_libs
     build_native "$ROOT_DIR/nativelibs/math.c" "$ROOT_DIR/nativelibs/math.$shared_ext" "-lm"
     build_native "$ROOT_DIR/nativelibs/files.c" "$ROOT_DIR/nativelibs/files.$shared_ext"
     build_native "$ROOT_DIR/nativelibs/unix.c" "$ROOT_DIR/nativelibs/unix.$shared_ext"
