@@ -1,7 +1,0 @@
-{
-  "name": "tree-sitter-raden",
-  "version": "0.0.1",
-  "description": "Tree-sitter grammar scaffold for the Raden language",
-  "main": "grammar.js",
-  "license": "MIT"
-}

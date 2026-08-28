@@ -52,8 +52,8 @@ static bool coCreate(RDNApi *api) {
         return api->raise_error(api, "coCreate requires 2 params");
     }
 
-    step = native_get_stack_value(stack, -1);
-    initial_state = native_get_stack_value(stack, -2);
+    step = rdn_native_get_stack_value(stack, -1);
+    initial_state = rdn_native_get_stack_value(stack, -2);
     if (step == NULL || step->type != VALUE_AS_VAR) {
         return api->raise_error(api, "coCreate requires function name and initial state");
     }
@@ -67,10 +67,10 @@ static bool coCreate(RDNApi *api) {
         return false;
     }
 
-    if (!push_value(stack, step) || !api->list_append(api, -2, -1) || !api->pop(api, 1)) {
+    if (!rdn_push_value(stack, step) || !api->list_append(api, -2, -1) || !api->pop(api, 1)) {
         return false;
     }
-    if (!push_value(stack, initial_state) || !api->list_append(api, -2, -1) || !api->pop(api, 1)) {
+    if (!rdn_push_value(stack, initial_state) || !api->list_append(api, -2, -1) || !api->pop(api, 1)) {
         return false;
     }
     if (!api->push_boolean(api, true) || !api->list_append(api, -2, -1) || !api->pop(api, 1)) {
@@ -93,9 +93,9 @@ static bool coUpdate(RDNApi *api) {
         return api->raise_error(api, "coUpdate requires 3 params");
     }
 
-    target_value = native_get_stack_value(stack, -3);
-    new_state = native_get_stack_value(stack, -2);
-    new_alive = native_get_stack_value(stack, -1);
+    target_value = rdn_native_get_stack_value(stack, -3);
+    new_state = rdn_native_get_stack_value(stack, -2);
+    new_alive = rdn_native_get_stack_value(stack, -1);
     if (target_value == NULL) {
         return api->raise_error(api, "coUpdate requires coroutine target");
     }
@@ -112,16 +112,12 @@ static bool coUpdate(RDNApi *api) {
         return api->raise_error(api, "coUpdate requires coroutine list");
     }
 
-    free_value(resolved_target->as.list.items[1]);
-    free_value(resolved_target->as.list.items[2]);
     resolved_target->as.list.items[1] = new_state;
     resolved_target->as.list.items[2] = new_alive;
 
     stack->count -= 3;
 
-    if (target_value->type == VALUE_AS_VAR) {
-        free_value(target_value);
-    }
+    if (target_value->type == VALUE_AS_VAR) { }
 
     (void)alive;
     return api->push_boolean(api, true);
@@ -138,7 +134,7 @@ static bool coStatus(RDNApi *api) {
         return api->raise_error(api, "coStatus requires 1 param");
     }
 
-    target_value = native_get_stack_value(state->stack, -1);
+    target_value = rdn_native_get_stack_value(state->stack, -1);
     if (!coroutine_resolve_target(api, target_value, &resolved_target)) {
         return false;
     }

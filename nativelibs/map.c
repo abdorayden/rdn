@@ -251,7 +251,7 @@ static Value *map_clone_value(RDNApi *api, RDNState *stack, Value *value) {
         return NULL;
     }
 
-    return pop_value(stack);
+    return rdn_pop_value(stack);
 }
 
 static bool map_type_valid(int expected, ValueType actual) {
@@ -289,7 +289,7 @@ static bool __m__map__new(RDNApi *api) {
         return api->raise_error(api, "Map::new requires a types list");
     }
 
-    types_value = pop_value(stack);
+    types_value = rdn_pop_value(stack);
     resolved = types_value;
     if (resolved->type == VALUE_AS_VAR) {
         resolved = api->resolve_variable(api, resolved->as.string);
@@ -342,9 +342,9 @@ static bool __m__map__put(RDNApi *api) {
         return api->raise_error(api, "Map::put requires map, key and value");
     }
 
-    value_value = pop_value(stack);
-    key_value = pop_value(stack);
-    map_value = pop_value(stack);
+    value_value = rdn_pop_value(stack);
+    key_value = rdn_pop_value(stack);
+    map_value = rdn_pop_value(stack);
 
     if (!map_resolve_table(api, map_value, &table)) {
         return false;
@@ -389,8 +389,8 @@ static bool __m__map__get(RDNApi *api) {
         return api->raise_error(api, "Map::get requires map and key");
     }
 
-    key_value = pop_value(stack);
-    map_value = pop_value(stack);
+    key_value = rdn_pop_value(stack);
+    map_value = rdn_pop_value(stack);
 
     if (!map_resolve_table(api, map_value, &table)) {
         return false;
@@ -426,8 +426,8 @@ static bool __m__map__del(RDNApi *api) {
         return api->raise_error(api, "Map::del requires map and key");
     }
 
-    key_value = pop_value(stack);
-    map_value = pop_value(stack);
+    key_value = rdn_pop_value(stack);
+    map_value = rdn_pop_value(stack);
 
     if (!map_resolve_table(api, map_value, &table)) {
         return false;
@@ -456,7 +456,7 @@ static bool __m__map__clear(RDNApi *api) {
         return api->raise_error(api, "Map::clear requires a map value");
     }
 
-    map_value = pop_value(stack);
+    map_value = rdn_pop_value(stack);
 
     if (!map_resolve_table(api, map_value, &table)) {
         return false;
@@ -475,7 +475,7 @@ static bool __m__map__size(RDNApi *api) {
         return api->raise_error(api, "Map::size requires a map value");
     }
 
-    map_value = pop_value(stack);
+    map_value = rdn_pop_value(stack);
 
     if (!map_resolve_table(api, map_value, &table)) {
         return false;
@@ -493,7 +493,7 @@ static bool __m__map__keys(RDNApi *api) {
         return api->raise_error(api, "Map::keys requires a map value");
     }
 
-    map_value = pop_value(stack);
+    map_value = rdn_pop_value(stack);
 
     if (!map_resolve_table(api, map_value, &table)) {
         return false;
@@ -528,7 +528,7 @@ static bool __m__map__values(RDNApi *api) {
         return api->raise_error(api, "Map::values requires a map value");
     }
 
-    map_value = pop_value(stack);
+    map_value = rdn_pop_value(stack);
 
     if (!map_resolve_table(api, map_value, &table)) {
         return false;
@@ -562,7 +562,7 @@ static bool __m__map__types(RDNApi *api) {
         return api->raise_error(api, "Map::types requires a map value");
     }
 
-    map_value = pop_value(stack);
+    map_value = rdn_pop_value(stack);
 
     if (!map_resolve_table(api, map_value, &table)) {
         return false;

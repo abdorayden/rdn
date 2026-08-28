@@ -1,2 +1,2 @@
-"../apps/todo_tui.rdn" load
+"../examples/apps/todo_tui.rdn" load
 runTodoTui call

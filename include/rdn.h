@@ -152,48 +152,55 @@ struct Funcs_t {
 // that natively-loaded modules can resolve them via dlsym(). The interpreter
 // keeps module-level `vars` / `funcs` state internally.
 
-char *copy_string(const char *text);
-Value *create_null_value(void);
-Value *create_integer_value(long integer);
-Value *create_double_value(double number);
-Value *create_boolean_value(bool boolean);
-Value *create_string_value_owned(char *string);
-Value *create_string_value_copy(const char *string);
-Value *create_list_value(void);
-Value *create_var_name_value(const char *name);
-Value *clone_value(const Value *value);
-void free_value(Value *value);
+char *rdn_copy_string(const char *text);
+Value *rdn_create_null_value(void);
+Value *rdn_create_integer_value(long integer);
+Value *rdn_create_double_value(double number);
+Value *rdn_create_boolean_value(bool boolean);
+Value *rdn_create_string_value_owned(char *string);
+Value *rdn_create_string_value_copy(const char *string);
+Value *rdn_create_list_value(void);
+Value *rdn_create_var_name_value(const char *name);
+Value *rdn_clone_value(const Value *value);
 
-Vars_t *create_var_entry(const char *name, Value *value, bool is_const);
-Vars_t *find_var_entry(const char *name);
-bool vars_let(const char *name, const Value *value);
-bool vars_set(const char *name, const Value *value);
-bool vars_const(const char *name, const Value *value);
-bool vars_push_scope(void);
-void vars_pop_scope(void);
-Value *resolve_value_if_var(Value *value, const char *context);
+bool rdn_to_string(RDNState *stack);
 
-Funcs_t *create_func_entry(const char *name, char *body, const char *source_path, size_t source_line, size_t source_column);
-Funcs_t *create_native_func_entry(const char *name, RDNNativeFunction native_function, void *native_library_handle);
-Funcs_t *find_func_entry(const char *name);
-bool funcs_define(const char *name, char *body, const char *source_path, size_t source_line, size_t source_column);
-bool funcs_define_native(const char *name, RDNNativeFunction native_function, void *native_library_handle);
-void free_vars(void);
-void free_funcs(void);
+Vars_t *rdn_create_var_entry(const char *name, Value *value, bool is_const);
+Vars_t *rdn_find_var_entry(const char *name);
+bool rdn_vars_let(const char *name, const Value *value);
+bool rdn_vars_set(const char *name, const Value *value);
+bool rdn_vars_const(const char *name, const Value *value);
+bool rdn_vars_push_scope(void);
+void rdn_vars_pop_scope(void);
+Value *rdn_resolve_value_if_var(Value *value, const char *context);
 
-bool push_value(RDNState *stack, Value *value);
-Value *pop_value(RDNState *stack);
-bool evaluate_source(RDNState *stack, char *source);
-bool evaluate_file(RDNState *stack, const char *path);
-char *read_file(const char *path);
+Funcs_t *rdn_create_func_entry(const char *name, char *body, const char *source_path, size_t source_line, size_t source_column);
+Funcs_t *rdn_create_native_func_entry(const char *name, RDNNativeFunction native_function, void *native_library_handle);
+Funcs_t *rdn_find_func_entry(const char *name);
+bool rdn_funcs_define(const char *name, char *body, const char *source_path, size_t source_line, size_t source_column);
+bool rdn_funcs_define_native(const char *name, RDNNativeFunction native_function, void *native_library_handle);
+
+// for cleaning the global hash table state of variables and functrions
+void rdn_free_vars(void);
+void rdn_free_funcs(void);
+
+bool rdn_push_value(RDNState *stack, Value *value);
+Value *rdn_pop_value(RDNState *stack);
+bool rdn_evaluate_source(RDNState *stack, char *source);
+bool rdn_evaluate_file(RDNState *stack, const char *path);
+char *rdn_read_file(const char *path);
 int rdn_main(int argc, char **argv);
 
 // Native-module helpers (also exported):
-Value *native_get_stack_value(RDNState *stack, long index);
-RDNValueType native_value_type_from_value(const Value *value);
-bool value_to_double(const Value *value, double *out_value);
-bool value_to_long(const Value *value, long *out_value);
-bool value_to_boolean(const Value *value, bool *out_value);
+Value *rdn_native_get_stack_value(RDNState *stack, long index);
+RDNValueType rdn_native_value_type_from_value(const Value *value);
+bool rdn_value_to_double(const Value *value, double *out_value);
+bool rdn_value_to_long(const Value *value, long *out_value);
+bool rdn_value_to_boolean(const Value *value, bool *out_value);
+
+bool rdn_is_callable(RDNState* stack);
+bool rdn_apply_call(RDNState *stack);
+bool rdn_apply_pcall(RDNState *stack);
 
 #define rdn_do_string(src) do{evaluate_source(NULL, (src));}while(0)
 

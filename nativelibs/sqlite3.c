@@ -233,7 +233,7 @@ static bool __m__sqlite3__open(RDNApi *api) {
         return sql_error(api, "Sqlite::open requires a database path");
     }
 
-    path_value = pop_value(stack);
+    path_value = rdn_pop_value(stack);
     path_value = sql_resolve(api, path_value);
 
     if (path_value == NULL || path_value->type != VALUE_STRING) {
@@ -271,8 +271,8 @@ static bool __m__sqlite3__exec(RDNApi *api) {
         return sql_error(api, "Sqlite::exec requires a connection and SQL text");
     }
 
-    sql_value = pop_value(stack);
-    conn_value = pop_value(stack);
+    sql_value = rdn_pop_value(stack);
+    conn_value = rdn_pop_value(stack);
 
     if (!sql_resolve_conn(api, conn_value, &conn)) {
         return false;
@@ -308,8 +308,8 @@ static bool __m__sqlite3__cursor(RDNApi *api) {
         return sql_error(api, "Sqlite::cursor requires a connection and SQL text");
     }
 
-    sql_value = pop_value(stack);
-    conn_value = pop_value(stack);
+    sql_value = rdn_pop_value(stack);
+    conn_value = rdn_pop_value(stack);
 
     if (!sql_resolve_conn(api, conn_value, &conn)) {
         return false;
@@ -344,8 +344,8 @@ static bool __m__sqlite3__bind(RDNApi *api) {
         return sql_error(api, "Sqlite::bind requires a cursor and a parameter list");
     }
 
-    params_value = pop_value(stack);
-    cursor_value = pop_value(stack);
+    params_value = rdn_pop_value(stack);
+    cursor_value = rdn_pop_value(stack);
 
     if (!sql_resolve_cursor(api, cursor_value, &cursor)) {
         return false;
@@ -411,7 +411,7 @@ static bool __m__sqlite3__step(RDNApi *api) {
         return sql_error(api, "Sqlite::step requires a cursor");
     }
 
-    cursor_value = pop_value(stack);
+    cursor_value = rdn_pop_value(stack);
 
     if (!sql_resolve_cursor(api, cursor_value, &cursor)) {
         return false;
@@ -486,7 +486,7 @@ static bool __m__sqlite3__close_cursor(RDNApi *api) {
         return sql_error(api, "Sqlite::close-cursor requires a cursor");
     }
 
-    cursor_value = pop_value(stack);
+    cursor_value = rdn_pop_value(stack);
 
     if (!sql_resolve_cursor(api, cursor_value, &cursor)) {
         return false;
@@ -507,7 +507,7 @@ static bool __m__sqlite3__close(RDNApi *api) {
         return sql_error(api, "Sqlite::close requires a connection");
     }
 
-    conn_value = pop_value(stack);
+    conn_value = rdn_pop_value(stack);
 
     if (!sql_resolve_conn(api, conn_value, &conn)) {
         return false;

@@ -84,13 +84,10 @@ static bool apply_module(RDNState *stack, char **cursor);
 static bool apply_open(RDNState *stack, char **cursor);
 static bool apply_apply(RDNState *stack, char **cursor);
 static bool apply_demac(RDNState *stack, char **cursor);
-static bool apply_call(RDNState *stack);
-static bool apply_pcall(RDNState *stack);
 static bool execute_named_entry(RDNState *stack, Funcs_t *entry, const char *context_kind, const char *context_name);
 static bool expand_demac(Funcs_t *entry, char **cursor);
 static void free_macro_expansion_stack(MacroExpansionStack *expansions);
 static void free_macro_expansions(void);
-static bool apply_to_string(RDNState *stack);
 static bool skip_comment(char **cursor);
 static bool read_string_token(char **cursor, char **out_token);
 static bool read_plain_token(char **cursor, char **out_token);
@@ -154,6 +151,7 @@ static bool native_api_list_append(RDNApi *api, long list_index, long value_inde
 static bool native_api_list_index(RDNApi *api, long list_index, long item_index);
 static bool native_api_list_remove(RDNApi *api, long list_index, long item_index);
 static void apply_host_environment(void);
+static void free_value(Value *value);
 
 // Scope tracking for the hash-table-backed Vars. A hash table is unordered,
 // so it cannot store interleaved scope markers the way the old linear array
@@ -179,7 +177,7 @@ static void vars_record_scope_name(const char *name) {
         return;
     }
     ScopeFrame *frame = &g_scope_stack.items[g_scope_stack.count - 1];
-    ray_append(&frame->names, copy_string(name));
+    ray_append(&frame->names, rdn_copy_string(name));
 }
 
 static bool is_module_name(const char *name) {
@@ -203,7 +201,7 @@ bool loaded_files_contains(const char *path){
 }
 
 void add_loaded_file(const char *path) {
-    ray_append(&g_loaded_files, copy_string(path));
+    ray_append(&g_loaded_files, rdn_copy_string(path));
 }
 
 void free_loaded_files() {
@@ -235,7 +233,7 @@ static bool path_is_separator_char(char ch);
 static const char *path_last_separator(const char *path);
 static char *get_install_prefix(void);
 
-char *copy_string(const char *text) {
+char *rdn_copy_string(const char *text) {
     return arena_strdup(&g_arena, text);
 }
 
@@ -330,7 +328,7 @@ static bool diagnostic_emitv(const char *kind, const char *pointer, const char *
     diagnostic_compute_location(pointer, &line, &column, &line_start, &line_end);
 
     {
-        char *trace_copy = copy_string(message);
+        char *trace_copy = rdn_copy_string(message);
         if (trace_copy != NULL) {
             ray_append(&g_stack_trace_protected, trace_copy);
         }
@@ -373,52 +371,52 @@ static bool diagnostic_note_current(const char *fmt, ...) {
     return false;
 }
 
-Value *create_null_value(void) {
+Value *rdn_create_null_value(void) {
     Value *value = arena_alloc(&g_arena, sizeof(*value));
     value->type = VALUE_NULL;
     value->as.integer = 0;
     return value;
 }
 
-Value *create_integer_value(long integer) {
+Value *rdn_create_integer_value(long integer) {
     Value *value = arena_alloc(&g_arena, sizeof(*value));
     value->type = VALUE_INTEGER;
     value->as.integer = integer;
     return value;
 }
 
-Value *create_double_value(double number) {
+Value *rdn_create_double_value(double number) {
     Value *value = arena_alloc(&g_arena, sizeof(*value));
     value->type = VALUE_DOUBLE;
     value->as.number = number;
     return value;
 }
 
-Value *create_boolean_value(bool boolean) {
+Value *rdn_create_boolean_value(bool boolean) {
     Value *value = arena_alloc(&g_arena, sizeof(*value));
     value->type = VALUE_BOOLEAN;
     value->as.boolean = boolean;
     return value;
 }
 
-Value *create_string_value_owned(char *string) {
+Value *rdn_create_string_value_owned(char *string) {
     Value *value = arena_alloc(&g_arena, sizeof(*value));
     value->type = VALUE_STRING;
     value->as.string = string;
     return value;
 }
 
-Value *create_string_value_copy(const char *string) {
-    char *copy = copy_string(string);
+Value *rdn_create_string_value_copy(const char *string) {
+    char *copy = rdn_copy_string(string);
 
     if (copy == NULL) {
         return NULL;
     }
 
-    return create_string_value_owned(copy);
+    return rdn_create_string_value_owned(copy);
 }
 
-Value *create_list_value(void) {
+Value *rdn_create_list_value(void) {
     Value *value = arena_alloc(&g_arena, sizeof(*value));
     value->type = VALUE_LIST;
     value->as.list.items = NULL;
@@ -427,14 +425,14 @@ Value *create_list_value(void) {
     return value;
 }
 
-Value *create_var_name_value(const char *name) {
+Value *rdn_create_var_name_value(const char *name) {
     Value *value = arena_alloc(&g_arena, sizeof(*value));
     value->type = VALUE_AS_VAR;
-    value->as.string = copy_string(name);
+    value->as.string = rdn_copy_string(name);
     return value;
 }
 
-Value *clone_value(const Value *value) {
+Value *rdn_clone_value(const Value *value) {
     size_t index = 0;
     Value *copy = NULL;
 
@@ -444,25 +442,25 @@ Value *clone_value(const Value *value) {
 
     switch (value->type) {
         case VALUE_NULL:
-            return create_null_value();
+            return rdn_create_null_value();
         case VALUE_INTEGER:
-            return create_integer_value(value->as.integer);
+            return rdn_create_integer_value(value->as.integer);
         case VALUE_DOUBLE:
-            return create_double_value(value->as.number);
+            return rdn_create_double_value(value->as.number);
         case VALUE_BOOLEAN:
-            return create_boolean_value(value->as.boolean);
+            return rdn_create_boolean_value(value->as.boolean);
         case VALUE_STRING:
-            return create_string_value_copy(value->as.string);
+            return rdn_create_string_value_copy(value->as.string);
         case VALUE_AS_VAR:
-            return create_var_name_value(value->as.string);
+            return rdn_create_var_name_value(value->as.string);
         case VALUE_LIST:
-            copy = create_list_value();
+            copy = rdn_create_list_value();
             if (copy == NULL) {
                 return NULL;
             }
 
             for (index = 0; index < value->as.list.count; index++) {
-                Value *item_copy = clone_value(value->as.list.items[index]);
+                Value *item_copy = rdn_clone_value(value->as.list.items[index]);
                 if (item_copy == NULL) {
                     free_value(copy);
                     return NULL;
@@ -475,34 +473,34 @@ Value *clone_value(const Value *value) {
     }
 }
 
-Vars_t *create_var_entry(const char *name, Value *value, bool is_const) {
+Vars_t *rdn_create_var_entry(const char *name, Value *value, bool is_const) {
     (void)name;
     Vars_t *entry = arena_alloc(&g_arena, sizeof(*entry));
     *entry = (Vars_t){0};
     entry->var_value = value;
     entry->is_scope_marker = false;
     entry->is_const = is_const;
-    entry->module_name = g_module_var_prefix != NULL ? copy_string(g_module_var_prefix) : NULL;
+    entry->module_name = g_module_var_prefix != NULL ? rdn_copy_string(g_module_var_prefix) : NULL;
     entry->prev = NULL;
     entry->scope_id = vars_current_scope_id();
     return entry;
 }
 
-Funcs_t *create_func_entry(const char *name, char *body, const char *source_path, size_t source_line, size_t source_column) {
+Funcs_t *rdn_create_func_entry(const char *name, char *body, const char *source_path, size_t source_line, size_t source_column) {
     (void)name;
     Funcs_t *entry = arena_alloc(&g_arena, sizeof(*entry));
     *entry = (Funcs_t){0};
     entry->type = FUNC_SCRIPT;
     entry->as.func_body = body;
-    entry->source_path = copy_string(source_path == NULL ? "<repl>" : source_path);
+    entry->source_path = rdn_copy_string(source_path == NULL ? "<repl>" : source_path);
     entry->source_line = source_line;
     entry->source_column = source_column;
     entry->native_library_handle = NULL;
-    entry->module_name = g_module_func_prefix != NULL ? copy_string(g_module_func_prefix) : NULL;
+    entry->module_name = g_module_func_prefix != NULL ? rdn_copy_string(g_module_func_prefix) : NULL;
     return entry;
 }
 
-Funcs_t *create_native_func_entry(const char *name, RDNNativeFunction native_function, void *native_library_handle) {
+Funcs_t *rdn_create_native_func_entry(const char *name, RDNNativeFunction native_function, void *native_library_handle) {
     (void)name;
     Funcs_t *entry = arena_alloc(&g_arena, sizeof(*entry));
     *entry = (Funcs_t){0};
@@ -512,15 +510,15 @@ Funcs_t *create_native_func_entry(const char *name, RDNNativeFunction native_fun
     entry->source_line = 0;
     entry->source_column = 0;
     entry->native_library_handle = native_library_handle;
-    entry->module_name = g_module_func_prefix != NULL ? copy_string(g_module_func_prefix) : NULL;
+    entry->module_name = g_module_func_prefix != NULL ? rdn_copy_string(g_module_func_prefix) : NULL;
     return entry;
 }
 
-void free_vars() {
+void rdn_free_vars() {
     ht_free(&vars);
 }
 
-void free_funcs() {
+void rdn_free_funcs() {
     // Only close native library handles. Entry payloads and keys are
     // arena-managed; ht_free() only releases the malloc'd slot buffer.
     RLList(void*) handles = {0};
@@ -606,14 +604,14 @@ static const char *native_library_last_error(void) {
 #endif
 }
 
-bool vars_push_scope() {
+bool rdn_vars_push_scope() {
     ScopeFrame frame = {0};
     frame.scope_id = g_next_scope_id++;
     ray_append(&g_scope_stack, frame);
     return true;
 }
 
-void vars_pop_scope() {
+void rdn_vars_pop_scope() {
     if (g_scope_stack.count == 0) {
         return;
     }
@@ -637,7 +635,7 @@ void vars_pop_scope() {
     g_scope_stack.count--;
 }
 
-Vars_t *find_var_entry(const char *name) {
+Vars_t *rdn_find_var_entry(const char *name) {
     return ht_find(&vars, (char *)name);
 }
 
@@ -649,7 +647,7 @@ static Vars_t *find_current_scope_var_entry(const char *name) {
     return entry;
 }
 
-Funcs_t *find_func_entry(const char *name) {
+Funcs_t *rdn_find_func_entry(const char *name) {
     return ht_find(&funcs, (char *)name);
 }
 
@@ -657,76 +655,76 @@ static bool func_entry_has_body(const Funcs_t *entry) {
     return entry->type == FUNC_SCRIPT || entry->type == FUNC_APPLY || entry->type == FUNC_DEMAC;
 }
 
-bool funcs_define(const char *name, char *body, const char *source_path, size_t source_line, size_t source_column) {
-    Funcs_t *entry = find_func_entry(name);
+bool rdn_funcs_define(const char *name, char *body, const char *source_path, size_t source_line, size_t source_column) {
+    Funcs_t *entry = rdn_find_func_entry(name);
 
     if (entry != NULL) {
         entry->type = FUNC_SCRIPT;
         entry->as.func_body = body;
-        entry->source_path = copy_string(source_path == NULL ? "<repl>" : source_path);
+        entry->source_path = rdn_copy_string(source_path == NULL ? "<repl>" : source_path);
         entry->source_line = source_line;
         entry->source_column = source_column;
         entry->native_library_handle = NULL;
         return true;
     }
 
-    entry = create_func_entry(name, body, source_path, source_line, source_column);
+    entry = rdn_create_func_entry(name, body, source_path, source_line, source_column);
     if (entry == NULL) {
         return diagnostic_error_current("failed to allocate function entry");
     }
 
-    *ht_put(&funcs, (char *)copy_string(name)) = *entry;
+    *ht_put(&funcs, (char *)rdn_copy_string(name)) = *entry;
     return true;
 }
 
 static bool funcs_define_apply(const char *name, char *body, const char *source_path, size_t source_line, size_t source_column) {
-    Funcs_t *entry = find_func_entry(name);
+    Funcs_t *entry = rdn_find_func_entry(name);
 
     if (entry != NULL) {
         entry->type = FUNC_APPLY;
         entry->as.func_body = body;
-        entry->source_path = copy_string(source_path == NULL ? "<repl>" : source_path);
+        entry->source_path = rdn_copy_string(source_path == NULL ? "<repl>" : source_path);
         entry->source_line = source_line;
         entry->source_column = source_column;
         entry->native_library_handle = NULL;
         return true;
     }
 
-    entry = create_func_entry(name, body, source_path, source_line, source_column);
+    entry = rdn_create_func_entry(name, body, source_path, source_line, source_column);
     if (entry == NULL) {
         return diagnostic_error_current("failed to allocate function entry");
     }
 
     entry->type = FUNC_APPLY;
-    *ht_put(&funcs, (char *)copy_string(name)) = *entry;
+    *ht_put(&funcs, (char *)rdn_copy_string(name)) = *entry;
     return true;
 }
 
 static bool funcs_define_demac(const char *name, char *body, const char *source_path, size_t source_line, size_t source_column) {
-    Funcs_t *entry = find_func_entry(name);
+    Funcs_t *entry = rdn_find_func_entry(name);
 
     if (entry != NULL) {
         entry->type = FUNC_DEMAC;
         entry->as.func_body = body;
-        entry->source_path = copy_string(source_path == NULL ? "<repl>" : source_path);
+        entry->source_path = rdn_copy_string(source_path == NULL ? "<repl>" : source_path);
         entry->source_line = source_line;
         entry->source_column = source_column;
         entry->native_library_handle = NULL;
         return true;
     }
 
-    entry = create_func_entry(name, body, source_path, source_line, source_column);
+    entry = rdn_create_func_entry(name, body, source_path, source_line, source_column);
     if (entry == NULL) {
         return diagnostic_error_current("failed to allocate macro entry");
     }
 
     entry->type = FUNC_DEMAC;
-    *ht_put(&funcs, (char *)copy_string(name)) = *entry;
+    *ht_put(&funcs, (char *)rdn_copy_string(name)) = *entry;
     return true;
 }
 
-bool funcs_define_native(const char *name, RDNNativeFunction native_function, void *native_library_handle) {
-    Funcs_t *entry = find_func_entry(name);
+bool rdn_funcs_define_native(const char *name, RDNNativeFunction native_function, void *native_library_handle) {
+    Funcs_t *entry = rdn_find_func_entry(name);
 
     if (entry != NULL) {
         if (func_entry_has_body(entry)) {
@@ -738,19 +736,19 @@ bool funcs_define_native(const char *name, RDNNativeFunction native_function, vo
         return true;
     }
 
-    entry = create_native_func_entry(name, native_function, native_library_handle);
+    entry = rdn_create_native_func_entry(name, native_function, native_library_handle);
     if (entry == NULL) {
         fprintf(stderr, "failed to allocate native function entry\n");
         return false;
     }
 
-    *ht_put(&funcs, (char *)copy_string(name)) = *entry;
+    *ht_put(&funcs, (char *)rdn_copy_string(name)) = *entry;
     return true;
 }
 
-bool vars_let(const char *name, const Value *value) {
-    Vars_t *top = find_var_entry(name);
-    Value *copy = clone_value(value);
+bool rdn_vars_let(const char *name, const Value *value) {
+    Vars_t *top = rdn_find_var_entry(name);
+    Value *copy = rdn_clone_value(value);
 
     if (copy == NULL) {
         return diagnostic_error_current("failed to clone variable value");
@@ -766,7 +764,7 @@ bool vars_let(const char *name, const Value *value) {
     }
 
     {
-        Vars_t *binding = create_var_entry(name, copy, false);
+        Vars_t *binding = rdn_create_var_entry(name, copy, false);
         if (binding == NULL) {
             free_value(copy);
             return diagnostic_error_current("failed to allocate variable entry");
@@ -777,15 +775,15 @@ bool vars_let(const char *name, const Value *value) {
                 *binding->prev = *top;
             }
         }
-        *ht_put(&vars, (char *)copy_string(name)) = *binding;
+        *ht_put(&vars, (char *)rdn_copy_string(name)) = *binding;
         vars_record_scope_name(name);
     }
     return true;
 }
 
-bool vars_set(const char *name, const Value *value) {
-    Vars_t *top = find_var_entry(name);
-    Value *copy = clone_value(value);
+bool rdn_vars_set(const char *name, const Value *value) {
+    Vars_t *top = rdn_find_var_entry(name);
+    Value *copy = rdn_clone_value(value);
 
     if (top == NULL) {
         return diagnostic_error_current("unknown variable '%s'", name);
@@ -804,9 +802,9 @@ bool vars_set(const char *name, const Value *value) {
     return true;
 }
 
-bool vars_const(const char *name, const Value *value) {
-    Vars_t *top = find_var_entry(name);
-    Value *copy = clone_value(value);
+bool rdn_vars_const(const char *name, const Value *value) {
+    Vars_t *top = rdn_find_var_entry(name);
+    Value *copy = rdn_clone_value(value);
 
     if (copy == NULL) {
         return diagnostic_error_current("failed to clone constant value");
@@ -818,7 +816,7 @@ bool vars_const(const char *name, const Value *value) {
     }
 
     {
-        Vars_t *binding = create_var_entry(name, copy, true);
+        Vars_t *binding = rdn_create_var_entry(name, copy, true);
         if (binding == NULL) {
             free_value(copy);
             return diagnostic_error_current("failed to allocate constant entry");
@@ -829,13 +827,13 @@ bool vars_const(const char *name, const Value *value) {
                 *binding->prev = *top;
             }
         }
-        *ht_put(&vars, (char *)copy_string(name)) = *binding;
+        *ht_put(&vars, (char *)rdn_copy_string(name)) = *binding;
         vars_record_scope_name(name);
     }
     return true;
 }
 
-void free_value(Value *value) {
+static void free_value(Value *value) {
     (void)value;
 }
 
@@ -843,7 +841,7 @@ static void free_stack_values(RDNState *stack) {
     stack->count = 0;
 }
 
-bool push_value(RDNState *stack, Value *value) {
+bool rdn_push_value(RDNState *stack, Value *value) {
     if (value == NULL) {
         fprintf(stderr, "failed to allocate value\n");
         return false;
@@ -853,7 +851,7 @@ bool push_value(RDNState *stack, Value *value) {
     return true;
 }
 
-Value *pop_value(RDNState *stack) {
+Value *rdn_pop_value(RDNState *stack) {
     if (stack == NULL || stack->count == 0) {
         return NULL;
     }
@@ -925,7 +923,7 @@ static bool parse_double_token(const char *text, double *out_value) {
     return true;
 }
 
-bool value_to_double(const Value *value, double *out_value) {
+bool rdn_value_to_double(const Value *value, double *out_value) {
     if (value->type == VALUE_INTEGER) {
         *out_value = (double)value->as.integer;
         return true;
@@ -939,7 +937,7 @@ bool value_to_double(const Value *value, double *out_value) {
     return false;
 }
 
-bool value_to_long(const Value *value, long *out_value) {
+bool rdn_value_to_long(const Value *value, long *out_value) {
     if (value->type != VALUE_INTEGER) {
         return false;
     }
@@ -948,7 +946,7 @@ bool value_to_long(const Value *value, long *out_value) {
     return true;
 }
 
-bool value_to_boolean(const Value *value, bool *out_value) {
+bool rdn_value_to_boolean(const Value *value, bool *out_value) {
     if (value->type != VALUE_BOOLEAN) {
         return false;
     }
@@ -957,14 +955,14 @@ bool value_to_boolean(const Value *value, bool *out_value) {
     return true;
 }
 
-Value *resolve_value_if_var(Value *value, const char *context) {
+Value *rdn_resolve_value_if_var(Value *value, const char *context) {
     Vars_t *entry = NULL;
 
     if (value == NULL || value->type != VALUE_AS_VAR) {
         return value;
     }
 
-    entry = find_var_entry(value->as.string);
+    entry = rdn_find_var_entry(value->as.string);
     if (entry == NULL) {
         diagnostic_error_current("%s requires known variable '%s'", context == NULL ? "(UNKNOWN)" : context, value->as.string);
         free_value(value);
@@ -972,7 +970,7 @@ Value *resolve_value_if_var(Value *value, const char *context) {
     }
 
     free_value(value);
-    return clone_value(entry->var_value);
+    return rdn_clone_value(entry->var_value);
 }
 
 static bool append_value_repr(char **buffer, size_t *length, const Value *value) {
@@ -1025,8 +1023,8 @@ static bool values_equal(const Value *left, const Value *right) {
 
     if ((left->type == VALUE_INTEGER || left->type == VALUE_DOUBLE) &&
         (right->type == VALUE_INTEGER || right->type == VALUE_DOUBLE)) {
-        value_to_double(left, &left_double);
-        value_to_double(right, &right_double);
+        rdn_value_to_double(left, &left_double);
+        rdn_value_to_double(right, &right_double);
         return left_double == right_double;
     }
 
@@ -1057,7 +1055,7 @@ static bool values_compare(const Value *left, const Value *right, const char *op
     double left_double = 0;
     double right_double = 0;
 
-    if (!value_to_double(left, &left_double) || !value_to_double(right, &right_double)) {
+    if (!rdn_value_to_double(left, &left_double) || !rdn_value_to_double(right, &right_double)) {
         return false;
     }
 
@@ -1136,17 +1134,17 @@ static bool apply_binary_operator(RDNState *stack, const char *operator_token) {
             return diagnostic_error_current("operator '%s' requires 1 operand, got %zu", operator_token, stack->count);
         }
 
-        right = resolve_value_if_var(ray_pop(stack), operator_token);
+        right = rdn_resolve_value_if_var(ray_pop(stack), operator_token);
         if (right == NULL) {
             return false;
         }
-        if (!value_to_boolean(right, &right_bool)) {
+        if (!rdn_value_to_boolean(right, &right_bool)) {
             diagnostic_error_current("operator '%s' requires a boolean operand", operator_token);
             ray_append(stack, right);
             return false;
         }
 
-        result = create_boolean_value(!right_bool);
+        result = rdn_create_boolean_value(!right_bool);
         if (result == NULL) {
             fprintf(stderr, "failed to allocate result\n");
             ray_append(stack, right);
@@ -1162,8 +1160,8 @@ static bool apply_binary_operator(RDNState *stack, const char *operator_token) {
         return diagnostic_error_current("operator '%s' requires 2 operands, got %zu", operator_token, stack->count);
     }
 
-    right = resolve_value_if_var(ray_pop(stack), operator_token);
-    left = resolve_value_if_var(ray_pop(stack), operator_token);
+    right = rdn_resolve_value_if_var(ray_pop(stack), operator_token);
+    left = rdn_resolve_value_if_var(ray_pop(stack), operator_token);
     if (left == NULL || right == NULL) {
         free_value(left);
         free_value(right);
@@ -1171,9 +1169,9 @@ static bool apply_binary_operator(RDNState *stack, const char *operator_token) {
     }
 
     if (is_token(operator_token, "=")) {
-        result = create_boolean_value(values_equal(left, right));
+        result = rdn_create_boolean_value(values_equal(left, right));
     } else if (is_token(operator_token, "!=")) {
-        result = create_boolean_value(values_not_equal(left, right));
+        result = rdn_create_boolean_value(values_not_equal(left, right));
     } else if (is_token(operator_token, "<") || is_token(operator_token, ">") ||
                is_token(operator_token, "<=") || is_token(operator_token, ">=")) {
         if (!values_compare(left, right, operator_token, &right_bool)) {
@@ -1182,13 +1180,13 @@ static bool apply_binary_operator(RDNState *stack, const char *operator_token) {
             ray_append(stack, right);
             return false;
         }
-        result = create_boolean_value(right_bool);
+        result = rdn_create_boolean_value(right_bool);
     } else if (is_token(operator_token, "|") || is_token(operator_token, "&")) {
-        if (value_to_boolean(left, &left_bool) && value_to_boolean(right, &right_bool)) {
+        if (rdn_value_to_boolean(left, &left_bool) && rdn_value_to_boolean(right, &right_bool)) {
             if (is_token(operator_token, "|")) {
-                result = create_boolean_value(left_bool || right_bool);
+                result = rdn_create_boolean_value(left_bool || right_bool);
             } else {
-                result = create_boolean_value(left_bool && right_bool);
+                result = rdn_create_boolean_value(left_bool && right_bool);
             }
         } else if (left->type == VALUE_BOOLEAN || right->type == VALUE_BOOLEAN) {
             diagnostic_error_current("operator '%s' requires both operands to be boolean or integer", operator_token);
@@ -1196,7 +1194,7 @@ static bool apply_binary_operator(RDNState *stack, const char *operator_token) {
             ray_append(stack, right);
             return false;
         } else {
-            if (!value_to_long(left, &left_long) || !value_to_long(right, &right_long)) {
+            if (!rdn_value_to_long(left, &left_long) || !rdn_value_to_long(right, &right_long)) {
                 diagnostic_error_current("operator '%s' requires integer operands", operator_token);
                 ray_append(stack, left);
                 ray_append(stack, right);
@@ -1204,14 +1202,14 @@ static bool apply_binary_operator(RDNState *stack, const char *operator_token) {
             }
 
             if (is_token(operator_token, "|")) {
-                result = create_integer_value(left_long | right_long);
+                result = rdn_create_integer_value(left_long | right_long);
             } else {
-                result = create_integer_value(left_long & right_long);
+                result = rdn_create_integer_value(left_long & right_long);
             }
         }
     } else if (is_token(operator_token, "<<") || is_token(operator_token, ">>") ||
                is_token(operator_token, "^")) {
-        if (!value_to_long(left, &left_long) || !value_to_long(right, &right_long)) {
+        if (!rdn_value_to_long(left, &left_long) || !rdn_value_to_long(right, &right_long)) {
             diagnostic_error_current("operator '%s' requires integer operands", operator_token);
             ray_append(stack, left);
             ray_append(stack, right);
@@ -1226,14 +1224,14 @@ static bool apply_binary_operator(RDNState *stack, const char *operator_token) {
         }
 
         if (is_token(operator_token, "<<")) {
-            result = create_integer_value(left_long << right_long);
+            result = rdn_create_integer_value(left_long << right_long);
         } else if (is_token(operator_token, ">>")) {
-            result = create_integer_value(left_long >> right_long);
+            result = rdn_create_integer_value(left_long >> right_long);
         } else {
-            result = create_integer_value(left_long ^ right_long);
+            result = rdn_create_integer_value(left_long ^ right_long);
         }
     } else {
-        if (!value_to_double(left, &left_double) || !value_to_double(right, &right_double)) {
+        if (!rdn_value_to_double(left, &left_double) || !rdn_value_to_double(right, &right_double)) {
             diagnostic_error_current("operator '%s' requires numeric operands", operator_token);
             ray_append(stack, left);
             ray_append(stack, right);
@@ -1249,11 +1247,11 @@ static bool apply_binary_operator(RDNState *stack, const char *operator_token) {
 
         if (left->type == VALUE_INTEGER && right->type == VALUE_INTEGER && !is_token(operator_token, "/")) {
             if (is_token(operator_token, "+")) {
-                result = create_integer_value(left->as.integer + right->as.integer);
+                result = rdn_create_integer_value(left->as.integer + right->as.integer);
             } else if (is_token(operator_token, "-")) {
-                result = create_integer_value(left->as.integer - right->as.integer);
+                result = rdn_create_integer_value(left->as.integer - right->as.integer);
             } else if (is_token(operator_token, "*")) {
-                result = create_integer_value(left->as.integer * right->as.integer);
+                result = rdn_create_integer_value(left->as.integer * right->as.integer);
             }else if (is_token(operator_token, "%")) {
                 if (right->as.integer == 0) {
                     diagnostic_error_current("division by zero");
@@ -1261,7 +1259,7 @@ static bool apply_binary_operator(RDNState *stack, const char *operator_token) {
                     ray_append(stack, right);
                     return false;
                 }
-                result = create_integer_value(left->as.integer % right->as.integer);
+                result = rdn_create_integer_value(left->as.integer % right->as.integer);
             }else if (is_token(operator_token, "//")) {
                 if (right->as.integer == 0) {
                     diagnostic_error_current("division by zero");
@@ -1269,20 +1267,20 @@ static bool apply_binary_operator(RDNState *stack, const char *operator_token) {
                     ray_append(stack, right);
                     return false;
                 }
-                result = create_integer_value((long)(left->as.integer / right->as.integer));
+                result = rdn_create_integer_value((long)(left->as.integer / right->as.integer));
             }
         } else if (left->type == VALUE_INTEGER && right->type == VALUE_INTEGER && is_token(operator_token, "/") &&
                    left->as.integer % right->as.integer == 0) {
-            result = create_integer_value(left->as.integer / right->as.integer);
+            result = rdn_create_integer_value(left->as.integer / right->as.integer);
         } else {
             if (is_token(operator_token, "+")) {
-                result = create_double_value(left_double + right_double);
+                result = rdn_create_double_value(left_double + right_double);
             } else if (is_token(operator_token, "-")) {
-                result = create_double_value(left_double - right_double);
+                result = rdn_create_double_value(left_double - right_double);
             } else if (is_token(operator_token, "*")) {
-                result = create_double_value(left_double * right_double);
+                result = rdn_create_double_value(left_double * right_double);
             } else if (is_token(operator_token, "/")) {
-                result = create_double_value(left_double / right_double);
+                result = rdn_create_double_value(left_double / right_double);
             }
         }
     }
@@ -1383,12 +1381,12 @@ static bool apply_match(RDNState *stack) {
         return diagnostic_error_current("match requires 2 operands");
     }
 
-    text_val = resolve_value_if_var(ray_pop(stack), "match");
+    text_val = rdn_resolve_value_if_var(ray_pop(stack), "match");
     if (text_val == NULL) {
         return false;
     }
 
-    pat_val = resolve_value_if_var(ray_pop(stack), "match");
+    pat_val = rdn_resolve_value_if_var(ray_pop(stack), "match");
     if (pat_val == NULL) {
         free_value(text_val);
         return false;
@@ -1406,11 +1404,11 @@ static bool apply_match(RDNState *stack) {
     free_value(text_val);
     free_value(pat_val);
 
-    return push_value(stack, create_boolean_value(result));
+    return rdn_push_value(stack, rdn_create_boolean_value(result));
 }
 
 static bool apply_debug(RDNState *stack) {
-    char *buffer = copy_string("[");
+    char *buffer = rdn_copy_string("[");
     size_t length = 1;
     buffer[0] = '\0';
     length = 0;
@@ -1433,7 +1431,7 @@ static bool apply_print(RDNState *stack) {
         return diagnostic_error_current("print requires 1 operand");
     }
 
-    value = resolve_value_if_var(ray_pop(stack), "print");
+    value = rdn_resolve_value_if_var(ray_pop(stack), "print");
     if (value == NULL) {
         return false;
     }
@@ -1449,7 +1447,7 @@ static bool apply_exit(RDNState *stack , int* exit_status) {
     }
 
     Value *value = NULL;
-    value = resolve_value_if_var(ray_pop(stack), "exit");
+    value = rdn_resolve_value_if_var(ray_pop(stack), "exit");
     if (value == NULL) {
         return false;
     }
@@ -1466,8 +1464,8 @@ static bool apply_exit(RDNState *stack , int* exit_status) {
 }
 
 static bool apply_stack_size(RDNState *stack){
-    Value* size = create_integer_value((long)stack->count);
-    return push_value(stack, size);
+    Value* size = rdn_create_integer_value((long)stack->count);
+    return rdn_push_value(stack, size);
 }
 
 static bool apply_func_name(RDNState *stack){
@@ -1486,16 +1484,16 @@ static bool apply_func_name(RDNState *stack){
         return false;
     }
 
-    entry = find_func_entry(fn->as.string);
+    entry = rdn_find_func_entry(fn->as.string);
     if (entry == NULL) {
         diagnostic_error_current("unknown function: %s", fn->as.string);
         ray_append(stack, fn);
         return false;
     }
 
-    result = create_string_value_copy(fn->as.string);
+    result = rdn_create_string_value_copy(fn->as.string);
     free_value(fn);
-    return push_value(stack, result);
+    return rdn_push_value(stack, result);
 }
 
 static bool apply_type(RDNState *stack) {
@@ -1508,12 +1506,12 @@ static bool apply_type(RDNState *stack) {
 
     value = ray_pop(stack);
     if (value->type == VALUE_AS_VAR) {
-        if (find_func_entry(value->as.string) != NULL) {
-            result = create_string_value_copy("function");
+        if (rdn_find_func_entry(value->as.string) != NULL) {
+            result = rdn_create_string_value_copy("function");
             free_value(value);
             value = NULL;
         } else {
-            value = resolve_value_if_var(value, "type");
+            value = rdn_resolve_value_if_var(value, "type");
             if (value == NULL) {
                 return false;
             }
@@ -1522,18 +1520,18 @@ static bool apply_type(RDNState *stack) {
 
     if (result == NULL) {
         if (value->type == VALUE_NULL) {
-            result = create_string_value_copy("null");
+            result = rdn_create_string_value_copy("null");
         } else
         if (value->type == VALUE_INTEGER) {
-            result = create_string_value_copy("integer");
+            result = rdn_create_string_value_copy("integer");
         } else if (value->type == VALUE_DOUBLE) {
-            result = create_string_value_copy("double");
+            result = rdn_create_string_value_copy("double");
         } else if (value->type == VALUE_BOOLEAN) {
-            result = create_string_value_copy("boolean");
+            result = rdn_create_string_value_copy("boolean");
         } else if (value->type == VALUE_LIST) {
-            result = create_string_value_copy("list");
+            result = rdn_create_string_value_copy("list");
         } else {
-            result = create_string_value_copy("string");
+            result = rdn_create_string_value_copy("string");
         }
     }
 
@@ -1580,7 +1578,7 @@ static bool apply_dup(RDNState *stack) {
     }
 
     Value *value = NULL;
-    value = resolve_value_if_var(ray_pop(stack), "dup");
+    value = rdn_resolve_value_if_var(ray_pop(stack), "dup");
     if (value == NULL) {
         return false;
     }
@@ -1590,32 +1588,32 @@ static bool apply_dup(RDNState *stack) {
 
     switch (value->type) {
         case VALUE_NULL:{
-            dup1 = create_null_value();
-            dup2 = create_null_value();
+            dup1 = rdn_create_null_value();
+            dup2 = rdn_create_null_value();
         }break;
         case VALUE_BOOLEAN:{
-            dup1 = create_boolean_value(value->as.boolean);
-            dup2 = create_boolean_value(value->as.boolean);
+            dup1 = rdn_create_boolean_value(value->as.boolean);
+            dup2 = rdn_create_boolean_value(value->as.boolean);
         }break;
         case VALUE_DOUBLE:{
-            dup1 = create_double_value(value->as.number);
-            dup2 = create_double_value(value->as.number);
+            dup1 = rdn_create_double_value(value->as.number);
+            dup2 = rdn_create_double_value(value->as.number);
         }break;
         case VALUE_INTEGER:{
-            dup1 = create_integer_value(value->as.integer);
-            dup2 = create_integer_value(value->as.integer);
+            dup1 = rdn_create_integer_value(value->as.integer);
+            dup2 = rdn_create_integer_value(value->as.integer);
         }break;
         case VALUE_STRING:{
-            dup1 = create_string_value_copy(value->as.string);
-            dup2 = create_string_value_copy(value->as.string);
+            dup1 = rdn_create_string_value_copy(value->as.string);
+            dup2 = rdn_create_string_value_copy(value->as.string);
         }break;
         case VALUE_AS_VAR:{
-            dup1 = create_var_name_value(value->as.string);
-            dup2 = create_var_name_value(value->as.string);
+            dup1 = rdn_create_var_name_value(value->as.string);
+            dup2 = rdn_create_var_name_value(value->as.string);
         }break;
         case VALUE_LIST:{
-            dup1 = clone_value(value);
-            dup2 = clone_value(value);
+            dup1 = rdn_clone_value(value);
+            dup2 = rdn_clone_value(value);
         }break;
         default: {
             diagnostic_error_current("dup requires 1 operand");
@@ -1631,13 +1629,13 @@ static bool apply_dup(RDNState *stack) {
 }
 
 // to_string builtin function convert value from the top stack to string without remove it
-static bool apply_to_string(RDNState *stack) {
+bool rdn_to_string(RDNState *stack) {
     if (stack->count < 1) {
         return diagnostic_error_current("to_string requires 1 operand");
     }
 
     Value *value = NULL;
-    value = resolve_value_if_var(ray_pop(stack), "to_string");
+    value = rdn_resolve_value_if_var(ray_pop(stack), "to_string");
     if (value == NULL) {
         return false;
     }
@@ -1646,33 +1644,33 @@ static bool apply_to_string(RDNState *stack) {
 
     switch (value->type) {
         case VALUE_NULL:{
-            converted = create_string_value_copy("null");
+            converted = rdn_create_string_value_copy("null");
         }break;
         case VALUE_BOOLEAN:{
             if (value->as.boolean) {
-                converted = create_string_value_copy("true");
+                converted = rdn_create_string_value_copy("true");
             }else {
-                converted = create_string_value_copy("false");
+                converted = rdn_create_string_value_copy("false");
             }
         }break;
         case VALUE_DOUBLE:{
             char *forStore = arena_alloc(&g_arena, 16);
             snprintf(forStore, 16, "%lf", value->as.number);
-            converted = create_string_value_owned(forStore);
+            converted = rdn_create_string_value_owned(forStore);
         }break;
         case VALUE_INTEGER:{
             char *forStore = arena_alloc(&g_arena, 16);
             snprintf(forStore, 16, "%ld", value->as.integer);
-            converted = create_string_value_owned(forStore);
+            converted = rdn_create_string_value_owned(forStore);
         }break;
         case VALUE_STRING:{
-            converted = create_string_value_copy(value->as.string);
+            converted = rdn_create_string_value_copy(value->as.string);
         }break;
         case VALUE_AS_VAR:{
-            converted = create_string_value_copy(value->as.string);
+            converted = rdn_create_string_value_copy(value->as.string);
         }break;
         case VALUE_LIST:{
-            char *buffer = copy_string("(");
+            char *buffer = rdn_copy_string("(");
             size_t length = 1;
 
             if (buffer == NULL) {
@@ -1687,7 +1685,7 @@ static bool apply_to_string(RDNState *stack) {
                 free_value(value);
                 return false;
             }
-            converted = create_string_value_owned(buffer);
+            converted = rdn_create_string_value_owned(buffer);
         }break;
         default: {
             diagnostic_error_current("to_string requires 1 operand");
@@ -1709,7 +1707,7 @@ static bool append_string_repr(char **target_string, const Value *value) {
         return false;
     }
 
-    buffer = copy_string(*target_string);
+    buffer = rdn_copy_string(*target_string);
     if (buffer == NULL) {
         return false;
     }
@@ -1727,7 +1725,7 @@ static Value *create_string_char_value(char ch) {
     char *buffer = arena_alloc(&g_arena, 2);
     buffer[0] = ch;
     buffer[1] = '\0';
-    return create_string_value_owned(buffer);
+    return rdn_create_string_value_owned(buffer);
 }
 
 static bool apply_append(RDNState *stack) {
@@ -1743,9 +1741,9 @@ static bool apply_append(RDNState *stack) {
     item = ray_pop(stack);
     target = ray_pop(stack);
 
-    if (target->type == VALUE_AS_VAR && (entry = find_var_entry(target->as.string)) != NULL) {
+    if (target->type == VALUE_AS_VAR && (entry = rdn_find_var_entry(target->as.string)) != NULL) {
         if (entry->var_value->type == VALUE_LIST) {
-            item_copy = clone_value(item);
+            item_copy = rdn_clone_value(item);
             if (item_copy == NULL) {
                 fprintf(stderr, "failed to clone appended item\n");
                 ray_append(stack, target);
@@ -1778,14 +1776,14 @@ static bool apply_append(RDNState *stack) {
         return false;
     }
 
-    target = resolve_value_if_var(target, "append");
+    target = rdn_resolve_value_if_var(target, "append");
     if (target == NULL) {
         free_value(item);
         return false;
     }
 
     if (target->type == VALUE_LIST) {
-        item_copy = clone_value(item);
+        item_copy = rdn_clone_value(item);
         if (item_copy == NULL) {
             fprintf(stderr, "failed to clone appended item\n");
             ray_append(stack, target);
@@ -1829,23 +1827,23 @@ static bool apply_index(RDNState *stack) {
         return diagnostic_error_current("index requires 2 operands");
     }
 
-    index_value = resolve_value_if_var(ray_pop(stack), "index");
+    index_value = rdn_resolve_value_if_var(ray_pop(stack), "index");
     if (index_value == NULL) {
         return false;
     }
     target = ray_pop(stack);
 
-    if (!value_to_long(index_value, &index)) {
+    if (!rdn_value_to_long(index_value, &index)) {
         diagnostic_error_current("index requires integer index");
         ray_append(stack, target);
         ray_append(stack, index_value);
         return false;
     }
 
-    if (target->type == VALUE_AS_VAR && (entry = find_var_entry(target->as.string)) != NULL) {
+    if (target->type == VALUE_AS_VAR && (entry = rdn_find_var_entry(target->as.string)) != NULL) {
         resolved_target = entry->var_value;
     } else {
-        target = resolve_value_if_var(target, "index");
+        target = rdn_resolve_value_if_var(target, "index");
         if (target == NULL) {
             free_value(index_value);
             return false;
@@ -1863,7 +1861,7 @@ static bool apply_index(RDNState *stack) {
             return false;
         }
 
-        result = clone_value(resolved_target->as.list.items[index]);
+        result = rdn_clone_value(resolved_target->as.list.items[index]);
         free_value(index_value);
         free_value(target);
 
@@ -1913,23 +1911,23 @@ static bool apply_remove(RDNState *stack) {
         return diagnostic_error_current("remove requires 2 operands");
     }
 
-    index_value = resolve_value_if_var(ray_pop(stack), "remove");
+    index_value = rdn_resolve_value_if_var(ray_pop(stack), "remove");
     if (index_value == NULL) {
         return false;
     }
     target = ray_pop(stack);
 
-    if (!value_to_long(index_value, &index)) {
+    if (!rdn_value_to_long(index_value, &index)) {
         diagnostic_error_current("remove requires integer index");
         ray_append(stack, target);
         ray_append(stack, index_value);
         return false;
     }
 
-    if (target->type == VALUE_AS_VAR && (entry = find_var_entry(target->as.string)) != NULL) {
+    if (target->type == VALUE_AS_VAR && (entry = rdn_find_var_entry(target->as.string)) != NULL) {
         resolved_target = entry->var_value;
     } else {
-        target = resolve_value_if_var(target, "remove");
+        target = rdn_resolve_value_if_var(target, "remove");
         if (target == NULL) {
             free_value(index_value);
             return false;
@@ -2000,10 +1998,10 @@ static bool apply_len(RDNState *stack) {
     }
 
     target = ray_pop(stack);
-    if (target->type == VALUE_AS_VAR && (entry = find_var_entry(target->as.string)) != NULL) {
+    if (target->type == VALUE_AS_VAR && (entry = rdn_find_var_entry(target->as.string)) != NULL) {
         resolved_target = entry->var_value;
     } else {
-        target = resolve_value_if_var(target, "len");
+        target = rdn_resolve_value_if_var(target, "len");
         if (target == NULL) {
             return false;
         }
@@ -2011,9 +2009,9 @@ static bool apply_len(RDNState *stack) {
     }
 
     if (resolved_target->type == VALUE_LIST) {
-        result = create_integer_value((long)resolved_target->as.list.count);
+        result = rdn_create_integer_value((long)resolved_target->as.list.count);
     } else if (resolved_target->type == VALUE_STRING) {
-        result = create_integer_value((long)strlen(resolved_target->as.string));
+        result = rdn_create_integer_value((long)strlen(resolved_target->as.string));
     } else {
         diagnostic_error_current("len requires list or string target");
         ray_append(stack, target);
@@ -2117,10 +2115,10 @@ static bool apply_load(RDNState *stack){
     if (plen < 4 || strcmp(path + plen - 4, ".rdn") != 0){
         char* buffer = arena_alloc(&g_arena, plen + 5);
         snprintf(buffer, plen + 5, "%s.rdn", path);
-        path_copy = copy_string(buffer);
+        path_copy = rdn_copy_string(buffer);
         free(buffer);
     }else {
-        path_copy = copy_string(path);
+        path_copy = rdn_copy_string(path);
     }
 
     if (path_copy == NULL) {
@@ -2168,7 +2166,7 @@ static bool apply_load(RDNState *stack){
         return true;
     }
 
-    source = read_file(resolved_path);
+    source = rdn_read_file(resolved_path);
     if (source == NULL) {
         free(resolved_path);
         free_value(target);
@@ -2188,7 +2186,7 @@ static bool apply_load(RDNState *stack){
     {
         const char *previous_path = g_current_source_path;
         g_current_source_path = resolved_path;
-        ok = evaluate_source(stack, source);
+        ok = rdn_evaluate_source(stack, source);
         g_current_source_path = previous_path;
     }
 
@@ -2224,13 +2222,13 @@ static bool apply_loadnative(RDNState *stack) {
     path_length = strlen(path);
     shared_ext_length = strlen(shared_ext);
     if (path_length >= shared_ext_length && strcmp(path + path_length - shared_ext_length, shared_ext) == 0) {
-        path_copy = copy_string(path);
+        path_copy = rdn_copy_string(path);
     } else {
         char *buffer = arena_alloc(&g_arena, path_length + shared_ext_length + 1);
 
         if (buffer != NULL) {
             snprintf(buffer, path_length + shared_ext_length + 1, "%s%s", path, shared_ext);
-            path_copy = copy_string(buffer);
+            path_copy = rdn_copy_string(buffer);
             free(buffer);
         }
     }
@@ -2256,7 +2254,7 @@ static bool apply_loadnative(RDNState *stack) {
 
     handle = native_library_open(resolved_path);
     if (handle == NULL) {
-        char *diagnostic_path = copy_string(resolved_path);
+        char *diagnostic_path = rdn_copy_string(resolved_path);
         library_error = native_library_last_error();
         free(resolved_path);
         free_value(target);
@@ -2276,7 +2274,7 @@ static bool apply_loadnative(RDNState *stack) {
 
     init_function = (RDNModuleInit)native_library_symbol(handle, "rdn_module_init");
     if (init_function == NULL) {
-        char *diagnostic_path = copy_string(resolved_path);
+        char *diagnostic_path = rdn_copy_string(resolved_path);
         library_error = native_library_last_error();
         native_library_close(handle);
         free(resolved_path);
@@ -2318,7 +2316,7 @@ static bool apply_loadnative(RDNState *stack) {
 
     for (size_t index = 0; index < module_state.regs.count; index++) {
         NativeModuleReg *reg = module_state.regs.items[index];
-        if (!funcs_define_native(reg->name, reg->function, handle)) {
+        if (!rdn_funcs_define_native(reg->name, reg->function, handle)) {
             free_native_module_regs(&module_state.regs);
             free(module_state.error_message);
             native_library_close(handle);
@@ -2356,7 +2354,7 @@ static bool typecheck_signature_types_valid(const Value *types) {
 }
 
 static bool append_typecheck_signature(const char *name, const Value *params, const Value *returns) {
-    Vars_t *state_entry = find_var_entry("Typecheck::State");
+    Vars_t *state_entry = rdn_find_var_entry("Typecheck::State");
     Value *signature = NULL;
     Value *name_value = NULL;
     Value *params_copy = NULL;
@@ -2366,10 +2364,10 @@ static bool append_typecheck_signature(const char *name, const Value *params, co
         return diagnostic_error_current("signed defun requires typecheck State list; load libs/typecheck.rdn first");
     }
 
-    signature = create_list_value();
-    name_value = create_string_value_copy(name);
-    params_copy = clone_value(params);
-    returns_copy = clone_value(returns);
+    signature = rdn_create_list_value();
+    name_value = rdn_create_string_value_copy(name);
+    params_copy = rdn_clone_value(params);
+    returns_copy = rdn_clone_value(returns);
 
     if (signature == NULL || name_value == NULL || params_copy == NULL || returns_copy == NULL) {
         free_value(signature);
@@ -2456,7 +2454,7 @@ static bool apply_module(RDNState *stack, char **cursor) {
                 qualified_name[len - 2] = '\0';
             }
         } else {
-            qualified_name = copy_string(name->as.string);
+            qualified_name = rdn_copy_string(name->as.string);
         }
 
         for(size_t i = 0 ; i < g_modules.count ; ++i) {
@@ -2527,7 +2525,7 @@ static bool apply_module(RDNState *stack, char **cursor) {
                     g_module_func_prefix = new_func_prefix;
                     g_module_var_prefix = new_var_prefix;
 
-                    if (!evaluate_source(stack, body)) {
+                    if (!rdn_evaluate_source(stack, body)) {
                         free_value(name);
                         free(body);
                         free(g_module_func_prefix);
@@ -2577,17 +2575,17 @@ static bool apply_open_full_module(Value *name) {
             strncmp(func_name, name->as.string, prefix_len) == 0) {
             const char *alias = func_name + prefix_len + 2;
 
-            if (find_func_entry(alias) != NULL) {
+            if (rdn_find_func_entry(alias) != NULL) {
                 continue;
             }
 
             FuncAlias item = {0};
-            item.name = copy_string(alias);
+            item.name = rdn_copy_string(alias);
             item.payload = *entry;
             if (func_entry_has_body(entry)) {
-                item.payload.as.func_body = copy_string(entry->as.func_body);
+                item.payload.as.func_body = rdn_copy_string(entry->as.func_body);
             }
-            item.payload.source_path = copy_string(entry->source_path);
+            item.payload.source_path = rdn_copy_string(entry->source_path);
             ray_append(&func_aliases, item);
         }
     }
@@ -2602,23 +2600,23 @@ static bool apply_open_full_module(Value *name) {
             strncmp(var_name, name->as.string, prefix_len) == 0) {
             const char *alias = var_name + prefix_len + 2;
 
-            if (find_var_entry(alias) != NULL) {
+            if (rdn_find_var_entry(alias) != NULL) {
                 continue;
             }
 
-            Value *copy = clone_value(entry->var_value);
+            Value *copy = rdn_clone_value(entry->var_value);
             if (copy == NULL) {
                 return diagnostic_error_current("failed to clone module variable value");
             }
 
-            Vars_t *alias_entry = create_var_entry(alias, copy, entry->is_const);
+            Vars_t *alias_entry = rdn_create_var_entry(alias, copy, entry->is_const);
             if (alias_entry == NULL) {
                 free_value(copy);
                 return diagnostic_error_current("failed to allocate module variable alias");
             }
 
             VarAlias item = {0};
-            item.name = copy_string(alias);
+            item.name = rdn_copy_string(alias);
             item.payload = *alias_entry;
             ray_append(&var_aliases, item);
         }
@@ -2656,13 +2654,13 @@ static bool apply_open_selective(Value *name) {
     ht_foreach(entry, &funcs) {
         const char *func_name = ht_key(&funcs, entry);
         if (strlen(func_name) == full_name_len && strcmp(func_name, full_name) == 0) {
-            if (find_func_entry(member) == NULL) {
+            if (rdn_find_func_entry(member) == NULL) {
                 Funcs_t payload = *entry;
                 if (func_entry_has_body(entry)) {
-                    payload.as.func_body = copy_string(entry->as.func_body);
+                    payload.as.func_body = rdn_copy_string(entry->as.func_body);
                 }
-                payload.source_path = copy_string(entry->source_path);
-                *ht_put(&funcs, copy_string(member)) = payload;
+                payload.source_path = rdn_copy_string(entry->source_path);
+                *ht_put(&funcs, rdn_copy_string(member)) = payload;
             }
             found = true;
             break;
@@ -2673,17 +2671,17 @@ static bool apply_open_selective(Value *name) {
         ht_foreach(entry, &vars) {
             const char *var_name = ht_key(&vars, entry);
             if (strlen(var_name) == full_name_len && strcmp(var_name, full_name) == 0) {
-                if (find_var_entry(member) == NULL) {
-                    Value *copy = clone_value(entry->var_value);
+                if (rdn_find_var_entry(member) == NULL) {
+                    Value *copy = rdn_clone_value(entry->var_value);
                     if (copy == NULL) {
                         return diagnostic_error_current("failed to clone variable value");
                     }
-                    Vars_t *alias_entry = create_var_entry(member, copy, entry->is_const);
+                    Vars_t *alias_entry = rdn_create_var_entry(member, copy, entry->is_const);
                     if (alias_entry == NULL) {
                         free_value(copy);
                         return diagnostic_error_current("failed to allocate variable alias");
                     }
-                    *ht_put(&vars, copy_string(member)) = *alias_entry;
+                    *ht_put(&vars, rdn_copy_string(member)) = *alias_entry;
                 }
                 found = true;
                 break;
@@ -2842,7 +2840,7 @@ static bool apply_defun(RDNState *stack, char **cursor) {
                 memcpy(body, body_start, body_length);
                 body[body_length] = '\0';
 
-                if (!funcs_define(name->as.string, body, g_current_source_path, source_line, source_column)) {
+                if (!rdn_funcs_define(name->as.string, body, g_current_source_path, source_line, source_column)) {
                     free_value(name);
                     free_value(params);
                     free_value(returns);
@@ -3065,7 +3063,7 @@ static bool materialize_scope_references(RDNState *stack) {
             continue;
         }
 
-        resolved = clone_value(entry->var_value);
+        resolved = rdn_clone_value(entry->var_value);
         if (resolved == NULL) {
             return diagnostic_error_current("failed to materialize scoped value '%s'", value->as.string);
         }
@@ -3132,7 +3130,7 @@ static bool execute_named_entry(RDNState *stack, Funcs_t *entry, const char *con
         return true;
     }
 
-    if (!vars_push_scope()) {
+    if (!rdn_vars_push_scope()) {
         return false;
     }
 
@@ -3143,18 +3141,18 @@ static bool execute_named_entry(RDNState *stack, Funcs_t *entry, const char *con
         if (!execute_block(stack, &cursor, &stop_reason, false)) {
             g_diagnostic_context = previous_context;
             diagnostic_note_current("while %s '%s'", context_kind, context_name);
-            vars_pop_scope();
+            rdn_vars_pop_scope();
             return false;
         }
         g_diagnostic_context = previous_context;
     }
 
     if (!materialize_scope_references(stack)) {
-        vars_pop_scope();
+        rdn_vars_pop_scope();
         return false;
     }
 
-    vars_pop_scope();
+    rdn_vars_pop_scope();
 
     if (stop_reason == BLOCK_STOP_BREAK) {
         return diagnostic_error_current("unexpected break");
@@ -3171,7 +3169,47 @@ static bool execute_named_entry(RDNState *stack, Funcs_t *entry, const char *con
     return true;
 }
 
-static bool apply_pcall(RDNState *stack) {
+bool rdn_is_callable(RDNState* stack) {
+    Funcs_t *entry = NULL;
+    Value *resolved_name = NULL;
+    Vars_t *var_entry = NULL;
+    Value *name = NULL;
+    bool ok = false;
+    if (stack->count < 1) {
+        return false;
+    }
+    name = rdn_pop_value(stack);
+    if (name->type != VALUE_AS_VAR) {
+        rdn_push_value(stack, name);
+        return ok;
+    }
+    var_entry = rdn_find_var_entry(name->as.string);
+    if (var_entry != NULL) {
+        resolved_name = rdn_clone_value(var_entry->var_value);
+        if (resolved_name == NULL) {
+            return ok;
+        }
+        if (resolved_name->type != VALUE_AS_VAR) {
+            rdn_push_value(stack, resolved_name);
+            return ok;
+        }
+        entry = rdn_find_func_entry(resolved_name->as.string);
+    }else {
+        entry = rdn_find_func_entry(name->as.string);
+    }
+
+    if (entry == NULL) {
+        rdn_push_value(stack, name);
+        ok = false;
+    }else {
+        ok = true;
+    }
+
+
+    return ok;
+}
+
+bool rdn_apply_pcall(RDNState *stack) {
     Value *name = NULL;
     Value *resolved_name = NULL;
     Vars_t *var_entry = NULL;
@@ -3193,9 +3231,9 @@ static bool apply_pcall(RDNState *stack) {
         return false;
     }
 
-    var_entry = find_var_entry(name->as.string);
+    var_entry = rdn_find_var_entry(name->as.string);
     if (var_entry != NULL) {
-        resolved_name = clone_value(var_entry->var_value);
+        resolved_name = rdn_clone_value(var_entry->var_value);
         if (resolved_name == NULL) {
             diagnostic_error_current("failed to resolve function variable '%s'", name->as.string);
             free_value(name);
@@ -3209,9 +3247,9 @@ static bool apply_pcall(RDNState *stack) {
             return false;
         }
 
-        entry = find_func_entry(resolved_name->as.string);
+        entry = rdn_find_func_entry(resolved_name->as.string);
     } else {
-        entry = find_func_entry(name->as.string);
+        entry = rdn_find_func_entry(name->as.string);
     }
 
     if (entry == NULL) {
@@ -3232,7 +3270,7 @@ static bool apply_pcall(RDNState *stack) {
 
     if (ok) {
         g_diagnostics_suppressed = was_suppressed;
-        if (!push_value(stack, create_boolean_value(true))) {
+        if (!rdn_push_value(stack, rdn_create_boolean_value(true))) {
             free_value(resolved_name);
             free_value(name);
             return false;
@@ -3259,21 +3297,21 @@ static bool apply_pcall(RDNState *stack) {
         }
 
         if (error_text != NULL && error_length > 0) {
-            if (!push_value(stack, create_string_value_owned(error_text))) {
+            if (!rdn_push_value(stack, rdn_create_string_value_owned(error_text))) {
                 free(error_text);
                 free_value(resolved_name);
                 free_value(name);
                 return false;
             }
         } else {
-            if (!push_value(stack, create_string_value_copy("pcall caught an error"))) {
+            if (!rdn_push_value(stack, rdn_create_string_value_copy("pcall caught an error"))) {
                 free_value(resolved_name);
                 free_value(name);
                 return false;
             }
         }
 
-        if (!push_value(stack, create_boolean_value(false))) {
+        if (!rdn_push_value(stack, rdn_create_boolean_value(false))) {
             free_value(resolved_name);
             free_value(name);
             return false;
@@ -3285,7 +3323,7 @@ static bool apply_pcall(RDNState *stack) {
     return true;
 }
 
-static bool apply_call(RDNState *stack) {
+bool rdn_apply_call(RDNState *stack) {
     Value *name = NULL;
     Value *resolved_name = NULL;
     Vars_t *var_entry = NULL;
@@ -3303,9 +3341,9 @@ static bool apply_call(RDNState *stack) {
         return false;
     }
 
-    var_entry = find_var_entry(name->as.string);
+    var_entry = rdn_find_var_entry(name->as.string);
     if (var_entry != NULL) {
-        resolved_name = clone_value(var_entry->var_value);
+        resolved_name = rdn_clone_value(var_entry->var_value);
         if (resolved_name == NULL) {
             diagnostic_error_current("failed to resolve function variable '%s'", name->as.string);
             free_value(name);
@@ -3319,9 +3357,9 @@ static bool apply_call(RDNState *stack) {
             return false;
         }
 
-        entry = find_func_entry(resolved_name->as.string);
+        entry = rdn_find_func_entry(resolved_name->as.string);
     } else {
-        entry = find_func_entry(name->as.string);
+        entry = rdn_find_func_entry(name->as.string);
     }
 
     if (entry == NULL) {
@@ -3482,7 +3520,7 @@ static bool apply_if(RDNState *stack, char **cursor, BlockStop *stop_reason) {
     }
 
     condition = ray_pop(stack);
-    if (!value_to_boolean(condition, &condition_value)) {
+    if (!rdn_value_to_boolean(condition, &condition_value)) {
         diagnostic_error_current("if requires a boolean operand");
         ray_append(stack, condition);
         return false;
@@ -3491,25 +3529,25 @@ static bool apply_if(RDNState *stack, char **cursor, BlockStop *stop_reason) {
     free_value(condition);
 
     if (condition_value) {
-        if (!vars_push_scope()) {
+        if (!rdn_vars_push_scope()) {
             return false;
         }
         if (!execute_block(stack, cursor, &branch_stop, true)) {
-            vars_pop_scope();
+            rdn_vars_pop_scope();
             return false;
         }
 
         if (branch_stop == BLOCK_STOP_EOF) {
-            vars_pop_scope();
+            rdn_vars_pop_scope();
             return diagnostic_error_current("if missing end");
         }
 
         if (!materialize_scope_references(stack)) {
-            vars_pop_scope();
+            rdn_vars_pop_scope();
             return false;
         }
 
-        vars_pop_scope();
+        rdn_vars_pop_scope();
 
         if (branch_stop == BLOCK_STOP_BREAK || branch_stop == BLOCK_STOP_CONTINUE || branch_stop == BLOCK_STOP_RETURN) {
             *stop_reason = branch_stop;
@@ -3539,35 +3577,35 @@ static bool apply_if(RDNState *stack, char **cursor, BlockStop *stop_reason) {
     }
 
     if (branch_stop == BLOCK_STOP_ELSE) {
-        if (!vars_push_scope()) {
+        if (!rdn_vars_push_scope()) {
             return false;
         }
         if (!execute_block(stack, cursor, &branch_stop, true)) {
-            vars_pop_scope();
+            rdn_vars_pop_scope();
             return false;
         }
 
         if (branch_stop == BLOCK_STOP_BREAK || branch_stop == BLOCK_STOP_CONTINUE || branch_stop == BLOCK_STOP_RETURN) {
             if (!materialize_scope_references(stack)) {
-                vars_pop_scope();
+                rdn_vars_pop_scope();
                 return false;
             }
-            vars_pop_scope();
+            rdn_vars_pop_scope();
             *stop_reason = branch_stop;
             return true;
         }
 
         if (branch_stop != BLOCK_STOP_END) {
-            vars_pop_scope();
+            rdn_vars_pop_scope();
             return diagnostic_error_current("else missing end");
         }
 
         if (!materialize_scope_references(stack)) {
-            vars_pop_scope();
+            rdn_vars_pop_scope();
             return false;
         }
 
-        vars_pop_scope();
+        rdn_vars_pop_scope();
         *stop_reason = BLOCK_STOP_END;
         return true;
     }
@@ -3581,27 +3619,27 @@ static bool push_token_value(RDNState *stack, const char *token, bool is_string)
     double double_value = 0;
 
     if (is_string) {
-        return push_value(stack, create_string_value_copy(token));
+        return rdn_push_value(stack, rdn_create_string_value_copy(token));
     }
 
     if (parse_integer_token(token, &integer_value)) {
-        return push_value(stack, create_integer_value(integer_value));
+        return rdn_push_value(stack, rdn_create_integer_value(integer_value));
     }
 
     if (parse_double_token(token, &double_value)) {
-        return push_value(stack, create_double_value(double_value));
+        return rdn_push_value(stack, rdn_create_double_value(double_value));
     }
 
     if (is_token(token, "null")) {
-        return push_value(stack, create_null_value());
+        return rdn_push_value(stack, rdn_create_null_value());
     }
 
     if (is_token(token, "true")) {
-        return push_value(stack, create_boolean_value(true));
+        return rdn_push_value(stack, rdn_create_boolean_value(true));
     }
 
     if (is_token(token, "false")) {
-        return push_value(stack, create_boolean_value(false));
+        return rdn_push_value(stack, rdn_create_boolean_value(false));
     }
 
     return diagnostic_error_current("unknown token: %s", token);
@@ -3708,12 +3746,12 @@ static bool execute_list_literal(RDNState *stack, char **cursor) {
             }
             continue;
         } else if (is_token(token, "call")) {
-            if (!apply_call(stack)) {
+            if (!rdn_apply_call(stack)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "pcall")) {
-            if (!apply_pcall(stack)) {
+            if (!rdn_apply_pcall(stack)) {
                 return false;
             }
             continue;
@@ -3807,7 +3845,7 @@ static bool execute_list_literal(RDNState *stack, char **cursor) {
             }
             continue;
         } else if (is_token(token, "to_string")) {
-            if (!apply_to_string(stack)) {
+            if (!rdn_to_string(stack)) {
                 return false;
             }
             continue;
@@ -3862,13 +3900,13 @@ static bool execute_list_literal(RDNState *stack, char **cursor) {
             Funcs_t *func_entry = NULL;
 
             if (identifier_is_name_target(*cursor)) {
-                resolved = create_var_name_value(token);
-            } else if ((var_entry = find_var_entry(token)) != NULL &&
+                resolved = rdn_create_var_name_value(token);
+            } else if ((var_entry = rdn_find_var_entry(token)) != NULL &&
                        (var_entry->var_value->type == VALUE_LIST || var_entry->var_value->type == VALUE_STRING)) {
-                resolved = create_var_name_value(token);
-            } else if ((var_entry = find_var_entry(token)) != NULL) {
-                resolved = clone_value(var_entry->var_value);
-            } else if ((func_entry = find_func_entry(token)) != NULL && func_entry->type == FUNC_DEMAC) {
+                resolved = rdn_create_var_name_value(token);
+            } else if ((var_entry = rdn_find_var_entry(token)) != NULL) {
+                resolved = rdn_clone_value(var_entry->var_value);
+            } else if ((func_entry = rdn_find_func_entry(token)) != NULL && func_entry->type == FUNC_DEMAC) {
                 if (!expand_demac(func_entry, cursor)) {
                     return false;
                 }
@@ -3880,10 +3918,10 @@ static bool execute_list_literal(RDNState *stack, char **cursor) {
                 }
                 continue;
             } else {
-                resolved = create_var_name_value(token);
+                resolved = rdn_create_var_name_value(token);
             }
 
-            if (!push_value(stack, resolved)) {
+            if (!rdn_push_value(stack, resolved)) {
                 return false;
             }
             continue;
@@ -3895,7 +3933,7 @@ static bool execute_list_literal(RDNState *stack, char **cursor) {
 }
 
 static Value *parse_list_literal(char **cursor) {
-    Value *list = create_list_value();
+    Value *list = rdn_create_list_value();
     RDNState list_stack = {0};
     size_t index = 0;
 
@@ -3913,8 +3951,8 @@ static Value *parse_list_literal(char **cursor) {
         Vars_t *entry = NULL;
         Value *item = list_stack.items[index];
 
-        if (item->type == VALUE_AS_VAR && (entry = find_var_entry(item->as.string)) != NULL) {
-            Value *resolved_item = clone_value(entry->var_value);
+        if (item->type == VALUE_AS_VAR && (entry = rdn_find_var_entry(item->as.string)) != NULL) {
+            Value *resolved_item = rdn_clone_value(entry->var_value);
 
             free_value(item);
             item = resolved_item;
@@ -4052,7 +4090,7 @@ static bool apply_error(RDNState *stack) {
     }
 
     if (name_or_val->type == VALUE_STRING) {
-        char *msg = copy_string(name_or_val->as.string);
+        char *msg = rdn_copy_string(name_or_val->as.string);
         free_value(name_or_val);
         bool ok = diagnostic_error_current("%s" , msg == NULL ? "(unknown)" : msg);
         free(msg);
@@ -4064,7 +4102,7 @@ static bool apply_error(RDNState *stack) {
 
 static bool apply_file_name(RDNState *stack) {
     const char *path = g_diagnostic_context.path != NULL ? g_diagnostic_context.path : "<repl>";
-    Value* rdn_file_path = create_string_value_copy(path);
+    Value* rdn_file_path = rdn_create_string_value_copy(path);
     ray_append(stack, rdn_file_path);
     return true;
 }
@@ -4073,8 +4111,8 @@ static bool apply_line_col(RDNState *stack) {
     size_t line;
     size_t column;
     diagnostic_compute_location(NULL, &line, &column, NULL, NULL);
-    ray_append(stack, create_integer_value((long)column));
-    ray_append(stack, create_integer_value((long)line));
+    ray_append(stack, rdn_create_integer_value((long)column));
+    ray_append(stack, rdn_create_integer_value((long)line));
     return true;
 }
 
@@ -4085,7 +4123,7 @@ static bool apply_do_string(RDNState *stack){
     Value* str = ray_pop(stack);
     bool ok = true;
     if (str->type == VALUE_STRING) {
-        ok = evaluate_source(stack, str->as.string);
+        ok = rdn_evaluate_source(stack, str->as.string);
         free_value(str);
         return ok;
     }else if(str->type == VALUE_AS_VAR) {
@@ -4094,7 +4132,7 @@ static bool apply_do_string(RDNState *stack){
             free_value(str);
             return diagnostic_error_current("variable must be a string type");
         }
-        ok = evaluate_source(stack, var->var_value->as.string);
+        ok = rdn_evaluate_source(stack, var->var_value->as.string);
         free_value(str);
         return ok;
     }
@@ -4108,7 +4146,7 @@ static bool apply_do_file(RDNState *stack){
     }
     Value* path = ray_pop(stack);
     if (path->type == VALUE_STRING) {
-        evaluate_file(stack, path->as.string);
+        rdn_evaluate_file(stack, path->as.string);
         free_value(path);
         return true;
     }else if (path->type == VALUE_AS_VAR) {
@@ -4117,7 +4155,7 @@ static bool apply_do_file(RDNState *stack){
             free_value(path);
             return diagnostic_error_current("variable must be a string type");
         }
-        evaluate_file(stack, var->var_value->as.string);
+        rdn_evaluate_file(stack, var->var_value->as.string);
         free_value(path);
         return true;
     }
@@ -4157,7 +4195,7 @@ static bool apply_unlet(RDNState *stack) {
         name->as.string = prefixed;
     }
 
-    Vars_t *entry = find_var_entry(name->as.string);
+    Vars_t *entry = rdn_find_var_entry(name->as.string);
 
     if (entry == NULL) {
         ray_append(stack, name);
@@ -4246,7 +4284,7 @@ static bool apply_let(RDNState *stack) {
         name->as.string = prefixed;
     }
 
-    if (!vars_let(name->as.string, value)) {
+    if (!rdn_vars_let(name->as.string, value)) {
         ray_append(stack, value);
         ray_append(stack, name);
         return false;
@@ -4290,7 +4328,7 @@ static bool apply_set(RDNState *stack) {
         name->as.string = prefixed;
     }
 
-    if (!vars_set(name->as.string, value)) {
+    if (!rdn_vars_set(name->as.string, value)) {
         ray_append(stack, value);
         ray_append(stack, name);
         return false;
@@ -4312,13 +4350,13 @@ static bool apply_enum(RDNState *stack , bool reset) {
         if (top->type == VALUE_INTEGER) {
             counter = top->as.integer;
             free_value(top);
-            Value* enum_val = create_integer_value(counter++);
+            Value* enum_val = rdn_create_integer_value(counter++);
             ray_append(stack, enum_val);
             return true;
         }
         ray_append(stack, top);
     }
-    Value* enum_val = create_integer_value(counter++);
+    Value* enum_val = rdn_create_integer_value(counter++);
     ray_append(stack, enum_val);
     return true;
 }
@@ -4356,7 +4394,7 @@ static bool apply_const(RDNState *stack) {
         name->as.string = prefixed;
     }
 
-    if (!vars_const(name->as.string, value)) {
+    if (!rdn_vars_const(name->as.string, value)) {
         ray_append(stack, value);
         ray_append(stack, name);
         return false;
@@ -4439,12 +4477,12 @@ static bool execute_block(RDNState *stack, char **cursor, BlockStop *stop_reason
             }
             continue;
         } else if (is_token(token, "call")) {
-            if (!apply_call(stack)) {
+            if (!rdn_apply_call(stack)) {
                 return false;
             }
             continue;
         } else if (is_token(token, "pcall")) {
-            if (!apply_pcall(stack)) {
+            if (!rdn_apply_pcall(stack)) {
                 return false;
             }
             continue;
@@ -4570,7 +4608,7 @@ static bool execute_block(RDNState *stack, char **cursor, BlockStop *stop_reason
             }
             continue;
         } else if (is_token(token, "to_string")) {
-            if (!apply_to_string(stack)) {
+            if (!rdn_to_string(stack)) {
                 return false;
             }
             continue;
@@ -4625,13 +4663,13 @@ static bool execute_block(RDNState *stack, char **cursor, BlockStop *stop_reason
             Funcs_t *func_entry = NULL;
 
             if (identifier_is_name_target(*cursor)) {
-                resolved = create_var_name_value(token);
-            } else if ((var_entry = find_var_entry(token)) != NULL &&
+                resolved = rdn_create_var_name_value(token);
+            } else if ((var_entry = rdn_find_var_entry(token)) != NULL &&
                        (var_entry->var_value->type == VALUE_LIST || var_entry->var_value->type == VALUE_STRING)) {
-                resolved = create_var_name_value(token);
-            } else if ((var_entry = find_var_entry(token)) != NULL) {
-                resolved = clone_value(var_entry->var_value);
-            } else if ((func_entry = find_func_entry(token)) != NULL && func_entry->type == FUNC_DEMAC) {
+                resolved = rdn_create_var_name_value(token);
+            } else if ((var_entry = rdn_find_var_entry(token)) != NULL) {
+                resolved = rdn_clone_value(var_entry->var_value);
+            } else if ((func_entry = rdn_find_func_entry(token)) != NULL && func_entry->type == FUNC_DEMAC) {
                 if (!expand_demac(func_entry, cursor)) {
                     return false;
                 }
@@ -4643,10 +4681,10 @@ static bool execute_block(RDNState *stack, char **cursor, BlockStop *stop_reason
                 }
                 continue;
             } else {
-                resolved = create_var_name_value(token);
+                resolved = rdn_create_var_name_value(token);
             }
 
-            if (!push_value(stack, resolved)) {
+            if (!rdn_push_value(stack, resolved)) {
                 return false;
             }
             continue;
@@ -4670,7 +4708,7 @@ static bool apply_loop(RDNState *stack, char **cursor, BlockStop *stop_reason) {
     }
 
     condition = ray_pop(stack);
-    if (!value_to_boolean(condition, &condition_value)) {
+    if (!rdn_value_to_boolean(condition, &condition_value)) {
         diagnostic_error_current("loop requires a boolean operand");
         ray_append(stack, condition);
         return false;
@@ -4686,7 +4724,7 @@ static bool apply_loop(RDNState *stack, char **cursor, BlockStop *stop_reason) {
         return diagnostic_error_current("loop missing end");
     }
 
-    if (!vars_push_scope()) {
+    if (!rdn_vars_push_scope()) {
         return false;
     }
 
@@ -4694,17 +4732,17 @@ static bool apply_loop(RDNState *stack, char **cursor, BlockStop *stop_reason) {
         char *iteration_cursor = body_start;
 
         if (!execute_block(stack, &iteration_cursor, &body_stop, false)) {
-            vars_pop_scope();
+            rdn_vars_pop_scope();
             return false;
         }
 
         if (body_stop == BLOCK_STOP_BREAK) {
             condition_value = false;
             if (!materialize_scope_references(stack)) {
-                vars_pop_scope();
+                rdn_vars_pop_scope();
                 return false;
             }
-            vars_pop_scope();
+            rdn_vars_pop_scope();
             *cursor = body_end;
             *stop_reason = BLOCK_STOP_END;
             return true;
@@ -4712,41 +4750,41 @@ static bool apply_loop(RDNState *stack, char **cursor, BlockStop *stop_reason) {
 
         if (body_stop == BLOCK_STOP_RETURN) {
             if (!materialize_scope_references(stack)) {
-                vars_pop_scope();
+                rdn_vars_pop_scope();
                 return false;
             }
-            vars_pop_scope();
+            rdn_vars_pop_scope();
             *cursor = body_end;
             *stop_reason = BLOCK_STOP_RETURN;
             return true;
         }
 
         if (body_stop != BLOCK_STOP_END && body_stop != BLOCK_STOP_CONTINUE) {
-            vars_pop_scope();
+            rdn_vars_pop_scope();
             return diagnostic_error_current("loop missing end");
         }
 
         if (stack->count < 1) {
-            vars_pop_scope();
+            rdn_vars_pop_scope();
             return diagnostic_error_current("loop body must leave boolean condition on stack");
         }
 
         condition = ray_pop(stack);
-        if (!value_to_boolean(condition, &condition_value)) {
+        if (!rdn_value_to_boolean(condition, &condition_value)) {
             diagnostic_error_current("loop body must leave boolean condition on stack");
             ray_append(stack, condition);
-            vars_pop_scope();
+            rdn_vars_pop_scope();
             return false;
         }
         free_value(condition);
     }
 
     if (!materialize_scope_references(stack)) {
-        vars_pop_scope();
+        rdn_vars_pop_scope();
         return false;
     }
 
-    vars_pop_scope();
+    rdn_vars_pop_scope();
 
     *cursor = body_end;
     *stop_reason = BLOCK_STOP_END;
@@ -4866,7 +4904,7 @@ static bool skip_block(char **cursor, BlockStop *stop_reason, bool allow_else) {
     }
 }
 
-bool evaluate_source(RDNState *stack, char *source) {
+bool rdn_evaluate_source(RDNState *stack, char *source) {
     BlockStop stop_reason = BLOCK_STOP_EOF;
     char *cursor = source;
     DiagnosticContext previous_context = g_diagnostic_context;
@@ -4910,25 +4948,25 @@ bool evaluate_source(RDNState *stack, char *source) {
 
 }
 
-bool evaluate_file(RDNState *stack, const char *path) {
+bool rdn_evaluate_file(RDNState *stack, const char *path) {
     char *source = NULL;
     const char *previous_path = g_current_source_path;
     bool ok = false;
 
-    source = read_file(path);
+    source = rdn_read_file(path);
     if (source == NULL) {
         return false;
     }
 
     g_current_source_path = path;
-    ok = evaluate_source(stack, source);
+    ok = rdn_evaluate_source(stack, source);
     g_current_source_path = previous_path;
 
     free(source);
     return ok;
 }
 
-char *read_file(const char *path) {
+char *rdn_read_file(const char *path) {
     FILE *file = fopen(path, "rb");
     char *buffer = NULL;
     long length = 0;
@@ -5033,7 +5071,7 @@ static char *resolve_path_from_current_source(const char *path) {
     }
 
     if (g_current_source_path == NULL || path[0] == '/') {
-        return copy_string(path);
+        return rdn_copy_string(path);
     }
 
 #ifdef _WIN32
@@ -5041,13 +5079,13 @@ static char *resolve_path_from_current_source(const char *path) {
         (((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z')) &&
          path[1] == ':' &&
          path_is_separator_char(path[2]))) {
-        return copy_string(path);
+        return rdn_copy_string(path);
     }
 #endif
 
     slash = path_last_separator(g_current_source_path);
     if (slash == NULL) {
-        return copy_string(path);
+        return rdn_copy_string(path);
     }
 
     dir_length = (size_t)(slash - g_current_source_path + 1);
@@ -5275,7 +5313,7 @@ static bool load_path_stack_contains(const char *path) {
 }
 
 static bool push_load_path(const char *path) {
-    char *copy = copy_string(path);
+    char *copy = rdn_copy_string(path);
 
     if (copy == NULL) {
         return false;
@@ -5319,7 +5357,7 @@ static bool push_search_path(SearchPathStack *paths, const char *path) {
         return true;
     }
 
-    copy = copy_string(path);
+    copy = rdn_copy_string(path);
     if (copy == NULL) {
         return false;
     }
@@ -5340,13 +5378,13 @@ static char *get_install_prefix(void) {
 
     size = GetModuleFileNameA(NULL, module_path, (DWORD)sizeof(module_path));
     if (size == 0 || size >= sizeof(module_path)) {
-        return copy_string(RDN_INSTALL_PREFIX);
+        return rdn_copy_string(RDN_INSTALL_PREFIX);
     }
 
     module_path[size] = '\0';
     separator = path_last_separator(module_path);
     if (separator == NULL) {
-        return copy_string(RDN_INSTALL_PREFIX);
+        return rdn_copy_string(RDN_INSTALL_PREFIX);
     }
 
     module_length = (size_t)(separator - module_path);
@@ -5359,7 +5397,7 @@ static char *get_install_prefix(void) {
     memcpy(prefix + module_length, suffix, suffix_length + 1);
     return prefix;
 #else
-    return copy_string(RDN_INSTALL_PREFIX);
+    return rdn_copy_string(RDN_INSTALL_PREFIX);
 #endif
 }
 
@@ -5406,7 +5444,7 @@ static bool pop_string_path_operand(RDNState *stack, const char *context, Value 
 
     target = ray_pop(stack);
     if (target->type == VALUE_AS_VAR) {
-        Vars_t *entry = find_var_entry(target->as.string);
+        Vars_t *entry = rdn_find_var_entry(target->as.string);
         if (entry == NULL) {
             free_value(target);
             return diagnostic_error_current("%s requires existing variable path", context);
@@ -5442,7 +5480,7 @@ static bool set_owned_error_message(char **slot, const char *message) {
         return true;
     }
 
-    copy = copy_string(message);
+    copy = rdn_copy_string(message);
     if (copy == NULL) {
         return false;
     }
@@ -5451,7 +5489,7 @@ static bool set_owned_error_message(char **slot, const char *message) {
     return true;
 }
 
-Value *native_get_stack_value(RDNState *stack, long index) {
+Value *rdn_native_get_stack_value(RDNState *stack, long index) {
     long resolved_index = 0;
 
     if (index == 0) {
@@ -5471,7 +5509,7 @@ Value *native_get_stack_value(RDNState *stack, long index) {
     return stack->items[resolved_index];
 }
 
-RDNValueType native_value_type_from_value(const Value *value) {
+RDNValueType rdn_native_value_type_from_value(const Value *value) {
     if (value == NULL) {
         return RDN_VALUE_NONE;
     }
@@ -5503,57 +5541,57 @@ static size_t native_api_stack_size(RDNApi *api) {
 
 static RDNValueType native_api_type(RDNApi *api, long index) {
     NativeCallState *state = api->userdata;
-    return native_value_type_from_value(native_get_stack_value(state->stack, index));
+    return rdn_native_value_type_from_value(rdn_native_get_stack_value(state->stack, index));
 }
 
 static bool native_api_is_number(RDNApi *api, long index) {
     NativeCallState *state = api->userdata;
-    Value *value = native_get_stack_value(state->stack, index);
+    Value *value = rdn_native_get_stack_value(state->stack, index);
     double number = 0;
 
     if (value == NULL) {
         return false;
     }
 
-    return value_to_double(value, &number);
+    return rdn_value_to_double(value, &number);
 }
 
 static bool native_api_to_integer(RDNApi *api, long index, long *out_value) {
     NativeCallState *state = api->userdata;
-    Value *value = native_get_stack_value(state->stack, index);
+    Value *value = rdn_native_get_stack_value(state->stack, index);
 
     if (value == NULL) {
         return false;
     }
 
-    return value_to_long(value, out_value);
+    return rdn_value_to_long(value, out_value);
 }
 
 static bool native_api_to_number(RDNApi *api, long index, double *out_value) {
     NativeCallState *state = api->userdata;
-    Value *value = native_get_stack_value(state->stack, index);
+    Value *value = rdn_native_get_stack_value(state->stack, index);
 
     if (value == NULL) {
         return false;
     }
 
-    return value_to_double(value, out_value);
+    return rdn_value_to_double(value, out_value);
 }
 
 static bool native_api_to_boolean(RDNApi *api, long index, bool *out_value) {
     NativeCallState *state = api->userdata;
-    Value *value = native_get_stack_value(state->stack, index);
+    Value *value = rdn_native_get_stack_value(state->stack, index);
 
     if (value == NULL) {
         return false;
     }
 
-    return value_to_boolean(value, out_value);
+    return rdn_value_to_boolean(value, out_value);
 }
 
 static const char *native_api_to_string(RDNApi *api, long index) {
     NativeCallState *state = api->userdata;
-    Value *value = native_get_stack_value(state->stack, index);
+    Value *value = rdn_native_get_stack_value(state->stack, index);
 
     if (value == NULL || value->type != VALUE_STRING) {
         return NULL;
@@ -5564,7 +5602,7 @@ static const char *native_api_to_string(RDNApi *api, long index) {
 
 static const char *native_api_to_identifier(RDNApi *api, long index) {
     NativeCallState *state = api->userdata;
-    Value *value = native_get_stack_value(state->stack, index);
+    Value *value = rdn_native_get_stack_value(state->stack, index);
 
     if (value == NULL || value->type != VALUE_AS_VAR) {
         return NULL;
@@ -5582,7 +5620,7 @@ static void *native_api_resolve_variable(RDNApi *api, const char *name) {
         return NULL;
     }
 
-    entry = find_var_entry(name);
+    entry = rdn_find_var_entry(name);
     if (entry == NULL) {
         return NULL;
     }
@@ -5606,37 +5644,37 @@ static bool native_api_pop(RDNApi *api, size_t count) {
 
 static bool native_api_push_null(RDNApi *api) {
     NativeCallState *state = api->userdata;
-    return push_value(state->stack, create_null_value());
+    return rdn_push_value(state->stack, rdn_create_null_value());
 }
 
 static bool native_api_push_integer(RDNApi *api, long value) {
     NativeCallState *state = api->userdata;
-    return push_value(state->stack, create_integer_value(value));
+    return rdn_push_value(state->stack, rdn_create_integer_value(value));
 }
 
 static bool native_api_push_number(RDNApi *api, double value) {
     NativeCallState *state = api->userdata;
-    return push_value(state->stack, create_double_value(value));
+    return rdn_push_value(state->stack, rdn_create_double_value(value));
 }
 
 static bool native_api_push_boolean(RDNApi *api, bool value) {
     NativeCallState *state = api->userdata;
-    return push_value(state->stack, create_boolean_value(value));
+    return rdn_push_value(state->stack, rdn_create_boolean_value(value));
 }
 
 static bool native_api_push_string(RDNApi *api, const char *value) {
     NativeCallState *state = api->userdata;
-    return push_value(state->stack, create_string_value_copy(value));
+    return rdn_push_value(state->stack, rdn_create_string_value_copy(value));
 }
 
 static bool native_api_push_list(RDNApi *api) {
     NativeCallState *state = api->userdata;
-    return push_value(state->stack, create_list_value());
+    return rdn_push_value(state->stack, rdn_create_list_value());
 }
 
 static bool native_api_list_len(RDNApi *api, long index, size_t *out_length) {
     NativeCallState *state = api->userdata;
-    Value *value = native_get_stack_value(state->stack, index);
+    Value *value = rdn_native_get_stack_value(state->stack, index);
 
     if (value == NULL || value->type != VALUE_LIST || out_length == NULL) {
         return false;
@@ -5648,8 +5686,8 @@ static bool native_api_list_len(RDNApi *api, long index, size_t *out_length) {
 
 static bool native_api_list_append(RDNApi *api, long list_index, long value_index) {
     NativeCallState *state = api->userdata;
-    Value *list_value = native_get_stack_value(state->stack, list_index);
-    Value *item_value = native_get_stack_value(state->stack, value_index);
+    Value *list_value = rdn_native_get_stack_value(state->stack, list_index);
+    Value *item_value = rdn_native_get_stack_value(state->stack, value_index);
     Value *item_copy = NULL;
 
     if (list_value == NULL || list_value->type != VALUE_LIST) {
@@ -5660,7 +5698,7 @@ static bool native_api_list_append(RDNApi *api, long list_index, long value_inde
         return native_api_raise_error(api, "list_append requires existing value");
     }
 
-    item_copy = clone_value(item_value);
+    item_copy = rdn_clone_value(item_value);
     if (item_copy == NULL) {
         return native_api_raise_error(api, "failed to clone appended list value");
     }
@@ -5671,7 +5709,7 @@ static bool native_api_list_append(RDNApi *api, long list_index, long value_inde
 
 static bool native_api_list_index(RDNApi *api, long list_index, long item_index) {
     NativeCallState *state = api->userdata;
-    Value *list_value = native_get_stack_value(state->stack, list_index);
+    Value *list_value = rdn_native_get_stack_value(state->stack, list_index);
     Value *item_copy = NULL;
 
     if (list_value == NULL || list_value->type != VALUE_LIST) {
@@ -5682,17 +5720,17 @@ static bool native_api_list_index(RDNApi *api, long list_index, long item_index)
         return native_api_raise_error(api, "list_index out of range");
     }
 
-    item_copy = clone_value(list_value->as.list.items[item_index]);
+    item_copy = rdn_clone_value(list_value->as.list.items[item_index]);
     if (item_copy == NULL) {
         return native_api_raise_error(api, "failed to clone list item");
     }
 
-    return push_value(state->stack, item_copy);
+    return rdn_push_value(state->stack, item_copy);
 }
 
 static bool native_api_list_remove(RDNApi *api, long list_index, long item_index) {
     NativeCallState *state = api->userdata;
-    Value *list_value = native_get_stack_value(state->stack, list_index);
+    Value *list_value = rdn_native_get_stack_value(state->stack, list_index);
     size_t index = 0;
 
     if (list_value == NULL || list_value->type != VALUE_LIST) {
@@ -5722,7 +5760,7 @@ static bool native_api_raise_error(RDNApi *api, const char *message) {
 
 static NativeModuleReg *create_native_module_reg(const char *name, RDNNativeFunction function) {
     NativeModuleReg *reg = arena_alloc(&g_arena, sizeof(*reg));
-    reg->name = copy_string(name);
+    reg->name = rdn_copy_string(name);
     reg->function = function;
     return reg;
 }
@@ -5843,7 +5881,7 @@ static bool source_has_complete_blocks(const char *source, bool *out_complete) {
             free_macro_expansion_stack(&expansions);
             return false;
         } else if (!is_string && is_identifier_token(token)) {
-            Funcs_t *entry = find_func_entry(token);
+            Funcs_t *entry = rdn_find_func_entry(token);
 
             if (entry != NULL && entry->type == FUNC_DEMAC) {
                 if (!next_token(&cursor, &token, &is_string) || !is_token(token, "demac"))  {
@@ -5904,8 +5942,8 @@ static int run_repl(void) {
             free(source);
             free_macro_expansions();
             free_stack_values(&stack);
-            free_vars();
-            free_funcs();
+            rdn_free_vars();
+            rdn_free_funcs();
             free_modules();
             free_loaded_files();
             return EXIT_FAILURE;
@@ -5925,7 +5963,7 @@ static int run_repl(void) {
             continue;
         }
 
-        if (!evaluate_source(&stack, source)) {
+        if (!rdn_evaluate_source(&stack, source)) {
             free_stack_values(&stack);
             stack = (RDNState){0};
         }
@@ -5941,8 +5979,8 @@ static int run_repl(void) {
     free(source);
     free_macro_expansions();
     free_stack_values(&stack);
-    free_vars();
-    free_funcs();
+    rdn_free_vars();
+    rdn_free_funcs();
     free_modules();
     free_loaded_files();
     return EXIT_SUCCESS;
@@ -5975,31 +6013,31 @@ static const char *host_shared_library_extension(void) {
 }
 
 static void apply_host_environment(void) {
-    Value *host_os = create_string_value_copy(host_os_name());
-    Value *shared_lib_ext = create_string_value_copy(host_shared_library_extension());
+    Value *host_os = rdn_create_string_value_copy(host_os_name());
+    Value *shared_lib_ext = rdn_create_string_value_copy(host_shared_library_extension());
 
     if (host_os != NULL) {
-        vars_const("__host_os", host_os);
+        rdn_vars_const("__host_os", host_os);
         free_value(host_os);
     }
     if (shared_lib_ext != NULL) {
-        vars_const("__sharedlib_ext", shared_lib_ext);
+        rdn_vars_const("__sharedlib_ext", shared_lib_ext);
         free_value(shared_lib_ext);
     }
 }
 
 static void apply_argv(const char* path, int argc , char** argv) {
 
-    Value* argv_list = create_list_value();
-    Value* tha_path_value = create_string_value_copy(path);
+    Value* argv_list = rdn_create_list_value();
+    Value* tha_path_value = rdn_create_string_value_copy(path);
     ray_append(&argv_list->as.list, tha_path_value);
 
     for(int i = 2 ; i < argc ; ++i) {
-        Value* val = create_string_value_copy(argv[i]);
+        Value* val = rdn_create_string_value_copy(argv[i]);
         ray_append(&argv_list->as.list, val);
     }
 
-    vars_let("__argv", argv_list);
+    rdn_vars_let("__argv", argv_list);
     free_value(argv_list);
 }
 
@@ -6020,7 +6058,7 @@ int rdn_main(int argc , char** argv) {
     apply_host_environment();
     apply_argv(path, argc ,  argv);
 
-    if (!evaluate_file(&stack, path)) {
+    if (!rdn_evaluate_file(&stack, path)) {
         exit_code = EXIT_FAILURE;
         goto get_fuck_out;
     }
@@ -6035,8 +6073,8 @@ get_fuck_out:
 
     free_macro_expansions();
     free_stack_values(&stack);
-    free_vars();
-    free_funcs();
+    rdn_free_vars();
+    rdn_free_funcs();
     free_modules();
     free_loaded_files();
     return exit_code;
