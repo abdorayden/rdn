@@ -36,6 +36,9 @@ BINDIR=${BINDIR:-/usr/local/bin}
 APP_NAME=${APP_NAME:-rdn}
 VERBOSE=${VERBOSE:-1}
 
+LIBDIR=${LIBDIR:-/usr/lib}
+INCLUDEDIR=${INCLUDEDIR:-/usr/include}
+
 main_binary="$ROOT_DIR/main"
 shared_ext="so"
 
@@ -49,19 +52,22 @@ usage: $(basename "$0") [all|build|install|clean|help]
 
 targets:
   all       build everything and install into \$PREFIX
-  build     build the interpreter and native modules
+  build     build the interpreter, native modules and libs
+  libs      build the interpreter libraries (librdn.a / librdn.so)
   install   build and install into \$PREFIX and \$BINDIR
   clean     remove local build outputs
   help      show this help text
 
 environment:
-  PREFIX    install prefix for libs and nativelibs
-  BINDIR    install directory for the rdn binary
-  CC        C compiler to use
-  CFLAGS    extra compiler flags
-  LDFLAGS   extra linker flags
-  APP_NAME  installed binary name
-  VERBOSE   set to 0 to silence command logging
+  PREFIX      install prefix for libs and nativelibs
+  BINDIR      install directory for the rdn binary
+  CC          C compiler to use
+  CFLAGS      extra compiler flags
+  LDFLAGS     extra linker flags
+  APP_NAME    installed binary name
+  VERBOSE     set to 0 to silence command logging
+  LIBDIR      folder where script install .a/.so libs
+  INCLUDEDIR  folder where script install API headers (rdn.h/...)
 EOF
 }
 
@@ -123,6 +129,13 @@ install_runtime_tree() {
     run mkdir -p "$PREFIX/libs" "$PREFIX/nativelibs" "$BINDIR"
     run cp -R "$ROOT_DIR/libs/." "$PREFIX/libs/"
     run cp -R "$ROOT_DIR/nativelibs/." "$PREFIX/nativelibs/"
+    run mkdir -p "$LIBDIR" "$INCLUDEDIR"
+    run cp "$static_lib" "$LIBDIR/"
+    run cp "$shared_lib" "$LIBDIR/"
+    run cp "$ROOT_DIR/include/rdn.h" "$INCLUDEDIR/rdn.h"
+    run cp "$ROOT_DIR/include/rdn_native.h" "$INCLUDEDIR/rdn_native.h"
+
+
     for source_file in "$PREFIX/libs"/*.rdn; do
         [ -e "$source_file" ] || continue
         alias_name="$(basename "$source_file")"
@@ -143,7 +156,7 @@ install_runtime_tree() {
 
 clean() {
     section "Cleaning build outputs"
-    run rm -f "$ROOT_DIR/main" "$ROOT_DIR/main.o"
+    run rm -f "$ROOT_DIR/main" "$ROOT_DIR/main.o" "$rdn_lib_object" "$static_lib" "$shared_lib"
     run rm -f "$ROOT_DIR"/nativelibs/*.so "$ROOT_DIR"/nativelibs/*.dylib "$ROOT_DIR"/nativelibs/*.dll
 }
 
@@ -183,6 +196,9 @@ case "${1:-all}" in
         ;;
     build)
         build_all
+        ;;
+    libs)
+        build_libs
         ;;
     install)
         build_all
