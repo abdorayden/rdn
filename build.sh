@@ -180,11 +180,6 @@ build_all() {
     build_native "$ROOT_DIR/nativelibs/json.c" "$ROOT_DIR/nativelibs/json.$shared_ext"
     build_native "$ROOT_DIR/nativelibs/io.c" "$ROOT_DIR/nativelibs/io.$shared_ext"
     build_native "$ROOT_DIR/nativelibs/bint.c" "$ROOT_DIR/nativelibs/bint.$shared_ext"
-    # The SQLite amalgamation cannot survive -Wall -Wextra -Werror, so the
-    # module and src/sqlite-amalgamation-3530400/sqlite3.c share one relaxed
-    # TU (-w placed after CFLAGS inhibits every warning).
-    build_native "$ROOT_DIR/nativelibs/sqlite3.c" "$ROOT_DIR/nativelibs/sqlite3.$shared_ext" \
-        "-w $ROOT_DIR/src/sqlite-amalgamation-3530400/sqlite3.c -lpthread -ldl -lm"
     build_native "$ROOT_DIR/nativelibs/coroutines.c" "$ROOT_DIR/nativelibs/coroutines.$shared_ext"
     build_native "$ROOT_DIR/nativelibs/map.c" "$ROOT_DIR/nativelibs/map.$shared_ext"
 }
