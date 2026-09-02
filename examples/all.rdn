@@ -1,0 +1,27 @@
+"Base64.rdn" load
+"Bint.rdn" load
+"Core.rdn" load
+"Coroutines.rdn" load
+"Files.rdn" load
+"Flag.rdn" load
+"Integer.rdn" load
+"Io.rdn" load
+"Json.rdn" load
+"Lists.rdn" load
+"Log.rdn" load
+"Map.rdn" load
+"Math.rdn" load
+"Net.rdn" load
+"Os.rdn" load
+"Path.rdn" load
+"Process.rdn" load
+"Queue.rdn" load
+"Regex.rdn" load
+"Sqlite.rdn" load
+"Strconv.rdn" load
+"Strings.rdn" load
+"Time.rdn" load
+"Typecheck.rdn" load
+"Unix.rdn" load
+
+"done" print
