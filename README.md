@@ -4,7 +4,7 @@
   <img src="./assets/rdn.png" alt="Raden logo">
 </p>
 
-Raden is a small stack-based scripting language.
+rdn is a small stack-based scripting language.
 
 It is built around a simple value stack, a small interpreter written in C, and a native module API for extending the language from shared libraries.
 
@@ -12,20 +12,28 @@ It is built around a simple value stack, a small interpreter written in C, and a
 
 Build the interpreter:
 
+- using make:
+
 ```sh
 make
+```
+
+- using bash installer:
+
+```sh
+sudo ./build.sh all # compile and install interpreter with it's runtime
 ```
 
 Run a script:
 
 ```sh
-./main MAIN.rdn
+./main examples/snips7.rdn # or rdn
 ```
 
 Run the test suite:
 
 ```sh
-bash test/run.sh
+bash test/run.sh # or python3 test/run.py
 ```
 
 Build a native module manually:
@@ -475,7 +483,7 @@ If you want a stronger embedding API later, the next logical step is exposing he
 
 ## Neovim Support
 
-This repo includes a simple Neovim runtime package for `.rdn` files under [`nvim/`](./nvim):
+This repo includes a simple Neovim runtime package for `.rdn` files under [`editor/nvim/`](./editor/nvim):
 
 - file detection
 - syntax highlighting
@@ -496,7 +504,7 @@ Use a local plugin spec like:
 ```lua
 return {
   {
-    dir = "/home/rayden/prog/raden/nvim",
+    dir = "<path>/rdn/editor/nvim",
     name = "raden.nvim",
     ft = "raden",
   },
@@ -509,9 +517,3 @@ The repo exposes these runtime directories at the root for Lazy compatibility:
 - `ftplugin/`
 - `indent/`
 - `syntax/`
-
-## Treesitter Scaffold
-
-A starter Treesitter grammar scaffold is included under [`treesitter/raden/`](./treesitter/raden).
-
-It is a starting point, not a finished grammar.
