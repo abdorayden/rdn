@@ -217,6 +217,30 @@ struct RDNApi {
      *     return api->raise_error(api, "bad argument");
      */
     bool (*raise_error)(RDNApi *api, const char *message);
+
+    /*
+     * Check if the value is callable (function)
+     * it requires an index of the stack just like other 
+     * functions to_... family
+     * it returns true if it Succeeds otherwise false
+     * */
+    bool (*is_function) (RDNApi* api, long index);
+
+    /*
+     * Call the function at the top of the stack
+     * if it fails it will raise an error
+     * it's just like func call
+     * it returns true if it Succeeds otherwise false
+     * */
+    bool (*call_function) (RDNApi* api);
+
+    /*
+     * Protected call function
+     * it returns true if it Succeeds otherwise false
+     * and push the return of the function and a boolean if the function falls of the error
+     * */
+    bool (*pcall_function) (RDNApi* api);
+
 };
 
 struct RDNModule {

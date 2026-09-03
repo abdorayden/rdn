@@ -128,6 +128,9 @@ static void pop_load_path(void);
 static const char *host_shared_library_extension(void);
 static void free_native_module_regs(NativeModuleRegs *regs);
 static bool native_api_raise_error(RDNApi *api, const char *message);
+static bool native_api_call_function(RDNApi* api);
+static bool native_api_pcall_function(RDNApi* api);
+static bool native_api_is_function(RDNApi* api, long index);
 static bool native_module_set_error(RDNModule *module, const char *message);
 static bool native_module_register_function(RDNModule *module, const char *name, RDNNativeFunction function);
 static size_t native_api_stack_size(RDNApi *api);
@@ -3118,6 +3121,9 @@ static bool execute_named_entry(RDNState *stack, Funcs_t *entry, const char *con
         api.list_index = native_api_list_index;
         api.list_remove = native_api_list_remove;
         api.raise_error = native_api_raise_error;
+        api.is_function = native_api_is_function;
+        api.call_function = native_api_call_function;
+        api.pcall_function = native_api_pcall_function;
 
         ok = entry->as.native_function(&api);
         if (!ok) {
@@ -3165,6 +3171,34 @@ static bool execute_named_entry(RDNState *stack, Funcs_t *entry, const char *con
     if (stop_reason != BLOCK_STOP_END && stop_reason != BLOCK_STOP_EOF && stop_reason != BLOCK_STOP_RETURN) {
         return diagnostic_error_current("function body terminated unexpectedly");
     }
+
+    return true;
+}
+
+static bool rdn_is_callable_by_value(Value* value) {
+    Value *resolved_name = NULL;
+    Funcs_t *entry = NULL;
+    if (value->type != VALUE_AS_VAR) {
+        return false;
+    }
+    Vars_t *var_entry = NULL;
+    var_entry = rdn_find_var_entry(value->as.string);
+    if (var_entry != NULL) {
+        resolved_name = rdn_clone_value(var_entry->var_value);
+        if (resolved_name == NULL) {
+            return false;
+        }
+        if (resolved_name->type != VALUE_AS_VAR) {
+            return false;
+        }
+        entry = rdn_find_func_entry(resolved_name->as.string);
+    }else {
+        entry = rdn_find_func_entry(value->as.string);
+    }
+
+    if (entry == NULL) {
+        return false;
+    }    
 
     return true;
 }
@@ -5758,6 +5792,27 @@ static bool native_api_raise_error(RDNApi *api, const char *message) {
     return false;
 }
 
+static bool native_api_is_function(RDNApi* api, long index){
+    NativeCallState *state = api->userdata;
+    Value *value = rdn_native_get_stack_value(state->stack, index);
+
+    if (value == NULL) {
+        return false;
+    }
+    
+    return rdn_is_callable_by_value(value);
+}
+
+static bool native_api_call_function(RDNApi* api){
+    NativeCallState *state = api->userdata;
+    return rdn_apply_call(state->stack);
+}
+
+static bool native_api_pcall_function(RDNApi* api){
+    NativeCallState *state = api->userdata;
+    return rdn_apply_pcall(state->stack);
+}
+
 static NativeModuleReg *create_native_module_reg(const char *name, RDNNativeFunction function) {
     NativeModuleReg *reg = arena_alloc(&g_arena, sizeof(*reg));
     reg->name = rdn_copy_string(name);
@@ -6053,7 +6108,8 @@ int rdn_main(int argc , char** argv) {
     path = argv[1];
     if (!reset_search_paths()) {
         fprintf(stderr, "failed to initialize search paths\n");
-        return exit_code;
+        exit_code = EXIT_FAILURE;
+        goto get_fuck_out;
     }
     apply_host_environment();
     apply_argv(path, argc ,  argv);

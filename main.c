@@ -6,6 +6,13 @@
 // TODO: optimize the code
 // TODO: macros doesn't allow nested blocks
 // TODO: next work i need to fix bugs in this language and add more tests
+//
+//
+//
+//
+// TODO: add comment doc like python but uses <* Doc *> inside functions, modules and then make it global in file
+// TODO: add single line comment
+// TODO: check functions hanling for the API
 
 int main(int argc, char **argv) {
     for(int i = 0 ; i < argc ; ++i) {

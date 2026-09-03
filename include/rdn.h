@@ -203,6 +203,9 @@ Funcs_t *rdn_create_func_entry(const char *name, char *body, const char *source_
 Funcs_t *rdn_create_native_func_entry(const char *name, RDNNativeFunction native_function, void *native_library_handle);
 Funcs_t *rdn_find_func_entry(const char *name);
 bool rdn_funcs_define(const char *name, char *body, const char *source_path, size_t source_line, size_t source_column);
+
+#define rdn_func_define_single(name, body) rdn_funcs_define((name), (body), NULL,1,1)
+
 bool rdn_funcs_define_native(const char *name, RDNNativeFunction native_function, void *native_library_handle);
 
 // for cleaning the global hash table state of variables and functrions
